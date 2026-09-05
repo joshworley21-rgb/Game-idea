@@ -1,0 +1,22 @@
+{
+  "name": "oval",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A single-player 3D president simulator: govern a modern nation while keeping your health, family and sanity intact.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "balance": "node --experimental-strip-types --no-warnings src/tools/balance.ts"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.169.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
