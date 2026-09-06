@@ -266,7 +266,7 @@ function buildFlags(root: THREE.Group): void {
   }
 }
 
-function buildFireplace(root: THREE.Group): void {
+function buildFireplace(root: THREE.Group): THREE.Object3D {
   const g = new THREE.Group();
   g.position.set(0.2, 0, ROOM.rz - 0.28);
   const marble = standard(PALETTE.marble, 0.5);
@@ -280,6 +280,7 @@ function buildFireplace(root: THREE.Group): void {
 
   // The portrait above the mantel is a model; see props.ts.
   root.add(g);
+  return g;
 }
 
 /** Small furniture pieces that carry the interactive stations. */
@@ -403,6 +404,9 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
 export interface OfficeBuild {
   group: THREE.Group;
+  /** Anchors for positional sound: the fire, and the clock in the corner. */
+  fireplace: THREE.Object3D;
+  clockSpot: THREE.Object3D;
   anchors: Record<StationId, StationAnchor>;
   /** Lights that follow the season, so the room changes across the term. */
   daylight: THREE.DirectionalLight;
@@ -420,7 +424,7 @@ export function buildOffice(lowPower = false): OfficeBuild {
   buildDoors(group);
   buildDesk(group);
   buildFlags(group);
-  buildFireplace(group);
+  const fireplace = buildFireplace(group);
   const anchors = buildStationFurniture(group);
 
   const daylight = new THREE.DirectionalLight(0xfff4e0, 1.5);
@@ -447,7 +451,13 @@ export function buildOffice(lowPower = false): OfficeBuild {
   southFill.position.set(0, 3.2, 2.9);
   group.add(southFill);
 
-  return { group, anchors, daylight, windowLights };
+  // The grandfather clock is a loaded model, so the tick hangs off a marker at
+  // the same coordinates rather than the model itself.
+  const clockSpot = new THREE.Object3D();
+  clockSpot.position.set(-3.95, 1.1, -2.8);
+  group.add(clockSpot);
+
+  return { group, anchors, daylight, windowLights, fireplace, clockSpot };
 }
 
 /** How much space the player takes up, for pushing out of furniture. */

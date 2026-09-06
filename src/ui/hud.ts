@@ -30,21 +30,34 @@ export class Hud {
   /** Compact stat row shown only on small screens, where the cards are hidden. */
   private strip = el("div", { class: "hud-card", id: "hud-strip" });
 
+  private muteButton: HTMLButtonElement;
+
   constructor(
     onEndMonth: () => void,
     onDashboard: () => void,
     onStation: (station: StationId) => void,
+    onToggleMute: () => boolean,
   ) {
     this.endButton = el("button", { class: "btn primary", onclick: onEndMonth }, [
       "End the month",
     ]) as HTMLButtonElement;
     // "(Tab)" means nothing on a phone, where this button is the only way in.
     const touch = matchMedia("(pointer: coarse)").matches;
+    this.muteButton = el("button", {
+      class: "btn ghost small mute",
+      title: "Mute sound",
+      "aria-label": "Mute sound",
+      onclick: () => {
+        this.muteButton.textContent = onToggleMute() ? "Sound off" : "Sound on";
+      },
+    }, ["Sound on"]) as HTMLButtonElement;
+
     this.actions.append(
       this.endButton,
       el("button", { class: "btn ghost small", onclick: onDashboard }, [
         touch ? "Full stats" : "Dashboard (Tab)",
       ]),
+      this.muteButton,
     );
     // Number keys reach every station without walking, so the whole game is
     // playable from the keyboard alone.
@@ -67,6 +80,11 @@ export class Hud {
       this.strip,
     ]);
     document.body.append(this.crosshair, this.prompt);
+  }
+
+  /** Reflects the stored preference once audio starts. */
+  setMuted(muted: boolean): void {
+    this.muteButton.textContent = muted ? "Sound off" : "Sound on";
   }
 
   setPrompt(station: StationId | null, blocked = false): void {

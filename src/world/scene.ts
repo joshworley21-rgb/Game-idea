@@ -4,6 +4,7 @@ import { buildOffice } from "./office.ts";
 import type { OfficeBuild } from "./office.ts";
 import { PlayerController } from "./controls.ts";
 import { Stations } from "./stations.ts";
+import { Sound } from "../audio/sound.ts";
 import { loadProps } from "./assetLoader.ts";
 import type { Footprint, LoadProgress } from "./assetLoader.ts";
 import type { StationId } from "../game/types.ts";
@@ -27,6 +28,9 @@ export class World {
   private hemisphere: THREE.HemisphereLight;
   private raf = 0;
   private raycaster = new THREE.Raycaster();
+  private listener = new THREE.AudioListener();
+  private lastPosition = new THREE.Vector3();
+  readonly sound = new Sound();
   /** True on phones and tablets, where the GPU budget is much smaller. */
   readonly lowPower: boolean;
 
@@ -65,7 +69,9 @@ export class World {
     this.scene.environmentIntensity = 0.55;
     pmrem.dispose();
 
+    this.camera.add(this.listener);
     this.player = new PlayerController(this.camera, this.renderer.domElement);
+    this.lastPosition.copy(this.camera.position);
     this.stations = new Stations(this.scene, this.office.anchors, this.lowPower);
     this.player.onTap = ({ x, y }) => {
       const station = this.pickStation(x, y);
@@ -90,6 +96,15 @@ export class World {
     footprints.push({ minX: -1.25, maxX: 1.25, minZ: -3.5, maxZ: -2.1 });
     this.player.colliders = footprints;
     return count;
+  }
+
+  /**
+   * Starts audio. Must be called from a user gesture: browsers refuse to open
+   * an AudioContext any other way.
+   */
+  startAudio(): void {
+    this.sound.start(this.listener);
+    this.sound.attachRoom(this.listener, this.office.fireplace, this.office.clockSpot);
   }
 
   /** Repaints the light for the month, 1-48. */
@@ -142,6 +157,8 @@ export class World {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, this.clock.getDelta());
       this.player.update(dt);
+      this.sound.update(this.camera.position.distanceTo(this.lastPosition));
+      this.lastPosition.copy(this.camera.position);
       const before = this.stations.nearest;
       const nearest = this.stations.update(dt, this.camera.position);
       if (nearest !== before) this.onNearestChange(nearest);

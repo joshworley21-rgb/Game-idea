@@ -81,6 +81,31 @@ a collapse of the ability to govern. Otherwise you reach the election, having
 decided in year three whether to run at all, and get a legacy score across the
 economy, society, the world, politics and your own life.
 
+## Sound
+
+Every sound in the game is synthesised at runtime with the Web Audio API.
+Nothing is sampled, so the whole soundscape costs no download, no licence and
+no asset pipeline — which matters when the game ships as one HTML file and a
+small APK.
+
+**Positional ambience.** The fire is a filtered noise bed with crackles
+scheduled on top; the grandfather clock is silent between ticks, alternating
+tick and tock so it reads as a pendulum. Both are `PositionalAudio` sources
+anchored to their furniture, so they fall away as you cross the room. Under all
+of it sits a barely-there room tone: lowpassed noise at the edge of hearing.
+
+**The rest is feedback.** Footsteps trigger on distance walked rather than a
+timer, so they land with the walking. A warm major arpeggio for a bill signed,
+a descending minor one for a bill dead on the floor, two urgent pulses when a
+crisis breaks, and a soft bell to close the month.
+
+Ambient timing runs off the audio clock, not accumulated frame deltas — the
+render loop clamps its delta to stop the player teleporting after a tab switch,
+and a clock driven by that would tick in slow motion on a slow device.
+
+Sound starts on the click that takes the oath, because browsers will not open
+an audio context any other way, and the mute preference persists.
+
 ## The 3D assets
 
 The furniture is real geometry, not boxes: eleven models from
@@ -154,6 +179,7 @@ repository.
 src/game/     simulation: state, sim tick, bills, crises, actions, endings
 src/world/    three.js: office geometry, props, controls, stations, asset loading
 src/ui/       HUD, panels, touch stick, styling
+src/audio/    procedural sound synthesis
 src/tools/    headless balance harness
 android/      Capacitor Android project
 public/models/ optimised .glb props (built by `npm run assets`)

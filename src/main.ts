@@ -46,8 +46,13 @@ class Game {
       (station) => {
         if (!this.host.isOpen && !this.ended) this.openStation(station);
       },
+      () => this.world.sound.toggleMute(),
     );
     document.body.append(this.hud.root, this.stick.root);
+
+    // The oath click is the user gesture browsers require before audio starts.
+    this.world.startAudio();
+    this.hud.setMuted(this.world.sound.isMuted);
 
     // Walking with a thumb. The stick only appears once a touch is seen.
     this.stick.onChange = (x, y) => {
@@ -78,6 +83,7 @@ class Game {
     };
 
     this.host.onClose = () => {
+      this.world.sound.closePanel();
       if (this.drain()) return;
       if (!this.ended) {
         this.world.player.enabled = true;
@@ -92,9 +98,25 @@ class Game {
     };
 
     engine.on("state", (s) => this.onState(s));
-    engine.on("outcome", (o: Outcome) => this.host.toast(o));
-    engine.on("crisis", (c: Crisis) => this.queue.push(() => this.open(() => crisisPanel(this.engine, c, this.host), true)));
-    engine.on("report", (r: MonthReport) => this.queue.unshift(() => this.open(() => reportPanel(this.engine, r, this.host))));
+    engine.on("outcome", (o: Outcome) => {
+      this.host.toast(o);
+      const sound = this.world.sound;
+      if (o.tone === "good") sound.good();
+      else if (o.tone === "bad") sound.bad();
+      else sound.paper();
+    });
+    engine.on("crisis", (c: Crisis) =>
+      this.queue.push(() => {
+        this.world.sound.alert();
+        this.open(() => crisisPanel(this.engine, c, this.host), true);
+      }),
+    );
+    engine.on("report", (r: MonthReport) =>
+      this.queue.unshift(() => {
+        this.world.sound.chime();
+        this.open(() => reportPanel(this.engine, r, this.host));
+      }),
+    );
     engine.on("reelectionQuestion", () =>
       this.queue.push(() => this.open(() => reelectionPanel(this.engine, this.host), true)),
     );
@@ -172,6 +194,7 @@ class Game {
   }
 
   private open(factory: () => HTMLElement, locked = false): void {
+    this.world.sound.openPanel();
     this.world.player.enabled = false;
     this.world.player.unlock();
     this.hud.setPrompt(null);

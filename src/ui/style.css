@@ -429,3 +429,8 @@ body {
 @media (max-width: 900px), (pointer: coarse) {
   #loading-note { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 180px); font-size: 12px; }
 }
+
+.btn.mute { min-width: 92px; }
+@media (max-width: 900px), (pointer: coarse) {
+  .btn.mute { min-width: 0; }
+}
