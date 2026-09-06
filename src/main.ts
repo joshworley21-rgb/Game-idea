@@ -19,6 +19,7 @@ import {
   stationPanel,
 } from "./ui/panels.ts";
 import { el } from "./ui/dom.ts";
+import { MoveStick, isTouchDevice } from "./ui/touch.ts";
 import { World } from "./world/scene.ts";
 
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
@@ -34,6 +35,7 @@ class Game {
   private queue: Modal[] = [];
   private nearest: StationId | null = null;
   private ended = false;
+  private stick = new MoveStick();
 
   constructor(engine: Engine) {
     this.engine = engine;
@@ -45,7 +47,35 @@ class Game {
         if (!this.host.isOpen && !this.ended) this.openStation(station);
       },
     );
-    document.body.append(this.hud.root);
+    document.body.append(this.hud.root, this.stick.root);
+
+    // Walking with a thumb. The stick only appears once a touch is seen.
+    this.stick.onChange = (x, y) => {
+      this.world.player.moveInput = { x, y };
+    };
+    if (isTouchDevice()) this.stick.enable();
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.pointerType === "touch") this.stick.enable();
+      },
+      { capture: true },
+    );
+
+    // Tapping or clicking a station in the room opens it.
+    this.world.onStationTap = (station) => {
+      if (!this.host.isOpen && !this.ended) this.openStation(station);
+    };
+
+    // Android's back button closes what is open rather than leaving the game.
+    this.onBack = () => {
+      if (this.ended) return false;
+      if (this.host.isOpen) {
+        this.host.close();
+        return true;
+      }
+      return false;
+    };
 
     this.host.onClose = () => {
       if (this.drain()) return;
@@ -71,18 +101,19 @@ class Game {
     engine.on("ended", (e: Ending) => this.showEnding(e));
 
     window.addEventListener("keydown", this.onKey);
-    canvas.addEventListener("click", () => {
-      if (!this.host.isOpen && !this.ended) this.world.player.lock();
-    });
 
     this.onState(engine.state);
     this.world.start();
+    currentGame = this;
     // Any crises already waiting from a loaded save.
     for (const crisis of engine.pendingCrises) {
       this.queue.push(() => this.open(() => crisisPanel(this.engine, crisis, this.host), true));
     }
     this.drain();
   }
+
+  /** Returns true when the press was handled and should not exit the app. */
+  onBack: () => boolean = () => false;
 
   private onKey = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLInputElement) return;
@@ -173,6 +204,27 @@ class Game {
   }
 }
 
+/** The running game, so the platform back button can reach it. */
+let currentGame: Game | null = null;
+
+/**
+ * On Android the hardware back button should close a panel, not quit. The
+ * Capacitor App plugin is only present in the native build, so it is loaded
+ * lazily and its absence is not an error.
+ */
+async function wireHardwareBack(): Promise<void> {
+  try {
+    const { App } = await import("@capacitor/app");
+    await App.addListener("backButton", ({ canGoBack }) => {
+      void canGoBack;
+      if (currentGame?.onBack()) return;
+      void App.exitApp();
+    });
+  } catch {
+    /* running in a browser; there is no hardware back button */
+  }
+}
+
 // ------------------------------------------------------------ title screen
 
 function titleScreen(): void {
@@ -251,3 +303,4 @@ function titleScreen(): void {
 }
 
 titleScreen();
+void wireHardwareBack();

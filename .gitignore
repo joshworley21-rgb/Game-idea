@@ -3,3 +3,13 @@ dist/
 .DS_Store
 *.local
 .vite/
+
+# Capacitor generates these from dist/ on every sync
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/local.properties
+android/.gradle/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+build-output/

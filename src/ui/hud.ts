@@ -27,6 +27,8 @@ export class Hud {
   private actions = el("div", { class: "hud-card", id: "hud-actions" });
   private endButton: HTMLButtonElement;
   private legend = el("div", { class: "hud-card", id: "hud-legend" });
+  /** Compact stat row shown only on small screens, where the cards are hidden. */
+  private strip = el("div", { class: "hud-card", id: "hud-strip" });
 
   constructor(
     onEndMonth: () => void,
@@ -36,9 +38,13 @@ export class Hud {
     this.endButton = el("button", { class: "btn primary", onclick: onEndMonth }, [
       "End the month",
     ]) as HTMLButtonElement;
+    // "(Tab)" means nothing on a phone, where this button is the only way in.
+    const touch = matchMedia("(pointer: coarse)").matches;
     this.actions.append(
       this.endButton,
-      el("button", { class: "btn ghost small", onclick: onDashboard }, ["Dashboard (Tab)"]),
+      el("button", { class: "btn ghost small", onclick: onDashboard }, [
+        touch ? "Full stats" : "Dashboard (Tab)",
+      ]),
     );
     // Number keys reach every station without walking, so the whole game is
     // playable from the keyboard alone.
@@ -58,6 +64,7 @@ export class Hud {
       this.self,
       this.actions,
       this.legend,
+      this.strip,
     ]);
     document.body.append(this.crosshair, this.prompt);
   }
@@ -130,6 +137,23 @@ export class Hud {
       statLine("Unrest", Math.round(n.unrest).toString(), bandLow(n.unrest, 40, 60)),
       statLine("Congress", `${Math.round((s.politics.house + s.politics.senate) / 2)}%`, band((s.politics.house + s.politics.senate) / 2, 50, 42)),
     );
+
+    clear(this.strip);
+    for (const [label, value, tone] of [
+      ["Growth", `${one(n.growth)}%`, band(n.growth, 2, 0.8)],
+      ["Jobless", `${one(n.unemployment)}%`, bandLow(n.unemployment, 5, 6.8)],
+      ["Unrest", Math.round(n.unrest).toString(), bandLow(n.unrest, 40, 60)],
+      ["Health", Math.round(s.personal.health).toString(), band(s.personal.health, 60, 40)],
+      ["Stress", Math.round(s.personal.stress).toString(), bandLow(s.personal.stress, 45, 70)],
+      ["Family", Math.round(s.personal.family).toString(), band(s.personal.family, 55, 35)],
+    ] as const) {
+      this.strip.append(
+        el("div", { class: "strip-item" }, [
+          el("span", { class: "k" }, [label]),
+          el("span", { class: `v ${tone}` }, [value]),
+        ]),
+      );
+    }
 
     clear(this.self);
     this.self.append(

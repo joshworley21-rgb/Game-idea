@@ -281,3 +281,140 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 .ending-title { font-family: var(--serif); font-size: 34px; text-align: center; margin: 10px 0 22px; }
 .ending-body { font-size: 15px; line-height: 1.75; color: rgba(241,236,224,0.84); white-space: pre-wrap; }
 .legacy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 12px; margin: 26px 0; }
+
+/* ------------------------------------------------------- touch and phones */
+
+#scene { touch-action: none; }
+
+body {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Text in panels stays selectable; the game world does not. */
+#hud, #scene, #prompt, #crosshair { user-select: none; -webkit-user-select: none; }
+
+.stick {
+  position: fixed;
+  left: max(20px, env(safe-area-inset-left));
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  width: 132px; height: 132px; border-radius: 50%;
+  border: 1px solid rgba(226, 193, 110, 0.3);
+  background: radial-gradient(circle, rgba(20, 24, 34, 0.5), rgba(12, 15, 22, 0.34));
+  display: none; place-items: center; z-index: 20;
+  touch-action: none;
+}
+.stick.visible { display: grid; }
+.stick-knob {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(226, 193, 110, 0.72);
+  border: 1px solid rgba(255, 240, 200, 0.7);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transition: transform 0.08s ease-out;
+  pointer-events: none;
+}
+
+#hud-strip { display: none; }
+.strip-item { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
+.strip-item .k { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+.strip-item .v { font-size: 14px; font-variant-numeric: tabular-nums; }
+
+/*
+ * Phone layout. The four corner cards become one top bar and one stat strip,
+ * and the station list moves to a thumb-reachable row along the bottom.
+ */
+@media (max-width: 900px), (pointer: coarse) {
+  #hud-nation, #hud-self { display: none; }
+  #crosshair { display: none; }
+
+  .hud-card { padding: 8px 10px; border-radius: 10px; }
+
+  #hud-date {
+    top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left));
+    min-width: 0; max-width: 46vw;
+  }
+  .date-line { font-size: 15px; }
+  .date-sub { font-size: 9.5px; margin-top: 1px; }
+  .term-track { margin-top: 5px; height: 3px; }
+
+  #hud-power {
+    top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
+    min-width: 0; display: flex; align-items: center; gap: 12px;
+  }
+  .power-row { flex-direction: column; gap: 1px; margin-bottom: 0; align-items: center; }
+  .power-label { font-size: 9px; letter-spacing: 0.06em; }
+  .power-value { font-size: 16px; }
+  .pip { width: 10px; height: 10px; }
+
+  #hud-strip {
+    display: flex; gap: 14px;
+    top: calc(max(10px, env(safe-area-inset-top)) + 52px);
+    left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right));
+    overflow-x: auto; scrollbar-width: none; justify-content: space-between;
+  }
+  #hud-strip::-webkit-scrollbar { display: none; }
+
+  /* Stations become a scrolling row of chips along the bottom edge. */
+  #hud-legend {
+    top: auto; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right));
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 52px);
+    transform: none; flex-direction: row; gap: 6px;
+    overflow-x: auto; scrollbar-width: none; padding: 6px;
+  }
+  #hud-legend::-webkit-scrollbar { display: none; }
+  .legend-row {
+    flex-direction: column; gap: 2px; width: auto; flex: none; padding: 6px 10px;
+    font-size: 10.5px; text-align: center; white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9px;
+  }
+  .legend-row kbd { display: none; }
+
+  #hud-actions {
+    bottom: max(8px, env(safe-area-inset-bottom)); left: 50%;
+    width: min(560px, calc(100vw - 16px)); justify-content: center;
+    padding: 6px; gap: 6px;
+  }
+  #hud-actions .btn { flex: 1; padding: 10px 8px; font-size: 13px; }
+
+  #prompt { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 148px); font-size: 12.5px; }
+
+  /* Panels take the whole screen, with room for the toast lane above them. */
+  #panel-root.open { padding: 74px 8px calc(8px + env(safe-area-inset-bottom)); }
+  .panel { max-height: calc(100vh - 86px); border-radius: 14px; }
+  .panel-head { padding: 13px 15px 11px; }
+  .panel-title { font-size: 20px; }
+  .panel-sub { font-size: 12px; }
+  .panel-body { padding: 14px 15px 16px; }
+  .panel-foot { padding: 11px 15px; flex-wrap: wrap; }
+  .panel-foot .btn { flex: 1; }
+  .option { padding: 12px; }
+  .option-top { flex-wrap: wrap; gap: 4px; }
+  .option-label { font-size: 14.5px; }
+  .option-detail { font-size: 12.5px; }
+
+  /* Sliders need a full row of their own on a narrow screen. */
+  .budget-row { grid-template-columns: 1fr auto; gap: 6px 10px; }
+  .budget-row input[type="range"] { grid-column: 1 / -1; height: 28px; }
+  .budget-amount { text-align: right; }
+
+  #toast-root { top: max(8px, env(safe-area-inset-top)); width: calc(100vw - 16px); }
+  .toast { padding: 10px 12px; }
+  .toast-title { font-size: 14px; }
+  .toast-text { font-size: 12px; }
+
+  .title-name { font-size: 42px; }
+  .title-tag { font-size: 13.5px; margin-bottom: 22px; }
+  .ending-grade { font-size: 56px; }
+  .ending-title { font-size: 26px; }
+  .ending-body { font-size: 14px; }
+  .help-list { font-size: 12px; line-height: 1.75; }
+}
+
+/* Landscape phones are short: give the panels back their vertical room. */
+@media (max-height: 480px) and (pointer: coarse) {
+  #panel-root.open { padding: 8px; }
+  .panel { max-height: calc(100vh - 16px); }
+  #hud-strip { display: none; }
+  #toast-root { display: none; }
+}

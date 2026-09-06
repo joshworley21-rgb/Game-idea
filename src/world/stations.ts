@@ -39,6 +39,8 @@ interface StationVisual {
   anchor: StationAnchor;
   ring: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
   sprite: THREE.Sprite;
+  /** Invisible volume so a tap or click can open the station directly. */
+  hit: THREE.Mesh;
   badge: number;
   active: boolean;
 }
@@ -47,9 +49,12 @@ interface StationVisual {
 export class Stations {
   private visuals: StationVisual[] = [];
   private clock = 0;
+  private labelScale = 1;
+  private touch: boolean;
   nearest: StationId | null = null;
 
-  constructor(scene: THREE.Scene, anchors: Record<StationId, StationAnchor>) {
+  constructor(scene: THREE.Scene, anchors: Record<StationId, StationAnchor>, touch = false) {
+    this.touch = touch;
     for (const anchor of Object.values(anchors)) {
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.42, 0.52, 40),
@@ -68,17 +73,27 @@ export class Stations {
       const info = STATION_INFO[anchor.id];
       const sprite = new THREE.Sprite(
         new THREE.SpriteMaterial({
-          map: labelTexture(info.name, "walk closer", false),
+          map: labelTexture(info.name, this.touch ? "tap to open" : "walk closer", false),
           transparent: true,
           depthTest: false,
         }),
       );
       sprite.position.copy(anchor.position).setY(1.62);
       sprite.scale.set(1.5, 0.47, 1);
+      sprite.userData.baseScale = [1.5, 0.47];
       sprite.renderOrder = 10;
       scene.add(sprite);
 
-      this.visuals.push({ anchor, ring, sprite, badge: 0, active: false });
+      // Fully transparent rather than `visible: false`, which the raycaster skips.
+      const hit = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.85, 0.85, 2.4, 12),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+      );
+      hit.position.copy(anchor.position).setY(1.2);
+      hit.userData.stationId = anchor.id;
+      scene.add(hit);
+
+      this.visuals.push({ anchor, ring, sprite, hit, badge: 0, active: false });
     }
   }
 
@@ -92,7 +107,13 @@ export class Stations {
 
   private refreshLabel(v: StationVisual): void {
     const info = STATION_INFO[v.anchor.id];
-    const hint = v.badge > 0 ? "NEEDS YOU NOW" : v.active ? "press E to open" : "walk closer";
+    const hint = v.badge > 0
+      ? "NEEDS YOU NOW"
+      : this.touch
+        ? "tap to open"
+        : v.active
+          ? "press E to open"
+          : "walk closer";
     v.sprite.material.map?.dispose();
     v.sprite.material.map = labelTexture(info.name, hint, v.active || v.badge > 0);
     v.sprite.material.needsUpdate = true;
@@ -131,6 +152,23 @@ export class Stations {
 
     this.nearest = best?.anchor.id ?? null;
     return this.nearest;
+  }
+
+  /** Shrinks the floating labels on small screens. */
+  setLabelScale(factor: number): void {
+    if (this.labelScale === factor) return;
+    this.labelScale = factor;
+    for (const v of this.visuals) {
+      const [x, y] = v.sprite.userData.baseScale as [number, number];
+      v.sprite.scale.set(x * factor, y * factor, 1);
+    }
+  }
+
+  /** The station under a screen point, if any. */
+  pick(raycaster: THREE.Raycaster): StationId | null {
+    const hits = raycaster.intersectObjects(this.visuals.map((v) => v.hit), false);
+    const id = hits[0]?.object.userData.stationId;
+    return typeof id === "string" ? (id as StationId) : null;
   }
 
   focusOf(id: StationId): THREE.Vector3 | null {

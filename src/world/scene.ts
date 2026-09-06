@@ -23,14 +23,24 @@ export class World {
   private clock = new THREE.Clock();
   private hemisphere: THREE.HemisphereLight;
   private raf = 0;
+  private raycaster = new THREE.Raycaster();
+  /** True on phones and tablets, where the GPU budget is much smaller. */
+  readonly lowPower: boolean;
 
   onNearestChange: (station: StationId | null) => void = () => {};
+  /** A tap or click that landed on a station. */
+  onStationTap: (station: StationId) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.lowPower = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: !this.lowPower,
+      powerPreference: "high-performance",
+    });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, this.lowPower ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.lowPower ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.9;
 
@@ -38,16 +48,25 @@ export class World {
     this.scene.fog = new THREE.Fog(0x1a1712, 14, 30);
 
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 100);
-    this.office = buildOffice();
+    this.office = buildOffice(this.lowPower);
     this.scene.add(this.office.group);
 
     this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.42);
     this.scene.add(this.hemisphere);
 
     this.player = new PlayerController(this.camera, this.renderer.domElement);
-    this.stations = new Stations(this.scene, this.office.anchors);
+    this.stations = new Stations(this.scene, this.office.anchors, this.lowPower);
+    this.player.onTap = ({ x, y }) => {
+      const station = this.pickStation(x, y);
+      if (station) this.onStationTap(station);
+      else this.player.lock();
+    };
 
     this.resize();
+    // A tall screen otherwise opens on a wall of ceiling; frame the desk.
+    if (window.innerHeight > window.innerWidth) {
+      this.player.lookAt(new THREE.Vector3(0, 1.0, -2.75));
+    }
     window.addEventListener("resize", this.resize);
   }
 
@@ -65,6 +84,17 @@ export class World {
     }
   }
 
+  /** The station under a screen point, for tap and click to open. */
+  pickStation(clientX: number, clientY: number): StationId | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.camera);
+    return this.stations.pick(this.raycaster);
+  }
+
   focus(station: StationId): void {
     const target = this.stations.focusOf(station);
     if (target) this.player.lookAt(target);
@@ -75,7 +105,14 @@ export class World {
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    // three's fov is vertical, so a portrait phone would crush the horizontal
+    // view to a slot. Hold the horizontal field steady and derive the vertical.
+    const targetHorizontal = (88 * Math.PI) / 180;
+    const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
+    this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
     this.camera.updateProjectionMatrix();
+    // World-space labels need to shrink on a small screen or they swamp it.
+    this.stations.setLabelScale(w < 620 ? 0.66 : 1);
   };
 
   start(): void {

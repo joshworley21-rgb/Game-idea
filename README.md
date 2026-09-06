@@ -30,8 +30,9 @@ You walk the Oval Office in first person. Each object is a system:
 
 **Controls** — `W A S D` and the mouse to move and look, `E` to use what you are
 standing at, `1`–`7` to jump straight to a station, `Tab` for the dashboard,
-`Enter` to end the month, `Esc` to close a panel. Click the scene to capture the
-mouse; everything is also reachable from the keyboard alone.
+`Enter` to end the month, `Esc` to close a panel. Click an object in the room to
+open it, or click empty space to capture the mouse. Everything is reachable from
+the keyboard alone, and on a touch screen from a thumb alone.
 
 Progress saves to `localStorage` after every action.
 
@@ -80,13 +81,43 @@ a collapse of the ability to govern. Otherwise you reach the election, having
 decided in year three whether to run at all, and get a legacy score across the
 economy, society, the world, politics and your own life.
 
+## Android
+
+The game also ships as an Android app: the same web build running in a WebView
+through Capacitor, with the assets bundled into the APK so it works offline.
+
+```bash
+npm run android:apk    # build + sync + assembleDebug
+# -> android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+It needs a JDK (17 or newer), Gradle, and an Android SDK with platform 36 and
+build-tools 36. Point `ANDROID_HOME` at the SDK before building.
+
+**Touch play.** The phone build is not the desktop build in a frame. Input runs
+on pointer events, so a thumb drag looks around exactly as a mouse drag does; a
+stick in the bottom-left corner walks; and tapping an object in the room opens
+it. The HUD reflows below 900px: the four corner cards collapse into a top bar
+and a stat strip, the stations become a scrolling row of chips along the bottom
+edge, and panels take the full screen. The camera's vertical field of view is
+derived from a fixed horizontal one, because three.js measures FOV vertically
+and a portrait phone would otherwise show the room through a slot. Shadow
+resolution, pixel ratio and antialiasing all step down on touch hardware, and
+the Android back button closes a panel rather than quitting.
+
+**Signing.** `android:apk` produces a debug-signed APK, which installs fine for
+sideloading but is not for distribution. For a release build, generate your own
+keystore and add a `signingConfig` — no keystore or password belongs in this
+repository.
+
 ## Project layout
 
 ```
 src/game/     simulation: state, sim tick, bills, crises, actions, endings
 src/world/    three.js: the office geometry, first-person controls, stations
-src/ui/       HUD, panels, styling
+src/ui/       HUD, panels, touch stick, styling
 src/tools/    headless balance harness
+android/      Capacitor Android project
 ```
 
 The simulation has no dependency on the renderer or the DOM, which is what makes

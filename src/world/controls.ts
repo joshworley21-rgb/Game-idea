@@ -5,10 +5,19 @@ const EYE_HEIGHT = 1.62;
 const SPEED = 3.1;
 const SPRINT = 5.0;
 const DAMPING = 11;
+/** A pointer that moves less than this over a short time counts as a tap. */
+const TAP_SLOP = 14;
+const TAP_MS = 400;
+
+export interface TapEvent {
+  x: number;
+  y: number;
+}
 
 /**
- * First-person walker. Uses pointer lock where the browser allows it and
- * falls back to drag-to-look so the game still works if lock is refused.
+ * First-person walker driven by pointer events, so a mouse drag and a thumb
+ * drag take the same path. Pointer lock is used when the browser grants it;
+ * on a phone, and in an embedded frame, drag-to-look carries the whole game.
  */
 export class PlayerController {
   readonly camera: THREE.PerspectiveCamera;
@@ -17,13 +26,24 @@ export class PlayerController {
   private pitch = 0;
   private velocity = new THREE.Vector3();
   private keys = new Set<string>();
-  private dragging = false;
-  private lastPointer = { x: 0, y: 0 };
   private bob = 0;
+
+  /** Look drag in progress, keyed by pointer id. */
+  private lookPointer: number | null = null;
+  private lastPointer = { x: 0, y: 0 };
+  private pressedAt = 0;
+  private pressedPos = { x: 0, y: 0 };
+  private moved = 0;
+
+  /** Movement from an on-screen stick: x strafes, y walks forward. */
+  moveInput = { x: 0, y: 0 };
+
   /** Set false while a UI panel is open. */
   enabled = true;
   locked = false;
   onLockChange: (locked: boolean) => void = () => {};
+  /** Fired for a press that did not turn into a drag. */
+  onTap: (event: TapEvent) => void = () => {};
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
@@ -34,34 +54,39 @@ export class PlayerController {
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     document.addEventListener("pointerlockchange", this.onPointerLockChange);
-    dom.addEventListener("mousedown", this.onMouseDown);
-    window.addEventListener("mouseup", this.onMouseUp);
-    window.addEventListener("mousemove", this.onMouseMove);
-    window.addEventListener("blur", this.releaseKeys);
+    dom.addEventListener("pointerdown", this.onPointerDown);
+    window.addEventListener("pointermove", this.onPointerMove);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
+    window.addEventListener("blur", this.release);
   }
 
   dispose(): void {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     document.removeEventListener("pointerlockchange", this.onPointerLockChange);
-    this.dom.removeEventListener("mousedown", this.onMouseDown);
-    window.removeEventListener("mouseup", this.onMouseUp);
-    window.removeEventListener("mousemove", this.onMouseMove);
-    window.removeEventListener("blur", this.releaseKeys);
+    this.dom.removeEventListener("pointerdown", this.onPointerDown);
+    window.removeEventListener("pointermove", this.onPointerMove);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerUp);
+    window.removeEventListener("blur", this.release);
   }
 
+  /** Requests pointer lock. Silently ignored where it is unavailable. */
   lock(): void {
     if (!this.enabled) return;
-    this.dom.requestPointerLock?.();
+    if (matchMedia("(pointer: coarse)").matches) return;
+    void this.dom.requestPointerLock?.();
   }
 
   unlock(): void {
     if (document.pointerLockElement === this.dom) document.exitPointerLock();
   }
 
-  private releaseKeys = (): void => {
+  private release = (): void => {
     this.keys.clear();
-    this.dragging = false;
+    this.lookPointer = null;
+    this.moveInput = { x: 0, y: 0 };
   };
 
   private onPointerLockChange = (): void => {
@@ -78,32 +103,36 @@ export class PlayerController {
     this.keys.delete(e.code);
   };
 
-  private onMouseDown = (e: MouseEvent): void => {
-    if (!this.enabled || e.button !== 0) return;
-    this.dragging = true;
+  private onPointerDown = (e: PointerEvent): void => {
+    if (!this.enabled || this.lookPointer !== null) return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    this.lookPointer = e.pointerId;
     this.lastPointer = { x: e.clientX, y: e.clientY };
+    this.pressedPos = { x: e.clientX, y: e.clientY };
+    this.pressedAt = performance.now();
+    this.moved = 0;
   };
 
-  private onMouseUp = (): void => {
-    this.dragging = false;
-  };
-
-  private onMouseMove = (e: MouseEvent): void => {
+  private onPointerMove = (e: PointerEvent): void => {
     if (!this.enabled) return;
-    if (!this.locked && !this.dragging) return;
-    // movementX/Y is only trustworthy under pointer lock; outside it, track
-    // the pointer ourselves so drag-to-look behaves the same everywhere.
+    const dragging = this.lookPointer === e.pointerId;
+    if (!this.locked && !dragging) return;
+
+    // movementX/Y is only meaningful under pointer lock; outside it, track the
+    // pointer ourselves so drag-to-look behaves the same everywhere.
     let dx: number;
     let dy: number;
-    if (this.locked) {
+    if (this.locked && !dragging) {
       dx = e.movementX;
       dy = e.movementY;
     } else {
       dx = e.clientX - this.lastPointer.x;
       dy = e.clientY - this.lastPointer.y;
       this.lastPointer = { x: e.clientX, y: e.clientY };
+      this.moved += Math.abs(dx) + Math.abs(dy);
     }
-    const sensitivity = 0.0022;
+
+    const sensitivity = e.pointerType === "touch" ? 0.0034 : 0.0022;
     this.yaw -= dx * sensitivity;
     this.pitch -= dy * sensitivity;
     const limit = Math.PI / 2 - 0.08;
@@ -111,11 +140,22 @@ export class PlayerController {
     this.applyRotation();
   };
 
+  private onPointerUp = (e: PointerEvent): void => {
+    if (this.lookPointer !== e.pointerId) return;
+    this.lookPointer = null;
+    const quick = performance.now() - this.pressedAt < TAP_MS;
+    const still =
+      Math.abs(e.clientX - this.pressedPos.x) < TAP_SLOP &&
+      Math.abs(e.clientY - this.pressedPos.y) < TAP_SLOP &&
+      this.moved < TAP_SLOP * 2;
+    if (this.enabled && quick && still) this.onTap({ x: e.clientX, y: e.clientY });
+  };
+
   private applyRotation(): void {
     this.camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
   }
 
-  /** Turns the camera to face a point over the next few frames. */
+  /** Turns the camera to face a point. */
   lookAt(target: THREE.Vector3): void {
     const dir = target.clone().sub(this.camera.position);
     this.yaw = Math.atan2(-dir.x, -dir.z);
@@ -124,14 +164,19 @@ export class PlayerController {
   }
 
   update(dt: number): void {
-    const forward = Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
+    const keyForward = Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
       Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
-    const strafe = Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
+    const keyStrafe = Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
       Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
 
+    const forward = keyForward + this.moveInput.y;
+    const strafe = keyStrafe + this.moveInput.x;
+
     if (this.enabled && (forward || strafe)) {
-      const speed = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? SPRINT : SPEED;
-      const dir = new THREE.Vector3(strafe, 0, -forward).normalize();
+      const sprinting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+      const speed = sprinting ? SPRINT : SPEED;
+      const dir = new THREE.Vector3(strafe, 0, -forward);
+      if (dir.lengthSq() > 1) dir.normalize();
       dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
       this.velocity.addScaledVector(dir, speed * DAMPING * dt);
     }
