@@ -1,7 +1,9 @@
 import { Emitter } from "../core/emitter.ts";
 import { Rng } from "../core/rng.ts";
 import { ACTIONS, actionCooldownLeft } from "./actions.ts";
-import { billCatalog, forecastVote, holdVote, voteAftermath } from "./bills.ts";
+import { billCatalog, factionAftermath, forecastVote, holdVote, voteAftermath } from "./bills.ts";
+import { createCabinet, crisisCompetence, replaceSecretary, tickCabinet } from "./cabinet.ts";
+import { applyMidtermSwing } from "./congress.ts";
 import { CRISES, applyConsequence, crisisPressure, eligibleCrises } from "./crises.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
 import {
@@ -65,7 +67,12 @@ export class Engine extends Emitter<EngineEvents> {
     this.rng = new Rng(this.state.seed);
     this.ctx = createSimContext(this.rng);
     this.state.bills = billCatalog();
+    this.state.cabinet = createCabinet(this.rng);
     this.log("system", `You are sworn in as President of the United States.`);
+    this.log(
+      "system",
+      `Cabinet confirmed: ${this.state.cabinet.map((c) => c.name).join(", ")}.`,
+    );
     pushNews(this.state, generateNews(this.state, this.rng));
     this.emit("state", this.state);
   }
@@ -79,6 +86,7 @@ export class Engine extends Emitter<EngineEvents> {
     });
     this.state = state;
     this.rng = new Rng(state.seed ^ (state.month * 2654435761));
+    if (!state.cabinet?.length) state.cabinet = createCabinet(this.rng);
     this.ctx = createSimContext(this.rng, state.month);
     this.emit("state", this.state);
   }
@@ -197,6 +205,7 @@ export class Engine extends Emitter<EngineEvents> {
 
     const after = voteAftermath(bill, result);
     applyEffects(s, after);
+    factionAftermath(s, bill, result.passed);
 
     const shown = { ...(result.passed ? bill.onPass : {}), ...after };
     shown["politics.capital"] = (shown["politics.capital"] ?? 0) - total;
@@ -267,7 +276,13 @@ export class Engine extends Emitter<EngineEvents> {
     // Capital clamps at zero, so an unaffordable last resort simply empties it.
     if (choice.capitalCost) applyEffects(s, { "politics.capital": -choice.capitalCost });
 
-    const failed = choice.risk !== undefined && this.rng.chance(choice.risk);
+    // A department that knows its business shaves the odds of it going wrong.
+    const competence = crisisCompetence(this.state, crisis.tags);
+    const risk =
+      choice.risk === undefined
+        ? undefined
+        : Math.max(0.02, Math.min(0.95, choice.risk * (1 - (competence - 60) * 0.007)));
+    const failed = risk !== undefined && this.rng.chance(risk);
     const effects = failed && choice.onFail ? choice.onFail : choice.effects;
     applyEffects(s, effects);
 
@@ -356,6 +371,7 @@ export class Engine extends Emitter<EngineEvents> {
     const crisisCount = s.counters.crisesThisMonth ?? 0;
     const report = simulateMonth(s, this.ctx, this.rng, crisisCount);
     s.counters.crisesThisMonth = 0;
+    this.runCabinet(report);
 
     s.history.push({
       month: s.month,
@@ -390,11 +406,57 @@ export class Engine extends Emitter<EngineEvents> {
     this.emit("state", s);
   }
 
+  /**
+   * The cabinet's month. People who have stopped believing in you either clear
+   * their desk or find a reporter; either way it lands in the monthly brief.
+   */
+  private runCabinet(report: MonthReport): void {
+    const s = this.state;
+    for (const event of tickCabinet(s, this.rng)) {
+      if (event.kind === "resigned") {
+        const successor = replaceSecretary(this.rng, s.cabinet, event.person.office);
+        applyEffects(s, {
+          "politics.capital": -5,
+          "politics.approval": -1.4,
+          "politics.media": -3,
+          "personal.stress": 5,
+        });
+        s.counters.resignations = (s.counters.resignations ?? 0) + 1;
+        this.log("system", `${event.person.title} ${event.person.name} resigns; ${successor.name} sworn in.`);
+        report.notes.push(`${event.person.name} is gone. ${successor.name} takes the department.`);
+        pushNews(s, [
+          {
+            month: s.month,
+            headline: `${event.person.name} resigns as ${event.person.title}, citing "differences of direction"`,
+            source: "The Beacon",
+            tone: "bad",
+          },
+        ]);
+      } else {
+        event.person.loyalty = Math.min(100, event.person.loyalty + 6); // the leak vents the pressure
+        applyEffects(s, { "politics.scandal": 7, "politics.media": -5, "personal.stress": 4 });
+        s.counters.leaks = (s.counters.leaks ?? 0) + 1;
+        this.log("system", `A private meeting with ${event.person.name} appears in print.`);
+        report.notes.push(`Someone in the room is talking to the press.`);
+        pushNews(s, [
+          {
+            month: s.month,
+            headline: `Leaked account of Oval Office meeting contradicts White House line`,
+            source: "The Beacon",
+            tone: "bad",
+          },
+        ]);
+      }
+    }
+  }
+
   private runMidterms(): void {
     const s = this.state;
     // The president's party almost always loses ground at the midterms.
     const swing = (s.politics.approval - 50) * 0.55 + this.rng.range(-4, 4) - 4;
     applyEffects(s, { "politics.house": swing, "politics.senate": swing * 0.7 });
+    // Seats actually change hands between the factions.
+    applyMidtermSwing(s, swing);
     const won = swing > 0;
     this.log("system", `Midterm elections: ${won ? "gains" : "losses"} of ${Math.abs(swing).toFixed(1)} points.`);
     pushNews(s, [

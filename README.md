@@ -76,12 +76,45 @@ business and loses the young; imposing a rail settlement gets the trains running
 and turns labour against you for the rest of the term. The dashboard shows the
 whole coalition, sorted, with a live re-election forecast.
 
-**Legislation.** A bill's floor score is your chamber support plus the capital
-you commit, adjusted for approval and party standing, minus how divisive the bill
-is and what it costs. A simple majority carries it. Bills aligned with your own
-party face stiffer opposition resistance; centrist bills are easier; crossing the
-aisle picks up votes and costs you at home. Failed bills can come back after six
-months.
+**Congress is five factions, not a support percentage.** The hundred seats are
+split between the Progressive Caucus, the Liberal Bloc, the Moderates, the
+Conservative Bloc and the Hardliners. Each sits somewhere on a left-to-right
+axis, holds a mood toward you, and follows its own constituency: the
+Progressives take their cue from the activist left, the Conservatives from
+business, the Hardliners from traditionalists, and the Moderates — a genuine
+swing bloc with no party loyalty at all — from the suburbs and from the
+country's verdict on you.
+
+A bill is scored faction by faction. Ideological distance does most of the
+work and rises steeply, so a faction one step away can be bought and one on the
+far flank is not voting for this at any price. On top of that sit the faction's
+mood, whether the bill is on its home turf, what the bill costs (deficit hawks
+punish spending nearly four times harder, and harder still above 110% debt), how
+divisive it is, and the capital you commit to whipping. Every faction's odds are
+shown on the bill card as a whip board, with the expected vote count out of a
+hundred; fifty carries it, and the floor adds twelve points of noise either way,
+so a close count is a real gamble.
+
+The practical shape of it: your own signature agenda is the hard one. A
+progressive bill under a blue president locks up the left and gets nothing from
+the Moderates until their mood has risen and you spend most of your capital
+whipping. Centrist bills pass. Bills written for the other party are close to
+impossible, which is what having a party means. Midterm losses move actual seats
+between the flanks, so a bad November changes every count that follows.
+
+**The cabinet has names.** Six secretaries — chief of staff, treasury, state,
+defense, justice, health — each with a competence, a loyalty, and a faction they
+came from. Competence is what turns money into delivery: a strong cabinet lifts
+every agency's output, a good treasury secretary adds to growth, and the
+department that owns a crisis takes the edge off its risk of going wrong.
+Appointments are patronage, so the factions your people came from warm to you.
+
+Loyalty only ever erodes. It falls faster when you are unpopular, mired in
+scandal or facing unrest, slower when your party is behind you, and a little
+faster every month someone has served. A secretary who has stopped believing in
+you either walks — costing capital, approval and a week of coverage — or talks
+to a reporter, which is worse. A steady presidency keeps its cabinet for four
+years. A failing one loses most of it.
 
 **Crises** are weighted by pressure derived from state, so they are consequences
 rather than dice. Underfund the environment and the fire seasons get worse;

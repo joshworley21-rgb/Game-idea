@@ -1,4 +1,6 @@
 import { Rng } from "../core/rng.ts";
+import { FACTIONS, billAxis, expectedVotes, whipCount } from "./congress.ts";
+import type { FactionVote } from "./congress.ts";
 import type { Bill, GameState, Ideology } from "./types.ts";
 
 /** Which ideology each party's base rewards. */
@@ -372,8 +374,11 @@ export function billCatalog(): Bill[] {
   return bills.map((b) => ({ ...b, status: "available" as const }));
 }
 
+/** A simple majority of the chamber carries a bill. */
+export const PASS_THRESHOLD = 50;
+
 export interface VoteForecast {
-  /** Expected floor score; 55 is the passing line. */
+  /** Expected votes out of one hundred; fifty carries it. */
   score: number;
   /** Rough probability of passage, 0-1. */
   odds: number;
@@ -381,44 +386,30 @@ export interface VoteForecast {
   read: string;
   /** True when the bill crosses the president's own party. */
   crossesParty: boolean;
+  /** Where every faction stands, for the whip board. */
+  factions: FactionVote[];
 }
 
-/** A simple majority of the chamber carries a bill. */
-export const PASS_THRESHOLD = 50;
-
-/** How hard the opposition fights, given where the bill sits ideologically. */
-function mismatchFactor(bill: Bill, state: GameState): { factor: number; crossesParty: boolean } {
-  const mine = partyIdeology(state);
-  if (bill.ideology === "centrist") return { factor: 0.25, crossesParty: false };
-  if (bill.ideology === mine) return { factor: 0.45, crossesParty: false };
-  // Crossing the aisle costs you at home but picks up votes across it.
-  return { factor: 0.5, crossesParty: true };
-}
-
-/** Deterministic part of the floor math; the roll call adds the noise. */
+/**
+ * The floor maths, faction by faction. A bill passes when the members who will
+ * vote for it hold more than half the chamber, so the question is never "how
+ * much capital" alone — it is which five groups you can get into one room.
+ */
 export function forecastVote(state: GameState, bill: Bill, capitalSpent: number): VoteForecast {
-  const chamber = (state.politics.house + state.politics.senate) / 2;
-  const { factor, crossesParty } = mismatchFactor(bill, state);
-  const debtSensitivity = state.nation.debtToGdp > 110 ? 1.6 : 1;
-  const costPenalty = bill.cost > 0 ? (bill.cost / 70) * debtSensitivity : 0;
+  const factions = whipCount(state, bill, capitalSpent);
+  const score = expectedVotes(factions);
+  const mine = partyIdeology(state);
+  const crossesParty = bill.ideology !== "centrist" && bill.ideology !== mine;
 
-  const score =
-    chamber +
-    capitalSpent * 0.55 +
-    (state.politics.approval - 50) * 0.35 +
-    (state.politics.party - 50) * 0.2 -
-    bill.partisanship * factor -
-    costPenalty +
-    (crossesParty ? 4 : 0);
-
-  // The roll call adds +/-8 uniform noise, so odds are linear in that window.
-  const odds = Math.min(0.97, Math.max(0.03, (score - PASS_THRESHOLD + 8) / 16));
+  // The floor is not a spreadsheet: the roll adds +/-12, so a whip count near
+  // the line is a genuine gamble and a hopeless one is not quite hopeless.
+  const odds = Math.min(0.97, Math.max(0.03, (score - PASS_THRESHOLD + 12) / 24));
   const read =
     odds > 0.85 ? "Locked up" :
     odds > 0.62 ? "Likely to pass" :
     odds > 0.38 ? "Too close to call" :
     odds > 0.15 ? "Uphill" : "Dead on arrival";
-  return { score, odds, read, crossesParty };
+  return { score, odds, read, crossesParty, factions };
 }
 
 export interface VoteResult {
@@ -430,7 +421,7 @@ export interface VoteResult {
 
 export function holdVote(state: GameState, bill: Bill, capitalSpent: number, rng: Rng): VoteResult {
   const forecast = forecastVote(state, bill, capitalSpent);
-  const roll = rng.range(-8, 8);
+  const roll = rng.range(-12, 12);
   const final = forecast.score + roll;
   const passed = final > PASS_THRESHOLD;
   const margin = final - PASS_THRESHOLD;
@@ -445,6 +436,24 @@ export function holdVote(state: GameState, bill: Bill, capitalSpent: number, rng
 }
 
 /** Effects on the president's own standing from the outcome of a vote. */
+/**
+ * How the factions feel afterwards. Members who wanted the bill warm to a
+ * president who delivered it; members who fought it cool toward one who rammed
+ * it through, and a failed bill annoys everybody who spent capital on it.
+ */
+export function factionAftermath(state: GameState, bill: Bill, passed: boolean): void {
+  const axis = billAxis(bill.ideology);
+  for (const def of FACTIONS) {
+    const faction = state.factions[def.key];
+    if (!faction) continue;
+    const distance = Math.abs(axis - def.axis);
+    // Close to the bill means they wanted it; far means they resented it.
+    const affinity = 1 - distance;
+    const shift = passed ? affinity * 5 : -Math.abs(affinity) * 1.5;
+    faction.mood = Math.max(0, Math.min(100, faction.mood + shift));
+  }
+}
+
 export function voteAftermath(bill: Bill, result: VoteResult) {
   const { crossesParty } = result.forecast;
   if (result.passed) {

@@ -78,12 +78,44 @@ export type BlocKey =
   | "activists"
   | "traditionalists";
 
+/** The five blocs that actually vote on your bills. */
+export type FactionKey =
+  | "progressives"
+  | "liberals"
+  | "moderates"
+  | "conservatives"
+  | "hardliners";
+
+export interface Faction {
+  /** Share of Congress, out of one hundred across all factions. */
+  seats: number;
+  /** How this faction feels about the president, 0-100. */
+  mood: number;
+}
+
+/** A member of the cabinet: a person, not a slider. */
+export interface Secretary {
+  /** Which office they hold. */
+  office: string;
+  title: string;
+  name: string;
+  /** How good they are at the job, 0-100. */
+  competence: number;
+  /** How long they will stay with you, 0-100. */
+  loyalty: number;
+  /** The congressional faction they are close to. */
+  faction: FactionKey;
+  /** Months served. */
+  months: number;
+}
+
 export type EffectPath =
   | `nation.${Exclude<keyof Nation, "sectors">}`
   | `nation.sectors.${SectorKey}`
   | `politics.${keyof Politics}`
   | `personal.${keyof Personal}`
-  | `blocs.${BlocKey}`;
+  | `blocs.${BlocKey}`
+  | `factions.${FactionKey}.mood`;
 
 /** A flat bag of additive deltas applied to state. */
 export type Effects = Partial<Record<EffectPath, number>>;
@@ -300,6 +332,10 @@ export interface GameState {
   heat: Partial<Record<CrisisTag, number>>;
   /** How each constituency feels about you, 0-100. */
   blocs: Record<BlocKey, number>;
+  /** The five blocs of Congress: their seats and their mood. */
+  factions: Record<FactionKey, Faction>;
+  /** The people running the departments. */
+  cabinet: Secretary[];
   /** Crisis ids unlocked by earlier decisions. */
   unlocked: string[];
   /** crisisId -> month it last fired. */

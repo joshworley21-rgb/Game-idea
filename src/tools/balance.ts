@@ -56,10 +56,14 @@ function run(strat: Strategy, seed: number) {
     }
     // Push one affordable bill a month when playing to govern.
     if (strat === "workaholic" || strat === "balanced") {
-      const bill = engine
+      // A president who legislates picks the winnable bill, not the first one.
+      const options = engine
         .availableBills()
-        .find((b) => b.capitalCost + 6 <= s.politics.capital && s.ap >= 1);
-      if (bill && engine.forecast(bill, 6).odds > 0.45) engine.proposeBill(bill.id, 6);
+        .filter((b) => b.capitalCost + 6 <= s.politics.capital && s.ap >= 1)
+        .map((b) => ({ bill: b, odds: engine.forecast(b, 6).odds }))
+        .sort((a, b) => b.odds - a.odds);
+      const best = options[0];
+      if (best && best.odds > 0.45) engine.proposeBill(best.bill.id, 6);
     }
     let guard = 12;
     while (s.ap > 0 && guard-- > 0) {

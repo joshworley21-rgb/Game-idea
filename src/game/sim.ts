@@ -1,6 +1,8 @@
 import { Rng } from "../core/rng.ts";
 import { addPath, applyEffects } from "./effects.ts";
 import { BLOCS, coalitionApproval, driftBlocs } from "./blocs.ts";
+import { cabinetFactionSupport, cabinetStrength, domainCompetence } from "./cabinet.ts";
+import { driftFactions, friendlySeats } from "./congress.ts";
 import {
   BUDGET_KEYS,
   NEED_DRIFT,
@@ -142,18 +144,21 @@ export function simulateMonth(
   }
 
   // --- Public services respond to money, slowly ---
+  // Money buys capacity; a competent cabinet is what turns it into delivery.
+  const machine = 1 + (cabinetStrength(s) - 63) * 0.0035;
   for (const key of BUDGET_KEYS) {
     ctx.needs[key] *= 1 + NEED_DRIFT;
     const ratio = s.enacted[key] / ctx.needs[key];
     const target = Math.min(100, Math.max(0, 50 + 62 * (ratio - 1)));
     const decay = s.nation.unrest > 65 ? 0.9 : 1; // strikes and disorder blunt delivery
-    s.nation.sectors[key] = drift(s.nation.sectors[key], target * decay, 0.085);
+    s.nation.sectors[key] = drift(s.nation.sectors[key], target * decay * machine, 0.085);
   }
 
   // --- Macroeconomy ---
   const cycle = 0.6 * Math.sin(s.month / 9 + ctx.cyclePhase);
   const shock = (rng.next() + rng.next() + rng.next() - 1.5) * 0.5;
-  let growthTarget = potentialGrowth(s) + cycle + shock;
+  let growthTarget =
+    potentialGrowth(s) + cycle + shock + (domainCompetence(s, "economy") - 60) * 0.006;
   // Central bank leans against inflation with rate hikes.
   if (s.nation.inflation > 3.2) growthTarget -= (s.nation.inflation - 3.2) * 0.35;
   s.nation.growth = drift(s.nation.growth, growthTarget, 0.35);
@@ -212,6 +217,13 @@ export function simulateMonth(
   // --- Politics ---
   // Constituencies move first: approval is the sum of what they now think.
   driftBlocs(s);
+  // Then Congress, whose factions follow their own constituencies — and take
+  // note of which of them you gave a department to.
+  driftFactions(s, cabinetFactionSupport(s));
+  // House and Senate numbers now describe who would actually vote with you.
+  const friendly = friendlySeats(s);
+  s.politics.house = drift(s.politics.house, friendly, 0.5);
+  s.politics.senate = drift(s.politics.senate, friendly * 0.96, 0.5);
 
   let target = approvalTarget(s);
   if (s.month <= 6) target += (7 - s.month) * 1.1; // honeymoon

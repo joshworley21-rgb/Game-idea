@@ -1,6 +1,8 @@
 import { actionCooldownLeft, actionsFor, STATION_INFO } from "../game/actions.ts";
 import { describeEffects } from "../game/effects.ts";
 import { BLOCS } from "../game/blocs.ts";
+import { PASS_THRESHOLD } from "../game/bills.ts";
+import { FACTION_BY_KEY } from "../game/congress.ts";
 import { electionMargin, gradeFor, scoreLegacy } from "../game/endings.ts";
 import type { MonthReport } from "../game/sim.ts";
 import {
@@ -252,6 +254,7 @@ function billCard(engine: Engine, bill: Bill, host: PanelHost): HTMLElement {
 
   const odds = el("span", { class: "option-cost" });
   const forecastLine = el("div", { class: "option-detail" });
+  const whipBoard = el("div", { class: "whip-board" });
   const pushLabel = el("span", { class: "budget-amount" });
   const slider = el("input", {
     type: "range",
@@ -274,6 +277,28 @@ function billCard(engine: Engine, bill: Bill, host: PanelHost): HTMLElement {
       ? "This crosses your own party. Passing it costs you at home."
       : `Whip count with ${bill.capitalCost + push} capital committed.`;
     pushLabel.textContent = `${bill.capitalCost + push} capital`;
+
+    // The whip board: who is with you, faction by faction, and by how much.
+    clear(whipBoard);
+    whipBoard.append(
+      el("div", { class: "whip-total" }, [
+        `${Math.round(f.score)} of 100 votes expected · ${PASS_THRESHOLD} carries it`,
+      ]),
+    );
+    for (const v of f.factions) {
+      const pct = Math.round(v.odds * 100);
+      const tone = pct >= 65 ? "ok" : pct >= 40 ? "warn" : "bad";
+      whipBoard.append(
+        el("div", { class: "whip-row", title: v.def.blurb }, [
+          el("span", { class: "whip-name" }, [v.def.short]),
+          el("span", { class: "whip-seats" }, [`${Math.round(v.seats)} seats`]),
+          el("div", { class: "meter-track whip-meter" }, [
+            el("div", { class: `meter-fill ${tone}`, style: `width:${pct}%` }),
+          ]),
+          el("span", { class: `whip-odds ${tone}` }, [`${pct}%`]),
+        ]),
+      );
+    }
   };
 
   slider.addEventListener("input", () => {
@@ -309,6 +334,7 @@ function billCard(engine: Engine, bill: Bill, host: PanelHost): HTMLElement {
       pushLabel,
     ]),
     forecastLine,
+    whipBoard,
     el("div", { style: "margin-top:10px" }, [goButton]),
     !affordable
       ? el("div", { class: "reason" }, [`You need ${bill.capitalCost} capital just to open the door.`])
@@ -613,6 +639,30 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
       : []),
     el("div", { class: "section-title" }, ["Public services"]),
     ...BUDGET_KEYS.map((k) => meter(BUDGET_LABELS[k], s.nation.sectors[k])),
+    el("div", { class: "section-title" }, ["Your cabinet"]),
+    ...(s.cabinet ?? []).map((person) => {
+      const def = FACTION_BY_KEY.get(person.faction);
+      const loyalTone = person.loyalty >= 55 ? "ok" : person.loyalty >= 35 ? "warn" : "bad";
+      return el("div", { class: "cabinet-row" }, [
+        el("div", { class: "bloc-head" }, [
+          el("span", {}, [person.name]),
+          el("span", { class: "bloc-share" }, [person.title]),
+        ]),
+        el("div", { class: "cabinet-meta" }, [
+          `${def?.short ?? "unaligned"} · ${person.months} months in post`,
+        ]),
+        el("div", { class: "cabinet-bars" }, [
+          el("span", { class: "k" }, ["Competence"]),
+          el("div", { class: "meter-track whip-meter" }, [
+            el("div", { class: "meter-fill ok", style: `width:${person.competence}%` }),
+          ]),
+          el("span", { class: "k" }, ["Loyalty"]),
+          el("div", { class: "meter-track whip-meter" }, [
+            el("div", { class: `meter-fill ${loyalTone}`, style: `width:${person.loyalty}%` }),
+          ]),
+        ]),
+      ]);
+    }),
     el("div", { class: "section-title" }, ["Conditions"]),
     meter("Security", s.nation.security),
     meter("Global standing", s.nation.standing),
@@ -643,6 +693,27 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
       ]),
     );
   }
+  // Congress, faction by faction: who holds the seats and how they feel today.
+  right.append(el("div", { class: "section-title" }, ["The floor"]));
+  for (const key of Object.keys(s.factions) as (keyof typeof s.factions)[]) {
+    const faction = s.factions[key];
+    const def = FACTION_BY_KEY.get(key);
+    if (!faction || !def) continue;
+    const tone = faction.mood >= 55 ? "ok" : faction.mood >= 45 ? "warn" : "bad";
+    right.append(
+      el("div", { class: "bloc-row", title: def.blurb }, [
+        el("div", { class: "bloc-head" }, [
+          el("span", {}, [def.short]),
+          el("span", { class: "bloc-share" }, [`${Math.round(faction.seats)} seats`]),
+          el("span", { class: `v ${tone}` }, [Math.round(faction.mood).toString()]),
+        ]),
+        el("div", { class: "meter-track" }, [
+          el("div", { class: `meter-fill ${tone}`, style: `width:${faction.mood}%` }),
+        ]),
+      ]),
+    );
+  }
+
   const margin = electionMargin(s);
   right.append(
     el("div", { class: "option-detail", style: "margin-top:10px" }, [

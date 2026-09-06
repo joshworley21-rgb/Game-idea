@@ -133,6 +133,27 @@ export function createInitialState(opts: NewGameOptions): GameState {
       activists: 50,
       traditionalists: 48,
     },
+    // A closely divided Congress with the moderates holding the balance.
+    // A new president arrives with their own side warm and the other cold;
+    // the flanks are always the hardest work.
+    factions:
+      opts.party === "blue"
+        ? {
+            progressives: { seats: 12, mood: 58 },
+            liberals: { seats: 26, mood: 60 },
+            moderates: { seats: 22, mood: 52 },
+            conservatives: { seats: 25, mood: 41 },
+            hardliners: { seats: 15, mood: 30 },
+          }
+        : {
+            progressives: { seats: 12, mood: 30 },
+            liberals: { seats: 26, mood: 41 },
+            moderates: { seats: 22, mood: 52 },
+            conservatives: { seats: 25, mood: 60 },
+            hardliners: { seats: 15, mood: 58 },
+          },
+    // Filled in by the engine, which owns the run's random source.
+    cabinet: [],
     unlocked: [],
     crisisHistory: {},
     history: [],
