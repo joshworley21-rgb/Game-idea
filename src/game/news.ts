@@ -178,9 +178,10 @@ function fill(line: string, s: GameState): string {
 export function generateNews(s: GameState, rng: Rng): NewsItem[] {
   const matching = TEMPLATES.filter((t) => t.when(s));
   const chosen: NewsItem[] = [];
-  const used = new Set<string>();
-  const count = Math.min(2, matching.length);
-  for (let i = 0; i < count; i += 1) {
+  // Don't reprint a headline the reader saw in the last couple of months.
+  const used = new Set(s.news.slice(0, 4).map((n) => n.headline));
+  const wanted = Math.min(2, matching.length);
+  for (let attempt = 0; attempt < 8 && chosen.length < wanted; attempt += 1) {
     const t = rng.pick(matching);
     const line = fill(rng.pick(t.lines), s);
     if (used.has(line)) continue;

@@ -40,9 +40,12 @@ function run(strat: Strategy, seed: number) {
   while (s.phase === "playing") {
     // Resolve every crisis with a random affordable option.
     for (const crisis of [...engine.pendingCrises]) {
-      const options = crisis.choices.filter((c) => engine.affordable(c));
-      const choice = options.length ? rng.pick(options) : crisis.choices[0];
-      engine.resolveCrisis(crisis.id, choice.id);
+      const options = crisis.choices.filter((c) => engine.affordable(crisis, c));
+      if (!options.length) throw new Error(`No resolvable option for crisis ${crisis.id}`);
+      const choice = rng.pick(options);
+      if (!engine.resolveCrisis(crisis.id, choice.id)) {
+        throw new Error(`Could not resolve crisis ${crisis.id} with ${choice.id}`);
+      }
     }
     if (engine.budgetPending() && strat !== "idle") {
       engine.signBudget({ ...s.budget }, s.nation.taxRate);

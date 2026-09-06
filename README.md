@@ -106,10 +106,10 @@ where the numbers land. It is the fastest way to see whether a change to the
 model has broken the difficulty curve:
 
 ```
-idle          legacy 44.3  approval 46.3  debt 104.2  health 51  marriage 34.2  bills 0
-workaholic    legacy 50.5  approval 54.6  debt 107.8  health 44  marriage 33.8  bills 9
-balanced      legacy 62.2  approval 56.5  debt 106.5  health 94  marriage 87.7  bills 10.7
-family-first  legacy 53.8  approval 47.5  debt 103.8  health 94  marriage 93    bills 0
+idle          legacy 44.8  approval 47.7  debt 102.8  health 56  marriage 35.5  bills 0
+workaholic    legacy 51.0  approval 53.3  debt 107.5  health 46  marriage 38.8  bills 9.7
+balanced      legacy 62.3  approval 55.5  debt 106.0  health 94  marriage 88.2  bills 11
+family-first  legacy 53.0  approval 44.1  debt 103.0  health 96  marriage 92.7  bills 0
 ```
 
 Governing well beats governing hard, and neither beats doing both — which is the

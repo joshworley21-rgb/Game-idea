@@ -28,6 +28,7 @@ import type {
   BudgetKey,
   Choice,
   Crisis,
+  Effects,
   Ending,
   GameState,
   OfficeAction,
@@ -78,7 +79,7 @@ export class Engine extends Emitter<EngineEvents> {
     });
     this.state = state;
     this.rng = new Rng(state.seed ^ (state.month * 2654435761));
-    this.ctx = createSimContext(this.rng);
+    this.ctx = createSimContext(this.rng, state.month);
     this.emit("state", this.state);
   }
 
@@ -227,7 +228,7 @@ export class Engine extends Emitter<EngineEvents> {
     s.nation.taxRate = Math.min(45, Math.max(6, taxRate));
     s.flags[`budget${s.month}`] = true;
 
-    const effects: Record<string, number> = {};
+    const effects: Effects = {};
     // Raising taxes is unpopular; cutting them buys short-term goodwill.
     if (Math.abs(taxDelta) > 0.05) {
       effects["politics.approval"] = -taxDelta * 2.2;
@@ -238,7 +239,7 @@ export class Engine extends Emitter<EngineEvents> {
     // A budget is a fight; passing one always costs something.
     effects["politics.capital"] = -6;
     effects["personal.stress"] = 6;
-    applyEffects(s, effects as never);
+    applyEffects(s, effects);
 
     this.log("policy", `Signed the Year ${calendar(s.month).year} budget.`);
     this.outcome({
@@ -247,7 +248,7 @@ export class Engine extends Emitter<EngineEvents> {
         Math.abs(taxDelta) > 0.05
           ? `The appropriations are law, and the tax change is the lead paragraph in every story about them.`
           : `The appropriations are law. Nine agencies now know what they have to work with.`,
-      effects: describeEffects(effects as never),
+      effects: describeEffects(effects),
       tone: "neutral",
     });
     return true;
@@ -261,8 +262,9 @@ export class Engine extends Emitter<EngineEvents> {
     if (!crisis || !s.pendingCrises.includes(crisisId)) return false;
     const choice = crisis.choices.find((c) => c.id === choiceId);
     if (!choice) return false;
-    if ((choice.capitalCost ?? 0) > s.politics.capital) return false;
+    if (!this.affordable(crisis, choice)) return false;
 
+    // Capital clamps at zero, so an unaffordable last resort simply empties it.
     if (choice.capitalCost) applyEffects(s, { "politics.capital": -choice.capitalCost });
 
     const failed = choice.risk !== undefined && this.rng.chance(choice.risk);
@@ -296,9 +298,17 @@ export class Engine extends Emitter<EngineEvents> {
     return true;
   }
 
-  /** The crisis choices the player can actually afford right now. */
-  affordable(choice: Choice): boolean {
-    return (choice.capitalCost ?? 0) <= this.state.politics.capital;
+  /**
+   * Whether a crisis option can be taken. The cheapest option in a crisis is
+   * always available, whatever the treasury looks like: a president with no
+   * capital left still has to answer the phone, and a crisis nobody can
+   * resolve would stall the term for good.
+   */
+  affordable(crisis: Crisis, choice: Choice): boolean {
+    const cost = choice.capitalCost ?? 0;
+    if (cost <= this.state.politics.capital) return true;
+    const cheapest = Math.min(...crisis.choices.map((c) => c.capitalCost ?? 0));
+    return cost === cheapest;
   }
 
   // ------------------------------------------------------------- month flow

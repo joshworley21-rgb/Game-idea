@@ -423,6 +423,19 @@ export const CRISES: Crisis[] = [
         resultText: "Confirmed 78-22. Half your party calls it a wasted seat.",
       },
       {
+        id: "leave-vacant",
+        label: "Leave the seat empty",
+        detail: "Nominate nobody for now. An eight-member court deadlocks, and everyone waits.",
+        effects: {
+          "politics.party": -7,
+          "politics.media": -2,
+          "nation.unrest": 3,
+          "politics.capital": 4,
+        },
+        resultText:
+          "The seat stays open into next term. Four-four rulings pile up and nobody is happy, which at least is even-handed.",
+      },
+      {
         id: "deal",
         label: "Trade the seat",
         detail: "Let the other side have the nominee in exchange for the votes you need elsewhere.",
@@ -662,6 +675,20 @@ export const CRISES: Crisis[] = [
           "nation.standing": -3,
         },
         resultText: "Crossings fall by half in a month. The courts will be hearing about it for years.",
+      },
+      {
+        id: "absorb",
+        label: "Ride it out",
+        detail: "No emergency money, no deployment. Process what you can and let the story run.",
+        effects: {
+          "nation.unrest": 6,
+          "politics.approval": -4,
+          "politics.media": -3,
+          "nation.security": -2,
+          "politics.capital": 3,
+        },
+        resultText:
+          "The centres stay over capacity for two months. The footage keeps coming and you keep having no answer for it.",
       },
       {
         id: "regional",

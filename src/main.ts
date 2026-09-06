@@ -51,6 +51,7 @@ class Game {
       if (this.drain()) return;
       if (!this.ended) {
         this.world.player.enabled = true;
+        this.hud.setPrompt(this.nearest);
         this.world.player.lock();
       }
     };

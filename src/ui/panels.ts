@@ -447,10 +447,12 @@ export function budgetPanel(engine: Engine, host: PanelHost): HTMLElement {
   }, [due ? "Sign the budget (1 action)" : "Not due until the fiscal year turns"]);
 
   const foot = el("div", { class: "panel-foot" }, [
-    el("span", { class: "option-detail" }, [
-      due
-        ? "Leave it unsigned and the government runs on a stopgap, which costs you standing."
-        : `Next budget due in ${12 - ((s.month - 1) % 12)} months.`,
+    el("span", { class: due && s.ap < 1 ? "reason" : "option-detail" }, [
+      due && s.ap < 1
+        ? "No action points left. End the month and the government runs on a stopgap instead."
+        : due
+          ? "Leave it unsigned and the government runs on a stopgap, which costs you standing."
+          : `Next budget due in ${12 - ((s.month - 1) % 12)} months.`,
     ]),
     signButton,
   ]);
@@ -472,7 +474,7 @@ export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HT
   const grid = el("div", { class: "option-grid" });
 
   for (const choice of crisis.choices) {
-    const affordable = engine.affordable(choice);
+    const affordable = engine.affordable(crisis, choice);
     grid.append(
       el(
         "button",
@@ -497,7 +499,13 @@ export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HT
                 `Roughly a ${Math.round(choice.risk * 100)}% chance this goes wrong.`,
               ])
             : null,
-          !affordable ? el("div", { class: "reason" }, ["You cannot afford this."]) : null,
+          !affordable
+            ? el("div", { class: "reason" }, ["Not enough political capital for this one."])
+            : (choice.capitalCost ?? 0) > engine.state.politics.capital
+              ? el("div", { class: "risk-note" }, [
+                  "You do not have the capital for this. Taking it anyway spends everything you have.",
+                ])
+              : null,
         ],
       ),
     );

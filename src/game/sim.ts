@@ -17,11 +17,18 @@ export interface SimContext {
   cyclePhase: number;
 }
 
-export function createSimContext(rng: Rng): SimContext {
-  return {
-    needs: { ...SECTOR_NEED },
-    cyclePhase: rng.range(0, Math.PI * 2),
-  };
+/**
+ * `month` rebuilds the accumulated cost of standing still, so a loaded save
+ * resumes with the same needs it had when it was written.
+ */
+export function createSimContext(rng: Rng, month = 1): SimContext {
+  const elapsed = Math.max(0, month - 1);
+  const creep = (1 + NEED_DRIFT) ** elapsed;
+  const needs = {} as Record<SectorKey, number>;
+  for (const key of Object.keys(SECTOR_NEED) as SectorKey[]) {
+    needs[key] = SECTOR_NEED[key] * creep;
+  }
+  return { needs, cyclePhase: rng.range(0, Math.PI * 2) };
 }
 
 export interface MonthReport {
