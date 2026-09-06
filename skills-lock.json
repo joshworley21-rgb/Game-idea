@@ -19,6 +19,12 @@
       "skillPath": ".github/skills/testing_and_automation/android-emulator-skill/SKILL.md",
       "computedHash": "b553aee78c03df76cc50af99775a4c9981dbafe2bf52a4c3b7b5f9169e4185a9"
     },
+    "create-toolset": {
+      "source": "EpicGames/unreal-engine-skills-for-claude-code-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/create-toolset/SKILL.md",
+      "computedHash": "7c555bbd24d81ac588c61ef4988cd0127f27cc9cbaf3a8f25024e58675281e6e"
+    },
     "dogfood": {
       "source": "callstack/agent-device",
       "sourceType": "github",
@@ -30,6 +36,18 @@
       "sourceType": "github",
       "skillPath": "skills/ios-simulator/SKILL.md",
       "computedHash": "a0196ca78c5af1e2f25f4d534b3971fe8d9e5e6aa02a2d0f35a53b222bca57da"
+    },
+    "unreal-mcp": {
+      "source": "EpicGames/unreal-engine-skills-for-claude-code-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/unreal-mcp/SKILL.md",
+      "computedHash": "c2117f5c1f7c63aea6dd1998e34ca5a06694c248165313e3662c3f0d195eef19"
+    },
+    "unreal-skill": {
+      "source": "EpicGames/unreal-engine-skills-for-claude-code-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/unreal-skill/SKILL.md",
+      "computedHash": "bf49d05392fee755e0c94772ddf508cb56178d3672367054ccd7213ebb2736e2"
     }
   }
 }
