@@ -1,8 +1,11 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { buildOffice } from "./office.ts";
 import type { OfficeBuild } from "./office.ts";
 import { PlayerController } from "./controls.ts";
 import { Stations } from "./stations.ts";
+import { loadProps } from "./assetLoader.ts";
+import type { Footprint, LoadProgress } from "./assetLoader.ts";
 import type { StationId } from "../game/types.ts";
 
 /** Window light and mood shift with the season, so the term visibly passes. */
@@ -42,7 +45,7 @@ export class World {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = this.lowPower ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.9;
+    this.renderer.toneMappingExposure = 1.0;
 
     this.scene.background = new THREE.Color(0x0b0d12);
     this.scene.fog = new THREE.Fog(0x1a1712, 14, 30);
@@ -53,6 +56,14 @@ export class World {
 
     this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.42);
     this.scene.add(this.hemisphere);
+
+    // The furniture models are physically based, and PBR materials go flat and
+    // dark without something to reflect. A generated room environment gives
+    // them that, and it costs one texture rather than a light rig.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
+    this.scene.environmentIntensity = 0.55;
+    pmrem.dispose();
 
     this.player = new PlayerController(this.camera, this.renderer.domElement);
     this.stations = new Stations(this.scene, this.office.anchors, this.lowPower);
@@ -68,6 +79,17 @@ export class World {
       this.player.lookAt(new THREE.Vector3(0, 1.0, -2.75));
     }
     window.addEventListener("resize", this.resize);
+  }
+
+  /** Fetches the furniture models, adds them, and makes them solid. */
+  async loadAssets(onProgress?: (progress: LoadProgress) => void): Promise<number> {
+    const footprints: Footprint[] = [];
+    const count = await loadProps(this.scene, onProgress, footprints);
+    // The Resolute desk is built in code rather than loaded, so it needs its
+    // footprint added by hand.
+    footprints.push({ minX: -1.25, maxX: 1.25, minZ: -3.5, maxZ: -2.1 });
+    this.player.colliders = footprints;
+    return count;
   }
 
   /** Repaints the light for the month, 1-48. */

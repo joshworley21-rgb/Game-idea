@@ -81,6 +81,44 @@ a collapse of the ability to govern. Otherwise you reach the election, having
 decided in year three whether to run at all, and get a legacy score across the
 economy, society, the world, politics and your own life.
 
+## The 3D assets
+
+The furniture is real geometry, not boxes: eleven models from
+[Poly Haven](https://polyhaven.com), all CC0.
+
+```bash
+npm run assets     # download, optimise, and write public/models/*.glb
+```
+
+The pipeline downloads each model at 1k into `assets-src/` (a cache, gitignored)
+and runs it through `gltf-transform`: textures resized and re-encoded to WebP,
+geometry welded and simplified, mesh data quantised, all packed into one `.glb`.
+That takes the set from **18.1 MB to 2.4 MB** with no visible difference — the
+potted plant alone goes from 6.33 MB to 216 KB. Quantisation is read natively by
+three.js, so no decoder ships with the game.
+
+**Adding a prop is two lines.** Put its Poly Haven id in `MODELS` in
+`scripts/fetch-assets.mjs`, then add a placement to `PROPS` in
+`src/world/props.ts`:
+
+```ts
+{ model: "Shelf_01", position: [-3.5, 0, 3.15], rotation: Math.PI / 1.5 }
+```
+
+You do not need to know where the model's author put its origin. The loader
+centres each prop horizontally and rests it on the floor using its own bounding
+box, so `position` means where the thing goes. `ceilingAt` hangs it instead,
+`groundAt` puts it on a shelf. Every floor-standing prop also becomes solid: its
+footprint is collected at load time and the player is pushed out of it.
+
+Two dev pages help when placing things — `/preview.html` renders every model on a
+turntable with its real dimensions, and `/overview.html` renders the room in plan
+view. Both are dev-server only and are not part of the production build.
+
+Models load after the title screen, so the room appears immediately and fills in
+as they arrive. A model that fails to load is skipped with a warning rather than
+taking the room down.
+
 ## Android
 
 The game also ships as an Android app: the same web build running in a WebView
@@ -114,10 +152,12 @@ repository.
 
 ```
 src/game/     simulation: state, sim tick, bills, crises, actions, endings
-src/world/    three.js: the office geometry, first-person controls, stations
+src/world/    three.js: office geometry, props, controls, stations, asset loading
 src/ui/       HUD, panels, touch stick, styling
 src/tools/    headless balance harness
 android/      Capacitor Android project
+public/models/ optimised .glb props (built by `npm run assets`)
+scripts/      asset pipeline
 ```
 
 The simulation has no dependency on the renderer or the DOM, which is what makes
@@ -130,6 +170,7 @@ npm run dev        # dev server
 npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production build
 npm run balance    # play the term headlessly under four strategies
+npm run assets     # rebuild the 3D props from Poly Haven
 ```
 
 `npm run balance` plays six seeds under each of four crude strategies and prints

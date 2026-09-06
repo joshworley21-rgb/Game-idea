@@ -13,3 +13,6 @@ android/.gradle/
 android/build/
 android/capacitor-cordova-android-plugins/build/
 build-output/
+
+# Raw model downloads; `npm run assets` regenerates them into public/models
+assets-src/

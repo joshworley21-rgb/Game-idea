@@ -105,6 +105,7 @@ class Game {
     this.onState(engine.state);
     this.world.start();
     currentGame = this;
+    void this.furnish();
     // Any crises already waiting from a loaded save.
     for (const crisis of engine.pendingCrises) {
       this.queue.push(() => this.open(() => crisisPanel(this.engine, crisis, this.host), true));
@@ -114,6 +115,23 @@ class Game {
 
   /** Returns true when the press was handled and should not exit the app. */
   onBack: () => boolean = () => false;
+
+  /**
+   * Pulls in the furniture models. The room renders immediately and fills in
+   * as they arrive, so a slow connection delays the furniture, not the game.
+   */
+  private async furnish(): Promise<void> {
+    const note = el("div", { id: "loading-note" }, ["Furnishing the Oval Office…"]);
+    document.body.append(note);
+    try {
+      await this.world.loadAssets(({ loaded, total }) => {
+        note.textContent = `Furnishing the Oval Office… ${loaded}/${total}`;
+      });
+    } finally {
+      note.style.opacity = "0";
+      setTimeout(() => note.remove(), 600);
+    }
+  }
 
   private onKey = (e: KeyboardEvent): void => {
     if (e.target instanceof HTMLInputElement) return;

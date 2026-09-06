@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { clampToRoom } from "./office.ts";
+import { clampToRoom, resolveCollisions } from "./office.ts";
 
 const EYE_HEIGHT = 1.62;
 const SPEED = 3.1;
@@ -38,6 +38,9 @@ export class PlayerController {
   /** Movement from an on-screen stick: x strafes, y walks forward. */
   moveInput = { x: 0, y: 0 };
 
+  /** Furniture footprints the player cannot walk through. */
+  colliders: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
+
   /** Set false while a UI panel is open. */
   enabled = true;
   locked = false;
@@ -48,7 +51,7 @@ export class PlayerController {
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
     this.dom = dom;
-    camera.position.set(0, EYE_HEIGHT, 2.3);
+    camera.position.set(0, EYE_HEIGHT, 3.0);
     this.applyRotation();
 
     window.addEventListener("keydown", this.onKeyDown);
@@ -184,6 +187,7 @@ export class PlayerController {
     this.velocity.multiplyScalar(Math.max(0, 1 - DAMPING * dt));
     this.camera.position.addScaledVector(this.velocity, dt);
     clampToRoom(this.camera.position);
+    resolveCollisions(this.camera.position, this.colliders);
 
     // A little head bob so walking has weight.
     const speed = this.velocity.length();

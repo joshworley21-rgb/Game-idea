@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Room overview</title>
+<style>body{margin:0;background:#0b0d12;overflow:hidden}canvas{display:block}</style></head>
+<body>
+<script type="module">
+  import * as THREE from "three";
+  import { buildOffice } from "/src/world/office.ts";
+  import { loadProps } from "/src/world/assetLoader.ts";
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(1100, 1100);
+  renderer.shadowMap.enabled = true;
+  document.body.append(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x141821);
+  const office = buildOffice();
+  scene.add(office.group);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x556677, 2.0));
+  const key = new THREE.DirectionalLight(0xffffff, 1.6);
+  key.position.set(4, 12, 6);
+  scene.add(key);
+
+  await loadProps(scene);
+
+  // Hide anything overhead so the floor plan is fully visible.
+  const overhead = [];
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const b = new THREE.Box3().setFromObject(o);
+    if (b.min.y > 3.9) overhead.push(o);
+  });
+  for (const o of overhead) o.visible = false;
+
+  // Plan view, tipped slightly so heights read.
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+  camera.position.set(0.5, 11.5, 4.2);
+  camera.lookAt(0, 0.6, 0.3);
+  renderer.render(scene, camera);
+
+  // Axis ticks so positions can be read straight off the picture.
+  const ctx = document.createElement("canvas").getContext("2d");
+  window.__ready = true;
+</script>
+</body></html>

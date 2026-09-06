@@ -12,7 +12,8 @@
     "balance": "node --experimental-strip-types --no-warnings src/tools/balance.ts",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "npm run android:sync && cd android && gradle --no-daemon assembleDebug",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "assets": "node scripts/fetch-assets.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@capacitor/android": "^8.5.1",
     "@capacitor/cli": "^8.5.1",
+    "@gltf-transform/cli": "^4.5.0",
     "@types/three": "^0.169.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"

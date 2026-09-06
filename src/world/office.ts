@@ -266,51 +266,6 @@ function buildFlags(root: THREE.Group): void {
   }
 }
 
-function buildSeating(root: THREE.Group): void {
-  const fabric = standard(PALETTE.sofa, 0.95);
-  const frame = standard(PALETTE.walnut, 0.6);
-
-  const sofa = (x: number, z: number, ry: number) => {
-    const g = new THREE.Group();
-    g.position.set(x, 0, z);
-    g.rotation.y = ry;
-    place(g, new THREE.BoxGeometry(2.3, 0.38, 0.85), fabric, 0, 0.36, 0);
-    place(g, new THREE.BoxGeometry(2.3, 0.62, 0.2), fabric, 0, 0.72, -0.35);
-    for (const ax of [-1.12, 1.12]) place(g, new THREE.BoxGeometry(0.2, 0.3, 0.85), fabric, ax, 0.62, 0);
-    for (const [lx, lz] of [[-1.05, 0.35], [1.05, 0.35], [-1.05, -0.35], [1.05, -0.35]] as const) {
-      place(g, new THREE.BoxGeometry(0.08, 0.18, 0.08), frame, lx, 0.09, lz);
-    }
-    for (const cx of [-0.6, 0.6]) {
-      place(g, new THREE.BoxGeometry(0.42, 0.42, 0.12), standard(0xa8383f, 0.95), cx, 0.72, -0.24);
-    }
-    root.add(g);
-  };
-  sofa(0, -0.85, 0);
-  sofa(0, 1.6, Math.PI);
-
-  // Coffee table.
-  const t = new THREE.Group();
-  t.position.set(0, 0, 0.38);
-  place(t, new THREE.BoxGeometry(1.7, 0.07, 0.7), standard(PALETTE.mahogany, 0.5), 0, 0.44, 0);
-  for (const [lx, lz] of [[-0.75, 0.28], [0.75, 0.28], [-0.75, -0.28], [0.75, -0.28]] as const) {
-    place(t, new THREE.BoxGeometry(0.08, 0.42, 0.08), standard(PALETTE.walnut, 0.6), lx, 0.21, lz);
-  }
-  place(t, new THREE.BoxGeometry(0.34, 0.06, 0.24), standard(0x8c2b2b, 0.7), -0.35, 0.5, 0);
-  place(t, new THREE.CylinderGeometry(0.09, 0.07, 0.16, 14), standard(PALETTE.marble, 0.4), 0.42, 0.55, 0);
-  root.add(t);
-
-  // Two armchairs at the head of the rug.
-  for (const [x, ry] of [[-1.75, Math.PI / 2.2], [1.75, -Math.PI / 2.2]] as const) {
-    const c = new THREE.Group();
-    c.position.set(x, 0, 0.4);
-    c.rotation.y = ry;
-    place(c, new THREE.BoxGeometry(0.8, 0.36, 0.8), fabric, 0, 0.34, 0);
-    place(c, new THREE.BoxGeometry(0.8, 0.6, 0.16), fabric, 0, 0.7, -0.32);
-    for (const ax of [-0.38, 0.38]) place(c, new THREE.BoxGeometry(0.14, 0.26, 0.8), fabric, ax, 0.6, 0);
-    root.add(c);
-  }
-}
-
 function buildFireplace(root: THREE.Group): void {
   const g = new THREE.Group();
   g.position.set(0.2, 0, ROOM.rz - 0.28);
@@ -323,9 +278,7 @@ function buildFireplace(root: THREE.Group): void {
   embers.position.set(0, 0.35, -0.1);
   g.add(embers);
 
-  // Portrait above the mantel.
-  place(g, new THREE.BoxGeometry(1.35, 1.65, 0.08), metal(PALETTE.brass, 0.55), 0, 2.3, 0.06);
-  place(g, new THREE.BoxGeometry(1.15, 1.45, 0.02), standard(0x39424f, 0.9), 0, 2.3, 0.11);
+  // The portrait above the mantel is a model; see props.ts.
   root.add(g);
 }
 
@@ -335,20 +288,17 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
   const dark = standard(PALETTE.walnut, 0.6);
 
   // Cabinet table (budget) on the west side.
+  // The table itself is a model; these are the papers stacked on top of it.
   const cab = new THREE.Group();
-  cab.position.set(-3.35, 0, -0.9);
+  cab.position.set(-3.5, 0, -0.9);
   cab.rotation.y = Math.PI / 2.6;
-  place(cab, new THREE.BoxGeometry(1.9, 0.08, 0.95), wood, 0, 0.76, 0);
-  for (const [lx, lz] of [[-0.8, 0.36], [0.8, 0.36], [-0.8, -0.36], [0.8, -0.36]] as const) {
-    place(cab, new THREE.BoxGeometry(0.1, 0.74, 0.1), dark, lx, 0.38, lz);
-  }
   for (let i = 0; i < 4; i += 1) {
     place(
       cab,
       new THREE.BoxGeometry(0.3, 0.03 + i * 0.01, 0.22),
       standard(i % 2 ? 0xd9cdb4 : PALETTE.paper, 0.95),
       -0.55 + i * 0.36,
-      0.82,
+      1.0,
       0.05,
     );
   }
@@ -356,13 +306,11 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // Credenza with the secure telephone, east side.
   const cred = new THREE.Group();
-  cred.position.set(3.45, 0, -1.15);
+  cred.position.set(3.6, 0, -1.15);
   cred.rotation.y = -Math.PI / 2.6;
-  place(cred, new THREE.BoxGeometry(1.5, 0.85, 0.55), wood, 0, 0.43, 0);
-  place(cred, new THREE.BoxGeometry(1.6, 0.06, 0.62), dark, 0, 0.88, 0);
-  place(cred, new THREE.BoxGeometry(0.26, 0.1, 0.2), standard(0xa81c1c, 0.5), -0.1, 0.96, 0);
-  place(cred, new THREE.BoxGeometry(0.24, 0.06, 0.08), standard(0xa81c1c, 0.5), -0.1, 1.04, 0.02);
-  place(cred, new THREE.BoxGeometry(0.3, 0.2, 0.22), standard(0x2b2b2b, 0.7), 0.45, 1.01, 0);
+  place(cred, new THREE.BoxGeometry(0.26, 0.1, 0.2), standard(0xa81c1c, 0.5), -0.1, 0.95, 0);
+  place(cred, new THREE.BoxGeometry(0.24, 0.06, 0.08), standard(0xa81c1c, 0.5), -0.1, 1.03, 0.02);
+  place(cred, new THREE.BoxGeometry(0.3, 0.2, 0.22), standard(0x2b2b2b, 0.7), 0.4, 1.0, 0);
   root.add(cred);
 
   // Press corner: podium, camera, lights.
@@ -389,13 +337,6 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
   const staff = new THREE.Group();
   staff.position.set(-3.3, 0, 1.75);
   staff.rotation.y = Math.PI / 3;
-  for (const cx of [-0.5, 0.5]) {
-    place(staff, new THREE.BoxGeometry(0.5, 0.08, 0.5), standard(PALETTE.leather, 0.7), cx, 0.46, 0);
-    place(staff, new THREE.BoxGeometry(0.5, 0.6, 0.08), standard(PALETTE.leather, 0.7), cx, 0.78, -0.21);
-    for (const [lx, lz] of [[-0.2, 0.2], [0.2, 0.2], [-0.2, -0.2], [0.2, -0.2]] as const) {
-      place(staff, new THREE.BoxGeometry(0.05, 0.45, 0.05), dark, cx + lx, 0.23, lz);
-    }
-  }
   const globe = new THREE.Group();
   globe.position.set(0, 0, 0.9);
   place(globe, new THREE.CylinderGeometry(0.22, 0.3, 0.06, 12), dark, 0, 0.03, 0);
@@ -406,20 +347,16 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // Residence side table with family photographs.
   const fam = new THREE.Group();
-  fam.position.set(1.85, 0, 3.15);
+  fam.position.set(2.0, 0, 3.2);
   fam.rotation.y = -Math.PI / 5;
-  place(fam, new THREE.BoxGeometry(0.85, 0.06, 0.55), wood, 0, 0.72, 0);
-  for (const [lx, lz] of [[-0.34, 0.2], [0.34, 0.2], [-0.34, -0.2], [0.34, -0.2]] as const) {
-    place(fam, new THREE.BoxGeometry(0.06, 0.7, 0.06), dark, lx, 0.36, lz);
-  }
   for (const [px, pw, ph, tilt] of [
     [-0.24, 0.22, 0.28, 0.1],
     [0.02, 0.3, 0.22, -0.05],
     [0.28, 0.18, 0.24, 0.14],
   ] as const) {
-    const frameMesh = place(fam, new THREE.BoxGeometry(pw, ph, 0.03), metal(PALETTE.brass, 0.5), px, 0.75 + ph / 2, 0);
+    const frameMesh = place(fam, new THREE.BoxGeometry(pw, ph, 0.03), metal(PALETTE.brass, 0.5), px, 0.72 + ph / 2, 0);
     frameMesh.rotation.y = tilt;
-    const photo = place(fam, new THREE.PlaneGeometry(pw * 0.8, ph * 0.8), standard(0xd7cbb6, 0.9), px, 0.75 + ph / 2, 0.02);
+    const photo = place(fam, new THREE.PlaneGeometry(pw * 0.8, ph * 0.8), standard(0xd7cbb6, 0.9), px, 0.72 + ph / 2, 0.02);
     photo.rotation.y = tilt;
   }
   root.add(fam);
@@ -428,9 +365,6 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
   const study = new THREE.Group();
   study.position.set(-2.05, 0, 3.05);
   study.rotation.y = Math.PI / 1.35;
-  place(study, new THREE.BoxGeometry(0.85, 0.36, 0.85), standard(0x6a4a3a, 0.9), 0, 0.34, 0);
-  place(study, new THREE.BoxGeometry(0.85, 0.75, 0.16), standard(0x6a4a3a, 0.9), 0, 0.78, -0.34);
-  for (const ax of [-0.4, 0.4]) place(study, new THREE.BoxGeometry(0.14, 0.28, 0.85), standard(0x6a4a3a, 0.9), ax, 0.6, 0);
   place(study, new THREE.CylinderGeometry(0.16, 0.2, 0.04, 14), dark, 0.75, 0.02, 0.1);
   place(study, new THREE.CylinderGeometry(0.02, 0.02, 1.5, 8), metal(PALETTE.brass), 0.75, 0.77, 0.1);
   const lampShade = place(
@@ -445,20 +379,6 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
   const readLight = new THREE.PointLight(0xffe0b0, 3, 3.4, 2);
   readLight.position.set(0.75, 1.5, 0.1);
   study.add(readLight);
-  const stack = new THREE.Group();
-  stack.position.set(-0.62, 0, 0.15);
-  for (let i = 0; i < 5; i += 1) {
-    const book = place(
-      stack,
-      new THREE.BoxGeometry(0.24, 0.045, 0.17),
-      standard([0x7a2b2b, 0x2b4a7a, 0x3f6b3a, 0x6b5a2b, 0x4a2b6b][i], 0.9),
-      0,
-      0.025 + i * 0.048,
-      0,
-    );
-    book.rotation.y = (i % 2 ? 1 : -1) * 0.12;
-  }
-  study.add(stack);
   root.add(study);
 
   const anchor = (id: StationId, x: number, z: number, fx: number, fz: number): StationAnchor => ({
@@ -497,7 +417,6 @@ export function buildOffice(lowPower = false): OfficeBuild {
   buildDoors(group);
   buildDesk(group);
   buildFlags(group);
-  buildSeating(group);
   buildFireplace(group);
   const anchors = buildStationFurniture(group);
 
@@ -526,6 +445,38 @@ export function buildOffice(lowPower = false): OfficeBuild {
   group.add(southFill);
 
   return { group, anchors, daylight, windowLights };
+}
+
+/** How much space the player takes up, for pushing out of furniture. */
+export const PLAYER_RADIUS = 0.34;
+
+/**
+ * Pushes a position out of any footprint it has entered, along whichever axis
+ * needs the smallest correction, so walking into a sofa slides along it rather
+ * than stopping dead.
+ */
+export function resolveCollisions(
+  position: THREE.Vector3,
+  footprints: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[],
+): void {
+  for (const f of footprints) {
+    const minX = f.minX - PLAYER_RADIUS;
+    const maxX = f.maxX + PLAYER_RADIUS;
+    const minZ = f.minZ - PLAYER_RADIUS;
+    const maxZ = f.maxZ + PLAYER_RADIUS;
+    if (position.x <= minX || position.x >= maxX) continue;
+    if (position.z <= minZ || position.z >= maxZ) continue;
+
+    const left = position.x - minX;
+    const right = maxX - position.x;
+    const back = position.z - minZ;
+    const front = maxZ - position.z;
+    const smallest = Math.min(left, right, back, front);
+    if (smallest === left) position.x = minX;
+    else if (smallest === right) position.x = maxX;
+    else if (smallest === back) position.z = minZ;
+    else position.z = maxZ;
+  }
 }
 
 /** Keeps the player inside the oval, with a little clearance from the wall. */
