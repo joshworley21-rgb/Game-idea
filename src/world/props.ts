@@ -36,28 +36,28 @@ export const PROPS: PropPlacement[] = [
   { model: "ArmChair_01", position: [-1.95, 0, 0.2], rotation: Math.PI / 2, scale: 1.05 },
   { model: "ArmChair_01", position: [1.95, 0, 0.2], rotation: -Math.PI / 2, scale: 1.05 },
 
-  // --- The cabinet table, west side (the budget station) ---
-  { model: "ClassicConsole_01", position: [-3.5, 0, -0.9], rotation: Math.PI / 2.6, scale: 1.1 },
+  // --- The cabinet table, north-west (the budget station) ---
+  { model: "ClassicConsole_01", position: [-4.05, 0, -1.55], rotation: Math.PI / 2.4, scale: 1.1 },
 
-  // --- The credenza by the secure line, east side ---
-  { model: "ClassicConsole_01", position: [3.6, 0, -1.15], rotation: -Math.PI / 2.6, scale: 0.95 },
+  // --- The credenza by the secure line, north-east ---
+  { model: "ClassicConsole_01", position: [4.15, 0, -1.55], rotation: -Math.PI / 2.4, scale: 0.95 },
 
-  // --- The West Wing corner: two chairs and a clock ---
-  { model: "ArmChair_01", position: [-3.55, 0, 1.25], rotation: Math.PI / 2.6, scale: 0.95 },
-  { model: "ArmChair_01", position: [-3.15, 0, 2.05], rotation: Math.PI / 2.2, scale: 0.95 },
-  { model: "vintage_grandfather_clock_01", position: [-4.3, 0, -2.35], rotation: Math.PI / 2.4, scale: 1 },
+  // --- The West Wing, due west: two chairs, with the clock further north ---
+  { model: "ArmChair_01", position: [-4.3, 0, 0.35], rotation: Math.PI / 2.1, scale: 0.95 },
+  { model: "ArmChair_01", position: [-4.15, 0, 1.45], rotation: Math.PI / 2.3, scale: 0.95 },
+  { model: "vintage_grandfather_clock_01", position: [-3.95, 0, -2.8], rotation: Math.PI / 2.6, scale: 1 },
 
   // --- The residence side table, where the family photographs live ---
-  { model: "WoodenTable_02", position: [2.0, 0, 3.2], rotation: -Math.PI / 5, scale: 1.7 },
+  { model: "WoodenTable_02", position: [3.2, 0, 3.15], rotation: -Math.PI / 4, scale: 1.7 },
 
-  // --- The private study nook ---
-  { model: "ArmChair_01", position: [-2.05, 0, 3.0], rotation: Math.PI / 1.35, scale: 1.05 },
-  { model: "Shelf_01", position: [-3.5, 0, 3.15], rotation: Math.PI / 1.5, scale: 1 },
-  { model: "book_encyclopedia_set_01", position: [-3.42, 1.02, 3.07], rotation: Math.PI / 1.5, scale: 1, groundAt: 1.02, noShadow: true },
+  // --- The private study, south-west corner ---
+  { model: "ArmChair_01", position: [-3.0, 0, 3.35], rotation: Math.PI / 1.3, scale: 1.05 },
+  { model: "Shelf_01", position: [-4.25, 0, 2.45], rotation: Math.PI / 1.75, scale: 1 },
+  { model: "book_encyclopedia_set_01", position: [-4.16, 1.02, 2.42], rotation: Math.PI / 1.75, scale: 1, groundAt: 1.02, noShadow: true },
 
   // --- Greenery in the corners ---
-  { model: "potted_plant_01", position: [4.35, 0, 1.9], rotation: 0.4, scale: 1.15 },
-  { model: "potted_plant_01", position: [-4.5, 0, 0.4], rotation: -1.1, scale: 1 },
+  { model: "potted_plant_01", position: [4.15, 0, 2.65], rotation: 0.4, scale: 1.15 },
+  { model: "potted_plant_01", position: [-4.55, 0, -0.45], rotation: -1.1, scale: 1 },
 
   // --- The portrait above the mantel, and the chandelier overhead ---
   { model: "fancy_picture_frame_01", position: [0.2, 2.45, WALL_Z], rotation: Math.PI, scale: 2.3, noShadow: true },

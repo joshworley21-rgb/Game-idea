@@ -290,8 +290,8 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
   // Cabinet table (budget) on the west side.
   // The table itself is a model; these are the papers stacked on top of it.
   const cab = new THREE.Group();
-  cab.position.set(-3.5, 0, -0.9);
-  cab.rotation.y = Math.PI / 2.6;
+  cab.position.set(-4.05, 0, -1.55);
+  cab.rotation.y = Math.PI / 2.4;
   for (let i = 0; i < 4; i += 1) {
     place(
       cab,
@@ -306,8 +306,8 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // Credenza with the secure telephone, east side.
   const cred = new THREE.Group();
-  cred.position.set(3.6, 0, -1.15);
-  cred.rotation.y = -Math.PI / 2.6;
+  cred.position.set(4.15, 0, -1.55);
+  cred.rotation.y = -Math.PI / 2.4;
   place(cred, new THREE.BoxGeometry(0.26, 0.1, 0.2), standard(0xa81c1c, 0.5), -0.1, 0.95, 0);
   place(cred, new THREE.BoxGeometry(0.24, 0.06, 0.08), standard(0xa81c1c, 0.5), -0.1, 1.03, 0.02);
   place(cred, new THREE.BoxGeometry(0.3, 0.2, 0.22), standard(0x2b2b2b, 0.7), 0.4, 1.0, 0);
@@ -315,8 +315,8 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // Press corner: podium, camera, lights.
   const press = new THREE.Group();
-  press.position.set(3.1, 0, 1.9);
-  press.rotation.y = -Math.PI / 1.7;
+  press.position.set(4.25, 0, 0.95);
+  press.rotation.y = -Math.PI / 2;
   place(press, new THREE.BoxGeometry(0.62, 1.15, 0.45), wood, 0, 0.58, 0);
   place(press, new THREE.BoxGeometry(0.72, 0.06, 0.52), dark, 0, 1.18, 0);
   place(press, new THREE.CylinderGeometry(0.012, 0.012, 0.3, 8), metal(0x2a2a2a), 0, 1.3, 0.05);
@@ -335,8 +335,8 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // West Wing door side: staff chairs and a globe.
   const staff = new THREE.Group();
-  staff.position.set(-3.3, 0, 1.75);
-  staff.rotation.y = Math.PI / 3;
+  staff.position.set(-4.35, 0, 0.95);
+  staff.rotation.y = Math.PI / 2.6;
   const globe = new THREE.Group();
   globe.position.set(0, 0, 0.9);
   place(globe, new THREE.CylinderGeometry(0.22, 0.3, 0.06, 12), dark, 0, 0.03, 0);
@@ -347,8 +347,8 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // Residence side table with family photographs.
   const fam = new THREE.Group();
-  fam.position.set(2.0, 0, 3.2);
-  fam.rotation.y = -Math.PI / 5;
+  fam.position.set(3.2, 0, 3.15);
+  fam.rotation.y = -Math.PI / 4;
   for (const [px, pw, ph, tilt] of [
     [-0.24, 0.22, 0.28, 0.1],
     [0.02, 0.3, 0.22, -0.05],
@@ -363,8 +363,8 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
 
   // Private study nook: armchair, floor lamp, books.
   const study = new THREE.Group();
-  study.position.set(-2.05, 0, 3.05);
-  study.rotation.y = Math.PI / 1.35;
+  study.position.set(-3.0, 0, 3.35);
+  study.rotation.y = Math.PI / 1.3;
   place(study, new THREE.CylinderGeometry(0.16, 0.2, 0.04, 14), dark, 0.75, 0.02, 0.1);
   place(study, new THREE.CylinderGeometry(0.02, 0.02, 1.5, 8), metal(PALETTE.brass), 0.75, 0.77, 0.1);
   const lampShade = place(
@@ -387,14 +387,17 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
     focus: new THREE.Vector3(fx, 1.1, fz),
   });
 
+  // Laid out symmetrically around the oval: the desk holds the north, the two
+  // working stations sit either side of it, and the personal ones take the
+  // south corners. Nothing shares an arc with anything else any more.
   return {
     desk: anchor("desk", 0, -1.85, 0, -2.75),
-    budget: anchor("budget", -2.6, -0.7, -3.35, -0.9),
-    phone: anchor("phone", 2.7, -0.95, 3.45, -1.15),
-    press: anchor("press", 2.45, 1.7, 3.1, 1.9),
-    staff: anchor("staff", -2.55, 1.6, -3.3, 1.75),
-    family: anchor("family", 2.05, 2.85, 1.85, 3.15),
-    rest: anchor("rest", -2.15, 2.8, -2.05, 3.05),
+    budget: anchor("budget", -2.95, -1.35, -4.05, -1.55),
+    phone: anchor("phone", 2.95, -1.35, 4.15, -1.55),
+    staff: anchor("staff", -3.3, 0.95, -4.35, 0.95),
+    press: anchor("press", 3.3, 0.95, 4.25, 0.95),
+    rest: anchor("rest", -2.4, 2.95, -3.0, 3.35),
+    family: anchor("family", 2.4, 2.95, 3.2, 3.15),
   };
 }
 
