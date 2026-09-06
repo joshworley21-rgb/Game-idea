@@ -2,6 +2,7 @@ import { Rng } from "../core/rng.ts";
 import { addPath, applyEffects } from "./effects.ts";
 import { BLOCS, coalitionApproval, driftBlocs } from "./blocs.ts";
 import { cabinetFactionSupport, cabinetStrength, domainCompetence } from "./cabinet.ts";
+import { driftFamily, familyStrain } from "./family.ts";
 import { driftFactions, friendlySeats } from "./congress.ts";
 import {
   BUDGET_KEYS,
@@ -243,22 +244,40 @@ export function simulateMonth(
   addPath(s, "politics.scandal", s.politics.media < 40 ? -0.6 : -1.2);
 
   // --- The person in the chair ---
+  // Whatever your family is carrying, you are carrying some of it too.
+  const carried = familyStrain(s) * 0.045;
   const stressTarget =
     34 +
     (52 - s.politics.approval) * 0.5 +
     crisisCount * 10 +
     Math.max(0, s.nation.unrest - 45) * 0.3 +
-    Math.max(0, 50 - s.personal.marriage) * 0.15;
+    Math.max(0, 50 - s.personal.marriage) * 0.15 +
+    carried +
+    s.personal.sleepDebt * 0.12;
   s.personal.stress = drift(s.personal.stress, Math.max(5, stressTarget), 0.3);
 
-  let healthDelta = -0.45 - Math.max(0, s.personal.stress - 65) * 0.055;
-  if (s.personal.age > 62) healthDelta -= 0.12;
-  addPath(s, "personal.health", healthDelta);
+  // Sleep is the first thing the job takes and the last thing you get back.
+  // You do recover a little on your own, which is why it settles somewhere
+  // rather than running to a hundred: the level it settles at is the point.
+  const restDebt =
+    1.4 + crisisCount * 3 + Math.max(0, s.personal.stress - 52) * 0.08 - s.personal.fitness * 0.018;
+  addPath(s, "personal.sleepDebt", restDebt - s.personal.sleepDebt * 0.055);
+  // Fitness falls toward what a schedule like this leaves you with.
+  s.personal.fitness = drift(s.personal.fitness, 24 - Math.max(0, s.personal.age - 60) * 0.6, 0.05);
 
-  const strain = s.personal.stress > 70 ? 0.5 : 0;
-  addPath(s, "personal.marriage", -1.05 - strain);
-  addPath(s, "personal.family", -0.95 - strain * 0.8);
+  let healthDelta =
+    -0.2 -
+    Math.max(0, s.personal.stress - 65) * 0.05 -
+    Math.max(0, s.personal.sleepDebt - 42) * 0.014 -
+    Math.max(0, 50 - s.personal.fitness) * 0.008;
+  if (s.personal.age > 62) healthDelta -= 0.12;
+  if (s.personal.condition) healthDelta -= 0.25;
+  addPath(s, "personal.health", healthDelta);
   s.personal.age += 1 / 12;
+
+  // The people upstairs have their own month. Bonds erode with absence, and
+  // marriage and family become a readout of how those five people are doing.
+  driftFamily(s, rng, notes);
 
   // Name the constituency that shifted hardest, so movement is legible.
   let biggest: { name: string; delta: number } | null = null;
@@ -280,8 +299,8 @@ export function simulateMonth(
     addPath(s, "personal.stress", 2.5);
     notes.push("Your doctor has stopped hinting and started warning.");
   }
-  if (s.personal.marriage < 25) notes.push("The residence is very quiet lately.");
-  if (s.personal.family < 25) notes.push("Your kids have stopped returning calls.");
+  if (s.personal.sleepDebt > 70) notes.push("You have not slept properly since the spring.");
+  if (s.personal.fitness < 30) notes.push("Two flights of stairs is now a decision.");
   if (s.nation.unrest > 70) notes.push("Protests are now a nightly fixture on the news.");
   if (s.nation.debtToGdp > 130) notes.push("Bond markets are openly nervous about the debt.");
 
@@ -290,6 +309,8 @@ export function simulateMonth(
   let ap = 2;
   if (s.personal.health >= 70 && s.personal.stress <= 50) ap += 1;
   if (s.personal.health < 40 || s.personal.stress >= 85) ap -= 1;
+  // A body running on nothing gets less done, whatever the schedule says.
+  if (s.personal.sleepDebt > 78) ap -= 1;
   s.apMax = Math.max(1, Math.min(3, ap));
   s.ap = s.apMax;
 

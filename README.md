@@ -25,8 +25,8 @@ You walk the Oval Office in first person. Each object is a system:
 | **The West Wing** | Cabinet meetings, whipping votes, fundraisers, reshuffles |
 | **The Secure Line** | Allies, summits, trade deals, the intelligence brief |
 | **The Press Pool** | Addresses, hostile interviews, rallies, campaign swings |
-| **The Residence** | Dinner, date night, calling your kids, Camp David |
-| **The Private Study** | Sleep, the physician, therapy, an hour that is yours |
+| **The Residence** | Your family by name: their evenings, and what they are carrying |
+| **The Private Study** | Sleep debt, fitness, the physician, and an hour that is yours |
 
 **Controls** — `W A S D` and the mouse to move and look, `E` to use what you are
 standing at, `1`–`7` to jump straight to a station, `Tab` for the dashboard,
@@ -149,11 +149,52 @@ Running situations show on a board in the HUD and in the dashboard, and a crisis
 produced by one says which, so trouble can be traced back to the decision that
 caused it.
 
-**You.** Health decays with the job and faster under stress. Marriage and family
-decay every single month and only recover if you spend actions on them, with
-diminishing returns near the top — restoring a marriage from 30 is much easier
-than holding one at 90. Your action points come from your health and stress, so
-neglecting yourself directly shrinks how much governing you can do.
+**Your family are people, not two numbers.** A spouse and two children,
+generated with the run's seed: names, ages, and a life each of them is living
+whether you are in it or not — a surgery practice down to one clinic a month, a
+nineteen-year-old on a gap year somewhere with bad reception, a teenager
+furious about the security detail. Each carries a bond with you, and marriage
+and family are readouts of those people the same way approval is a readout of
+the constituencies.
+
+The residence generates its evenings from the family you actually have, so it
+offers "Take Elena out" and "Show up for Maya", each with its own cooldown:
+seeing one of them is not seeing the others. An hour lands on the person you
+gave it to.
+
+Bonds erode with absence, and absence is counted per person — the months since
+you last gave *them* an evening. In the gaps you leave, they pick up strains of
+their own: a child coming apart at school, a spouse losing themselves in the
+role, someone trading on the surname, someone not picking up. A strain festers
+while you are elsewhere and eases when you are there, and what your family is
+carrying you are carrying too — it feeds straight back into your stress. Left
+long enough it arrives at the residence as a decision with their name on it.
+Absence saturates rather than running to zero: a person you have not seen in a
+year is distant, not erased, and the door is still open when you finally walk
+through it.
+
+The country notices. A first family that is visibly close is worth something
+with the suburbs and traditionalists; one that is never in the same room costs
+you with both, and eventually becomes a story.
+
+**Your body is a body.** Health is no longer one bar. Sleep debt accumulates
+with crises and stress and recovers a little on its own, so it settles at a
+level rather than running to a hundred — and that level is the point. Fitness
+falls toward what a schedule like this leaves you with unless you spend a
+morning a week on it. Both feed health, and past a threshold sleep debt costs
+you an action point outright.
+
+A full physical is the only thing that finds a condition before it finds you:
+atrial fibrillation, a coronary narrowing they want watched. Once diagnosed
+there is a plan, and the plan costs you schedule. Ignore all of it and the body
+collects on its own terms — a week at Walter Reed, the Vice President signing
+three things, and a country told it was precautionary.
+
+Measured over full terms: a president who goes upstairs ends with an average
+family bond of 80, three residence crises across four years, and almost never
+sees the inside of a hospital. One who never does ends at 25, takes fourteen
+residence crises, and has about two health episodes — with roughly a one in
+three chance of resigning on medical advice before the term is out.
 
 **Endings.** The term can end early through medical resignation, impeachment, or
 a collapse of the ability to govern. Otherwise you reach the election, having
@@ -283,10 +324,10 @@ where the numbers land. It is the fastest way to see whether a change to the
 model has broken the difficulty curve:
 
 ```
-idle          legacy 44.8  approval 47.7  debt 102.8  health 56  marriage 35.5  bills 0
-workaholic    legacy 51.0  approval 53.3  debt 107.5  health 46  marriage 38.8  bills 9.7
-balanced      legacy 62.3  approval 55.5  debt 106.0  health 94  marriage 88.2  bills 11
-family-first  legacy 53.0  approval 44.1  debt 103.0  health 96  marriage 92.7  bills 0
+idle          legacy 43.5  approval 46.4  debt 103.7  health 41.5  marriage 32.2  bills 0    earlyEnd 0/6
+workaholic    legacy 47.0  approval 47.2  debt 102.5  health 13.0  marriage 24.8  bills 6.7  earlyEnd 2/6
+balanced      legacy 59.2  approval 53.2  debt 105.2  health 86.2  marriage 82.2  bills 7.2  earlyEnd 0/6
+family-first  legacy 53.0  approval 49.1  debt 103.3  health 93.7  marriage 80.8  bills 0    earlyEnd 0/6
 ```
 
 Governing well beats governing hard, and neither beats doing both — which is the

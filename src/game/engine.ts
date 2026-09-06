@@ -1,9 +1,10 @@
 import { Emitter } from "../core/emitter.ts";
 import { Rng } from "../core/rng.ts";
-import { ACTIONS, actionCooldownLeft } from "./actions.ts";
+import { ACTIONS, actionCooldownLeft, residenceActions } from "./actions.ts";
 import { billCatalog, factionAftermath, forecastVote, holdVote, voteAftermath } from "./bills.ts";
 import { createCabinet, crisisCompetence, replaceSecretary, tickCabinet } from "./cabinet.ts";
 import { applyMidtermSwing } from "./congress.ts";
+import { attend, createFamily, memberById, mostNeglected } from "./family.ts";
 import { CRISES, applyConsequence, crisisPressure, eligibleCrises } from "./crises.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
 import {
@@ -68,6 +69,7 @@ export class Engine extends Emitter<EngineEvents> {
     this.ctx = createSimContext(this.rng);
     this.state.bills = billCatalog();
     this.state.cabinet = createCabinet(this.rng);
+    this.state.family = createFamily(this.rng, this.state.personal.age);
     this.log("system", `You are sworn in as President of the United States.`);
     this.log(
       "system",
@@ -87,6 +89,10 @@ export class Engine extends Emitter<EngineEvents> {
     this.state = state;
     this.rng = new Rng(state.seed ^ (state.month * 2654435761));
     if (!state.cabinet?.length) state.cabinet = createCabinet(this.rng);
+    if (!state.family?.length) state.family = createFamily(this.rng, state.personal.age);
+    // A save written before the body had parts would otherwise arithmetic to NaN.
+    state.personal.sleepDebt ??= 22;
+    state.personal.fitness ??= 62;
     this.ctx = createSimContext(this.rng, state.month);
     this.emit("state", this.state);
   }
@@ -128,7 +134,11 @@ export class Engine extends Emitter<EngineEvents> {
   performAction(actionId: string): boolean {
     const s = this.state;
     if (s.phase !== "playing") return false;
-    const action = ACTIONS.find((a) => a.id === actionId);
+    // The residence's evenings are generated from the family, so they are not
+    // in the static catalogue.
+    const action =
+      ACTIONS.find((a) => a.id === actionId) ??
+      residenceActions(s).find((a) => a.id === actionId);
     if (!action) return false;
     if (s.ap < action.ap) return false;
     if ((action.capitalCost ?? 0) > s.politics.capital) return false;
@@ -137,6 +147,13 @@ export class Engine extends Emitter<EngineEvents> {
     s.ap -= action.ap;
     if (action.capitalCost) applyEffects(s, { "politics.capital": -action.capitalCost });
     applyEffects(s, action.effects);
+    // An hour given to one person lands on that person, not on an average;
+    // an evening with all of them lands on all of them.
+    if (action.target && action.attention) {
+      const people =
+        action.target === "all" ? s.family : [memberById(s, action.target)];
+      for (const member of people) if (member) attend(member, action.attention);
+    }
     s.actionHistory[action.id] = s.month;
     this.log(action.station === "family" || action.station === "rest" ? "personal" : "policy", action.label);
 
@@ -372,6 +389,8 @@ export class Engine extends Emitter<EngineEvents> {
     const report = simulateMonth(s, this.ctx, this.rng, crisisCount);
     s.counters.crisesThisMonth = 0;
     this.runCabinet(report);
+    this.runBody(report);
+    this.runResidence(report);
 
     s.history.push({
       month: s.month,
@@ -447,6 +466,108 @@ export class Engine extends Emitter<EngineEvents> {
           },
         ]);
       }
+    }
+  }
+
+  /**
+   * The body's month. A full physical is what finds a condition before it
+   * finds you; left long enough, exhaustion and a bad heart collect on their
+   * own terms, and the country watches you do it.
+   */
+  private runBody(report: MonthReport): void {
+    const s = this.state;
+    const p = s.personal;
+
+    // The physician cannot diagnose what you never let them look at.
+    const lastPhysical = s.actionHistory["physical"];
+    const looked = lastPhysical !== undefined && s.month - lastPhysical <= 2;
+    if (!p.condition && looked) {
+      const risk =
+        (Math.max(0, p.age - 58) * 0.02 +
+          Math.max(0, 55 - p.fitness) * 0.006 +
+          Math.max(0, p.sleepDebt - 40) * 0.004) *
+        (p.health < 55 ? 1.6 : 1);
+      if (this.rng.chance(Math.min(0.6, risk))) {
+        p.condition = this.rng.pick([
+          "atrial fibrillation",
+          "hypertension the letter called \"managed\"",
+          "a coronary narrowing they want watched",
+          "type 2 diabetes",
+        ]);
+        applyEffects(s, { "personal.stress": 8, "politics.media": -2 });
+        this.log("personal", `Walter Reed finds ${p.condition}.`);
+        report.notes.push(`The physical found something: ${p.condition}.`);
+        this.outcome({
+          title: "The Physical",
+          text: `The letter the networks read out is two pages. The one your physician hands you privately is longer, and it names ${p.condition}. There is a plan. The plan involves the schedule.`,
+          effects: describeEffects({ "personal.stress": 8, "politics.media": -2 }),
+          tone: "bad",
+        });
+      }
+    }
+
+    // An episode: exhaustion, a heart, a body that has had enough.
+    const episodeRisk =
+      Math.max(0, p.sleepDebt - 62) * 0.004 +
+      Math.max(0, 45 - p.health) * 0.005 +
+      (p.condition ? 0.012 : 0) +
+      Math.max(0, p.stress - 78) * 0.003;
+    if (episodeRisk > 0 && this.rng.chance(Math.min(0.14, episodeRisk))) {
+      const kind = p.condition
+        ? "an episode the cardiology team had warned you about"
+        : "a collapse in the residence corridor at four in the morning";
+      applyEffects(s, {
+        "personal.health": -9,
+        "personal.stress": -14,
+        "personal.sleepDebt": -35,
+        "politics.capital": -8,
+        "politics.approval": -2,
+      });
+      s.counters.healthEpisodes = (s.counters.healthEpisodes ?? 0) + 1;
+      // A week at Walter Reed is a week you do not get back.
+      s.ap = Math.max(0, s.ap - 1);
+      this.log("personal", "A week at Walter Reed. The Vice President signs three things.");
+      report.notes.push("You lost a week of the month to a hospital bed.");
+      pushNews(s, [
+        {
+          month: s.month,
+          headline: "President admitted to Walter Reed; White House says tests are precautionary",
+          source: "Channel 8 Nightly",
+          tone: "bad",
+        },
+      ]);
+      this.outcome({
+        title: "Walter Reed",
+        text: `It is ${kind}. You wake up with a cannula in your arm and your chief of staff already in the room. The country is told it was precautionary. Your family is told the truth.`,
+        effects: describeEffects({
+          "personal.health": -9,
+          "politics.capital": -8,
+          "politics.approval": -2,
+        }),
+        tone: "bad",
+      });
+    }
+  }
+
+  /**
+   * Upstairs. Nobody schedules this, so the month says once, plainly, who has
+   * been waiting longest — and the country eventually notices a first family
+   * that is never in the same room.
+   */
+  private runResidence(report: MonthReport): void {
+    const s = this.state;
+    const waiting = mostNeglected(s);
+    if (waiting && waiting.since >= 4) {
+      report.notes.push(
+        `${waiting.name} has been waiting ${waiting.since} months for an evening.`,
+      );
+    }
+    // A visibly absent family is a story, and a visibly close one is an asset.
+    const closeness = (s.personal.marriage + s.personal.family) / 2;
+    if (closeness < 38) {
+      applyEffects(s, { "blocs.traditionalists": -0.9, "blocs.suburban": -0.5, "politics.media": -0.4 });
+    } else if (closeness > 74) {
+      applyEffects(s, { "blocs.traditionalists": 0.5, "blocs.suburban": 0.4, "politics.media": 0.3 });
     }
   }
 

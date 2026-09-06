@@ -5,31 +5,39 @@
 import { Engine } from "../game/engine.ts";
 import { scoreLegacy } from "../game/endings.ts";
 import { Rng } from "../core/rng.ts";
-import { ACTIONS, actionCooldownLeft } from "../game/actions.ts";
+import { STATION_ORDER, actionCooldownLeft, actionsFor } from "../game/actions.ts";
 import { START_BUDGET, annualDeficit, annualRevenue } from "../game/state.ts";
 import type { GameState } from "../game/types.ts";
 
 type Strategy = "idle" | "workaholic" | "balanced" | "family-first";
 
+/**
+ * Strategies are expressed as the stations a president actually walks to, not
+ * as a list of action ids: the residence generates its evenings from the
+ * family, so there is no fixed id to name.
+ */
+const STATION_WEIGHTS: Record<Strategy, Partial<Record<string, number>>> = {
+  idle: {},
+  workaholic: { staff: 3, desk: 2, press: 2, phone: 2 },
+  balanced: { staff: 2, press: 1.5, phone: 1, family: 2, rest: 2 },
+  "family-first": { family: 4, rest: 3, staff: 1 },
+};
+
 function pickAction(s: GameState, strat: Strategy, rng: Rng): string | null {
-  const prefer: Record<Strategy, string[]> = {
-    idle: [],
-    workaholic: ["cabinet", "whip", "address", "summit", "rally", "executive-order", "intel-brief"],
-    balanced: ["cabinet", "family-dinner", "address", "sleep", "whip", "date-night", "exercise", "call-ally"],
-    "family-first": ["family-dinner", "date-night", "camp-david", "sleep", "exercise", "kids-call", "cabinet"],
-  };
-  const list = prefer[strat];
-  const usable = list
-    .map((id) => ACTIONS.find((a) => a.id === id)!)
-    .filter(
-      (a) =>
-        a.ap <= s.ap &&
-        (a.capitalCost ?? 0) <= s.politics.capital &&
-        actionCooldownLeft(s, a) === 0 &&
-        (!a.available || a.available(s)),
-    );
+  const weights = STATION_WEIGHTS[strat];
+  const usable = STATION_ORDER.flatMap((station) =>
+    actionsFor(s, station)
+      .filter(
+        (a) =>
+          (weights[station] ?? 0) > 0 &&
+          a.ap <= s.ap &&
+          (a.capitalCost ?? 0) <= s.politics.capital &&
+          actionCooldownLeft(s, a) === 0,
+      )
+      .map((a) => ({ action: a, weight: weights[station] ?? 0 })),
+  );
   if (usable.length === 0) return null;
-  return rng.pick(usable).id;
+  return rng.weighted(usable, (u) => u.weight)?.action.id ?? null;
 }
 
 function run(strat: Strategy, seed: number) {

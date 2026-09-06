@@ -55,6 +55,32 @@ export interface Politics {
   scandal: number;
 }
 
+/** A difficulty running in someone's life while you are at work. */
+export interface Strain {
+  id: string;
+  /** A short phrase that finishes "Maya is ...". */
+  label: string;
+  detail: string;
+  /** 0-100. Grows while untended. */
+  severity: number;
+  months: number;
+}
+
+/** A person who knew you before any of this. */
+export interface FamilyMember {
+  id: string;
+  kind: "spouse" | "child";
+  name: string;
+  age: number;
+  /** What they are doing with their own life. */
+  doing: string;
+  /** Their bond with you, 0-100. */
+  bond: number;
+  /** Months since you last gave them real time. */
+  since: number;
+  strain?: Strain;
+}
+
 export interface Personal {
   health: number;
   stress: number;
@@ -65,6 +91,12 @@ export interface Personal {
   /** Personal reputation for straight dealing, 0-100. */
   integrity: number;
   age: number;
+  /** Accumulated lost sleep, 0-100. Nothing else recovers while this is high. */
+  sleepDebt: number;
+  /** Cardiovascular condition, 0-100. Falls without work, and it is work. */
+  fitness: number;
+  /** A diagnosis you are living with, once the physician has found it. */
+  condition?: string;
 }
 
 /** The constituencies that together make up your approval. */
@@ -113,7 +145,7 @@ export type EffectPath =
   | `nation.${Exclude<keyof Nation, "sectors">}`
   | `nation.sectors.${SectorKey}`
   | `politics.${keyof Politics}`
-  | `personal.${keyof Personal}`
+  | `personal.${Exclude<keyof Personal, "condition">}`
   | `blocs.${BlocKey}`
   | `factions.${FactionKey}.mood`;
 
@@ -241,7 +273,8 @@ export interface Consequence {
 export interface Crisis {
   id: string;
   title: string;
-  brief: string;
+  /** A function when the text needs to name the people actually involved. */
+  brief: string | ((s: GameState) => string);
   /** Where the news breaks from. */
   source: string;
   category: "domestic" | "foreign" | "economic" | "disaster" | "personal";
@@ -274,6 +307,10 @@ export interface OfficeAction {
   available?: (s: GameState) => boolean;
   /** Cooldown in months after use. */
   cooldown?: number;
+  /** The family member this hour is for, if it is for one of them. */
+  target?: string;
+  /** Bond added to the target on top of the effects. */
+  attention?: number;
 }
 
 export type StationId =
@@ -336,6 +373,8 @@ export interface GameState {
   factions: Record<FactionKey, Faction>;
   /** The people running the departments. */
   cabinet: Secretary[];
+  /** The people upstairs. Filled in by the engine on a new term. */
+  family: FamilyMember[];
   /** Crisis ids unlocked by earlier decisions. */
   unlocked: string[];
   /** crisisId -> month it last fired. */

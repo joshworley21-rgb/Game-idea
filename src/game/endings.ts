@@ -1,5 +1,6 @@
 import { Rng } from "../core/rng.ts";
 import { BLOCS } from "./blocs.ts";
+import { childrenOf, spouseOf } from "./family.ts";
 import { TERM_MONTHS } from "./state.ts";
 import type { Ending, GameState } from "./types.ts";
 
@@ -121,24 +122,35 @@ export function decisiveBlocs(s: GameState): { name: string; support: number }[]
     .slice(0, 3);
 }
 
+/** What the four years did to the people upstairs, by name. */
 function personalCoda(s: GameState): string {
   const p = s.personal;
+  const spouse = spouseOf(s);
+  const kids = childrenOf(s);
+  const them = spouse?.name ?? "your spouse";
+  const kidNames =
+    kids.length === 2
+      ? `${kids[0].name} and ${kids[1].name}`
+      : kids.map((k) => k.name).join(", ") || "your children";
+  // The child who took the worst of it gets named specifically.
+  const worst = [...kids].sort((a, b) => a.bond - b.bond)[0];
+
   if (p.marriage < 25 && p.family < 30) {
-    return "You go home to a house where the arguments have already been had and nobody lives with you any more. The presidency took the whole family, and it took it in pieces small enough that you never had to notice on any particular Tuesday.";
+    return `You go home to a house where the arguments have already been had and nobody lives with you any more. ${them} left the residence before you did. ${kidNames} call on birthdays. The presidency took the whole family, and it took it in pieces small enough that you never had to notice on any particular Tuesday.`;
   }
   if (p.marriage < 30) {
-    return "The separation is announced through a lawyer three months after you leave. It is reported respectfully and briefly, and you find you cannot argue with a single line of it.";
+    return `The separation from ${them} is announced through a lawyer three months after you leave. It is reported respectfully and briefly, and you find you cannot argue with a single line of it.`;
   }
   if (p.family < 30) {
-    return "Your children are polite at the library dedication. They are polite at Thanksgiving. You spend the rest of your life trying to get back to a version of them you last saw before the motorcade.";
+    return `${kidNames} are polite at the library dedication. They are polite at Thanksgiving.${worst ? ` ${worst.name} is polite in the way that takes practice.` : ""} You spend the rest of your life trying to get back to a version of them you last saw before the motorcade.`;
   }
   if (p.health < 35) {
-    return "You spend most of the first year out of office in cardiology waiting rooms. The job was worth it, you tell people, and about half the time you believe it.";
+    return `You spend most of the first year out of office in cardiology waiting rooms${p.condition ? `, where ${p.condition} finally gets the attention it wanted four years ago` : ""}. The job was worth it, you tell people, and about half the time you believe it. ${them} drives you to the appointments.`;
   }
   if (p.marriage > 70 && p.family > 70 && p.health > 60) {
-    return "You walk out of the building with your marriage, your children, and most of your health intact. Almost nobody manages all three. It is, quietly, the achievement you are proudest of.";
+    return `You walk out of the building with ${them}, with ${kidNames}, and with most of your health intact. Almost nobody manages all three. It is, quietly, the achievement you are proudest of.`;
   }
-  return "You leave tired, married, and mostly on speaking terms with your children, which the historians will never score and your family will never forget.";
+  return `You leave tired, still married to ${them}, and mostly on speaking terms with ${kidNames} — which the historians will never score and your family will never forget.`;
 }
 
 function nationCoda(s: GameState, legacy: LegacyBreakdown): string {

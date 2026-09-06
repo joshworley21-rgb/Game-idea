@@ -112,6 +112,8 @@ export function createInitialState(opts: NewGameOptions): GameState {
       family: 70,
       integrity: 72,
       age: 56,
+      sleepDebt: 22,
+      fitness: 62,
     },
     budget,
     enacted: { ...budget },
@@ -154,6 +156,7 @@ export function createInitialState(opts: NewGameOptions): GameState {
           },
     // Filled in by the engine, which owns the run's random source.
     cabinet: [],
+    family: [],
     unlocked: [],
     crisisHistory: {},
     history: [],

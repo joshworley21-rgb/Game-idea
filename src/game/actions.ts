@@ -1,4 +1,5 @@
-import type { GameState, OfficeAction, StationId } from "./types.ts";
+import { childrenOf, spouseOf } from "./family.ts";
+import type { FamilyMember, GameState, OfficeAction, StationId } from "./types.ts";
 
 /** Fixed order, used for the number-key shortcuts and the HUD legend. */
 export const STATION_ORDER: StationId[] = [
@@ -287,6 +288,8 @@ export const ACTIONS: OfficeAction[] = [
   },
 
   // --- The Residence ---
+  // The shared evenings. The named ones are generated per-person from the
+  // family you actually have; see `residenceActions` below.
   {
     id: "family-dinner",
     station: "family",
@@ -294,28 +297,12 @@ export const ACTIONS: OfficeAction[] = [
     detail: "Upstairs, phones in a basket, the schedule cleared for two hours.",
     ap: 1,
     cooldown: 2,
-    effects: { "personal.family": 7, "personal.marriage": 2, "personal.stress": -7 },
+    // An evening with all of them counts for everyone, if less than an
+    // evening with one of them counts for that one.
+    target: "all",
+    attention: 5,
+    effects: { "personal.stress": -7 },
     resultText: "Two hours upstairs. Nobody mentions the polls once, which took visible effort from everyone.",
-  },
-  {
-    id: "date-night",
-    station: "family",
-    label: "Take your spouse out",
-    detail: "A restaurant, a motorcade, and forty agents pretending not to exist.",
-    ap: 1,
-    cooldown: 3,
-    effects: { "personal.marriage": 8, "personal.stress": -6, "politics.media": 1 },
-    resultText: "You get most of a meal before someone asks for a photo. They laugh about it. It counts.",
-  },
-  {
-    id: "kids-call",
-    station: "family",
-    label: "Call the kids",
-    detail: "Twenty minutes on the residence line, badly timed for both of you.",
-    ap: 1,
-    cooldown: 1,
-    effects: { "personal.family": 5, "personal.stress": -3 },
-    resultText: "Your eldest talks for nineteen minutes about a job you do not understand. It is the best part of the week.",
   },
   {
     id: "camp-david",
@@ -324,24 +311,15 @@ export const ACTIONS: OfficeAction[] = [
     detail: "Everyone comes. No staff, no cameras, and the country runs itself for two days.",
     ap: 2,
     cooldown: 5,
+    target: "all",
+    attention: 11,
     effects: {
-      "personal.marriage": 11,
-      "personal.family": 10,
       "personal.stress": -18,
       "personal.health": 3,
+      "personal.sleepDebt": -12,
       "politics.capital": -4,
     },
     resultText: "Two days of walking, cards, and terrible movies. You come back recognisable to your own family.",
-  },
-  {
-    id: "school-event",
-    station: "family",
-    label: "Show up for your kid",
-    detail: "A game, a recital, whatever it is this month. Be in the third row.",
-    ap: 1,
-    cooldown: 3,
-    effects: { "personal.family": 8, "politics.media": 2, "personal.stress": -3, "politics.capital": -2 },
-    resultText: "You are in the third row for all of it. She pretends not to look over. She looks over.",
   },
 
   // --- The Private Study ---
@@ -352,7 +330,7 @@ export const ACTIONS: OfficeAction[] = [
     detail: "No 5am calls for two weeks. The staff will hate it and do it anyway.",
     ap: 1,
     cooldown: 2,
-    effects: { "personal.stress": -13, "personal.health": 3 },
+    effects: { "personal.stress": -13, "personal.health": 2, "personal.sleepDebt": -26 },
     resultText: "Fourteen nights of real sleep. Everything is still on fire; you are simply awake for it.",
   },
   {
@@ -362,7 +340,7 @@ export const ACTIONS: OfficeAction[] = [
     detail: "Five mornings a week, cardiology's plan, no negotiating.",
     ap: 1,
     cooldown: 2,
-    effects: { "personal.health": 5, "personal.stress": -5 },
+    effects: { "personal.health": 3, "personal.fitness": 9, "personal.stress": -5 },
     resultText: "Resting heart rate down nine points in a month. The doctor stops looking at you like that.",
   },
   {
@@ -387,7 +365,7 @@ export const ACTIONS: OfficeAction[] = [
     detail: "A standing appointment, off the official schedule. It stays off it.",
     ap: 1,
     cooldown: 3,
-    effects: { "personal.stress": -16, "personal.health": 2, "personal.marriage": 2 },
+    effects: { "personal.stress": -16, "personal.health": 2, "personal.sleepDebt": -8 },
     resultText:
       "An hour a week where nobody wants anything from you. It is the most useful hour on the calendar.",
   },
@@ -401,10 +379,117 @@ export const ACTIONS: OfficeAction[] = [
     effects: { "personal.stress": -8, "personal.health": 1, "politics.capital": 2 },
     resultText: "Three hundred pages on a predecessor who had it worse. Oddly, it helps.",
   },
+  {
+    id: "manage-condition",
+    station: "rest",
+    label: "Do what the cardiologist said",
+    detail: "The medication, the monitoring, and the half of the schedule they want cut.",
+    ap: 1,
+    cooldown: 2,
+    available: (s) => Boolean(s.personal.condition),
+    effects: {
+      "personal.health": 6,
+      "personal.fitness": 4,
+      "personal.stress": -6,
+      "politics.capital": -3,
+    },
+    resultText:
+      "Numbers back where they should be, and two events dropped from the week to get them there.",
+  },
 ];
 
+/**
+ * The evenings that belong to one person. These are built from the family you
+ * actually have, so the residence offers "Take Elena out" and "Show up for
+ * Maya" rather than "spouse" and "kid" — and each person has their own
+ * cooldown, so seeing one of them is not seeing the others.
+ */
+function forChild(child: FamilyMember): OfficeAction[] {
+  const showUp: OfficeAction =
+    child.age <= 18
+      ? {
+          id: `show-up-${child.id}`,
+          station: "family",
+          label: `Show up for ${child.name}`,
+          detail: "A game, a recital, whatever it is this month. Be in the third row.",
+          ap: 1,
+          cooldown: 3,
+          target: child.id,
+          attention: 9,
+          effects: { "politics.media": 2, "personal.stress": -3, "politics.capital": -2 },
+          resultText: `You are in the third row for all of it. ${child.name} pretends not to look over. ${child.name} looks over.`,
+        }
+      : {
+          id: `visit-${child.id}`,
+          station: "family",
+          label: `Go and see ${child.name}`,
+          detail: "Their place, their terms, no press pool. Two vehicles and an apology.",
+          ap: 1,
+          cooldown: 4,
+          target: child.id,
+          attention: 10,
+          effects: { "personal.stress": -5, "politics.capital": -3 },
+          resultText: `Four hours in a flat you have never been to. ${child.name} cooks. It is not good and you say it is.`,
+        };
+
+  return [
+    {
+      id: `call-${child.id}`,
+      station: "family",
+      label: `Call ${child.name}`,
+      detail: "Twenty minutes on the residence line, badly timed for both of you.",
+      ap: 1,
+      cooldown: 1,
+      target: child.id,
+      attention: 5,
+      effects: { "personal.stress": -3 },
+      resultText: `${child.name} talks for nineteen minutes about something you do not follow. It is the best part of the week.`,
+    },
+    showUp,
+  ];
+}
+
+function forSpouse(spouse: FamilyMember): OfficeAction[] {
+  return [
+    {
+      id: "date-night",
+      station: "family",
+      label: `Take ${spouse.name} out`,
+      detail: "A restaurant, a motorcade, and forty agents pretending not to exist.",
+      ap: 1,
+      cooldown: 3,
+      target: spouse.id,
+      attention: 8,
+      effects: { "personal.stress": -6, "politics.media": 1 },
+      resultText: `You get most of a meal before someone asks for a photo. ${spouse.name} laughs about it. It counts.`,
+    },
+    {
+      id: "spouse-listen",
+      station: "family",
+      label: `Ask ${spouse.name} how it is going`,
+      detail: "And then do not check the phone once, whatever the answer turns out to be.",
+      ap: 1,
+      cooldown: 2,
+      target: spouse.id,
+      attention: 7,
+      effects: { "personal.stress": -4, "personal.integrity": 1 },
+      resultText: `An hour, most of it theirs. Some of what you hear you did not want to know.`,
+    },
+  ];
+}
+
+/** Everything on offer upstairs tonight, for this particular family. */
+export function residenceActions(state: GameState): OfficeAction[] {
+  const spouse = spouseOf(state);
+  return [
+    ...(spouse ? forSpouse(spouse) : []),
+    ...childrenOf(state).flatMap(forChild),
+  ];
+}
+
 export function actionsFor(state: GameState, station: StationId): OfficeAction[] {
-  return ACTIONS.filter((a) => {
+  const pool = station === "family" ? [...ACTIONS, ...residenceActions(state)] : ACTIONS;
+  return pool.filter((a) => {
     if (a.station !== station) return false;
     if (a.available && !a.available(state)) return false;
     return true;

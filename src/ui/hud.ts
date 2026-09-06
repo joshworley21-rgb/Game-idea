@@ -159,11 +159,15 @@ export class Hud {
       statLine("Congress", `${Math.round((s.politics.house + s.politics.senate) / 2)}%`, band((s.politics.house + s.politics.senate) / 2, 50, 42)),
     );
 
+    // What is running, in the country and upstairs. A strain in the family is
+    // the same kind of thing as a war: it gets worse while you are elsewhere.
+    const strained = (s.family ?? []).filter((m) => m.strain);
     clear(this.situations);
-    this.situations.style.display = s.threads.length ? "block" : "none";
-    if (s.threads.length) {
+    const anything = s.threads.length > 0 || strained.length > 0;
+    this.situations.style.display = anything ? "block" : "none";
+    if (anything) {
       this.situations.append(el("div", { class: "hud-title" }, ["Running"]));
-      for (const thread of s.threads.slice(0, 4)) {
+      for (const thread of s.threads.slice(0, 3)) {
         const severity = thread.intensity > 60 ? "bad" : thread.intensity > 30 ? "warn" : "ok";
         this.situations.append(
           el("div", { class: "situation", title: thread.detail }, [
@@ -173,6 +177,21 @@ export class Hud {
             ]),
             el("div", { class: "meter-track" }, [
               el("div", { class: `meter-fill ${severity}`, style: `width:${thread.intensity}%` }),
+            ]),
+          ]),
+        );
+      }
+      for (const member of strained.slice(0, 3)) {
+        const strain = member.strain!;
+        const severity = strain.severity > 60 ? "bad" : strain.severity > 30 ? "warn" : "ok";
+        this.situations.append(
+          el("div", { class: "situation", title: strain.detail }, [
+            el("div", { class: "situation-head" }, [
+              el("span", {}, [`${member.name} — ${strain.label}`]),
+              el("span", { class: `v ${severity}` }, [`${Math.round(strain.severity)}`]),
+            ]),
+            el("div", { class: "meter-track" }, [
+              el("div", { class: `meter-fill ${severity}`, style: `width:${strain.severity}%` }),
             ]),
           ]),
         );

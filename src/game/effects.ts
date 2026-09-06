@@ -1,3 +1,4 @@
+import { childrenOf, spouseOf } from "./family.ts";
 import type { EffectPath, Effects, GameState } from "./types.ts";
 
 type Bounds = [min: number, max: number];
@@ -44,8 +45,37 @@ function softenGain(path: string, current: number, delta: number): number {
   return delta;
 }
 
+/**
+ * Marriage and family are readouts of the people upstairs, not stores. A delta
+ * aimed at either lands on the person it is actually about — the spouse, or
+ * every child — and the scalar is recomputed from them.
+ */
+function applyToPeople(s: GameState, path: string, delta: number): boolean {
+  if (path === "personal.marriage") {
+    const spouse = spouseOf(s);
+    if (!spouse) return false;
+    spouse.bond = clampPath(path, spouse.bond + softenGain(path, spouse.bond, delta));
+    // Time and attention move together: a good evening is not just a number.
+    if (delta > 0) spouse.since = Math.max(0, spouse.since - (delta > 8 ? 2 : 1));
+    s.personal.marriage = spouse.bond;
+    return true;
+  }
+  if (path === "personal.family") {
+    const kids = childrenOf(s);
+    if (!kids.length) return false;
+    for (const kid of kids) {
+      kid.bond = clampPath(path, kid.bond + softenGain(path, kid.bond, delta));
+      if (delta > 0) kid.since = Math.max(0, kid.since - (delta > 8 ? 2 : 1));
+    }
+    s.personal.family = kids.reduce((sum, k) => sum + k.bond, 0) / kids.length;
+    return true;
+  }
+  return false;
+}
+
 /** Adds `delta` at `path`, clamped to that stat's legal range. */
 export function addPath(s: GameState, path: EffectPath, delta: number): void {
+  if (applyToPeople(s, path, delta)) return;
   const parts = path.split(".");
   const last = parts.pop()!;
   let node: Record<string, unknown> = s as unknown as Record<string, unknown>;
@@ -83,6 +113,8 @@ const LABELS: Partial<Record<string, string>> = {
   "personal.marriage": "Marriage",
   "personal.family": "Family",
   "personal.integrity": "Integrity",
+  "personal.sleepDebt": "Sleep debt",
+  "personal.fitness": "Fitness",
 };
 
 /** Stats where a rising number is bad news for the player. */
@@ -92,6 +124,7 @@ const INVERTED = new Set([
   "nation.debtToGdp",
   "nation.unrest",
   "personal.stress",
+  "personal.sleepDebt",
   "politics.scandal",
 ]);
 

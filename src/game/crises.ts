@@ -1,7 +1,51 @@
-import type { Consequence, Crisis, CrisisTag, GameState } from "./types.ts";
+import { childrenOf, spouseOf } from "./family.ts";
+import type { Consequence, Crisis, CrisisTag, FamilyMember, GameState } from "./types.ts";
 
 /** Pressure scales likelihood. Zero means the event cannot fire right now. */
 const lack = (value: number, floor: number, k = 0.08) => Math.max(0, (floor - value) * k);
+
+// --- Naming the people the residence crises are actually about -------------
+
+const spouseName = (s: GameState) => spouseOf(s)?.name ?? "your spouse";
+
+/**
+ * The child a residence crisis is about. A crisis names the child it can
+ * plausibly be about — a call from a school is not about the 23-year-old — and
+ * falls back to whoever is carrying the most.
+ */
+function troubledChild(
+  s: GameState,
+  opts: { ids?: string[]; minAge?: number; maxAge?: number } = {},
+): FamilyMember | undefined {
+  const kids = childrenOf(s);
+  if (!kids.length) return undefined;
+  const score = (m: FamilyMember) => (m.strain?.severity ?? 0) - m.bond;
+  const fits = (m: FamilyMember) =>
+    m.age >= (opts.minAge ?? 0) &&
+    m.age <= (opts.maxAge ?? 200) &&
+    (!opts.ids || (m.strain !== undefined && opts.ids.includes(m.strain.id)));
+  const matching = kids.filter(fits).sort((a, b) => score(b) - score(a));
+  if (matching.length) return matching[0];
+  // Age still has to hold even when nobody carries the right strain.
+  const byAge = kids
+    .filter((m) => m.age >= (opts.minAge ?? 0) && m.age <= (opts.maxAge ?? 200))
+    .sort((a, b) => score(b) - score(a));
+  return byAge[0] ?? [...kids].sort((a, b) => score(b) - score(a))[0];
+}
+
+const childName = (s: GameState, opts?: Parameters<typeof troubledChild>[1]) =>
+  troubledChild(s, opts)?.name ?? "your youngest";
+
+/** How badly one strain is running, for pressure. Zero when nobody has one. */
+function strainOn(s: GameState, kind: "spouse" | "child", ids?: string[]): number {
+  const people = (s.family ?? []).filter((m) => m.kind === kind);
+  const worst = people.reduce((max, m) => {
+    if (!m.strain) return max;
+    if (ids && !ids.includes(m.strain.id)) return max;
+    return Math.max(max, m.strain.severity);
+  }, 0);
+  return worst * 0.022;
+}
 
 export const CRISES: Crisis[] = [
   {
@@ -662,13 +706,16 @@ export const CRISES: Crisis[] = [
   {
     id: "marriage",
     title: "An Ultimatum",
-    brief:
-      "Your spouse has asked for a conversation with the door closed and no staff. They have been asking for six weeks. Tonight they stopped asking.",
+    brief: (s) => {
+      const spouse = spouseOf(s);
+      const months = spouse?.since ?? 3;
+      return `${spouseName(s)} has asked for a conversation with the door closed and no staff. They have been asking for six weeks. Tonight they stopped asking.\n\nIt has been ${months} ${months === 1 ? "month" : "months"} since you gave them an evening, and they have been carrying ${spouse?.strain?.label ?? "all of this"} on their own.`;
+    },
     source: "The Residence",
     category: "personal",
     tags: ["personal"],
     weight: 1.2,
-    pressure: (s) => lack(s.personal.marriage, 55, 0.11),
+    pressure: (s) => lack(s.personal.marriage, 55, 0.11) + strainOn(s, "spouse"),
     cooldown: 8,
     choices: [
       {
@@ -702,14 +749,20 @@ export const CRISES: Crisis[] = [
   },
   {
     id: "child",
-    title: "Your Daughter's Number",
-    brief:
-      "Your youngest was photographed leaving a club at 3am and the picture is being sold. She is nineteen. She has not picked up your calls since Tuesday.",
+    title: "The Photograph",
+    brief: (s) => {
+      const kid = troubledChild(s, { minAge: 17 });
+      const name = kid?.name ?? "your youngest";
+      return `${name} was photographed leaving a club at 3am and the picture is being sold. ${kid ? `${name} is ${kid.age}` : "She is nineteen"}, and has not picked up your calls since Tuesday.`;
+    },
     source: "The Residence",
     category: "personal",
     tags: ["personal", "scandal"],
     weight: 1.1,
-    pressure: (s) => lack(s.personal.family, 55, 0.1),
+    pressure: (s) =>
+      childrenOf(s).some((k) => k.age >= 17)
+        ? lack(s.personal.family, 55, 0.1) + strainOn(s, "child")
+        : 0,
     cooldown: 10,
     choices: [
       {
@@ -740,6 +793,302 @@ export const CRISES: Crisis[] = [
         detail: "Full protective detail, whether she wants it or not.",
         effects: { "personal.family": -5, "personal.stress": -3, "politics.capital": -2 },
         resultText: "She is safe and furious. You will take safe.",
+      },
+    ],
+  },
+  {
+    id: "spouse-career",
+    title: "The Thing They Gave Up",
+    brief: (s) => {
+      const spouse = spouseOf(s);
+      return `${spouseName(s)} was offered it again this week — ${spouse?.doing ?? "the work they left"} — and turned it down again, and you found out from someone else. They are not angry. That is what worries you.`;
+    },
+    source: "The Residence",
+    category: "personal",
+    tags: ["personal"],
+    weight: 1.1,
+    pressure: (s) => strainOn(s, "spouse", ["spouse-work", "spouse-erasure"]) + lack(s.personal.marriage, 62, 0.05),
+    cooldown: 12,
+    choices: [
+      {
+        id: "make-room",
+        label: "Make room for it",
+        detail: "Their diary comes first for a year. Yours works around it, publicly if need be.",
+        capitalCost: 6,
+        effects: {
+          "personal.marriage": 17,
+          "personal.stress": 6,
+          "politics.media": 2,
+          "blocs.young": 2,
+          "blocs.suburban": 2,
+        },
+        resultText:
+          "They take the job. Two of your events move and one is cancelled outright, and the residence sounds different in the evenings.",
+      },
+      {
+        id: "make-it-visible",
+        label: "Put them on the platform",
+        detail: "A real portfolio, announced properly — their work, their name, their remit.",
+        capitalCost: 4,
+        effects: {
+          "personal.marriage": 9,
+          "politics.media": 4,
+          "politics.approval": 1,
+          "blocs.suburban": 3,
+          "personal.stress": 3,
+        },
+        risk: 0.25,
+        onFail: {
+          "personal.marriage": 4,
+          "politics.scandal": 5,
+          "politics.media": -3,
+          "blocs.traditionalists": -4,
+        },
+        failText:
+          "The remit gets called a job for a spouse, then a job for a donor, and by Thursday it is a story about you.",
+        resultText: "They are very good at it, which surprises nobody who knows them and everybody who does not.",
+      },
+      {
+        id: "after-the-term",
+        label: "Ask them to wait",
+        detail: "Four years. Then everything, properly, on their terms.",
+        effects: { "personal.marriage": -11, "personal.stress": 5, "politics.capital": 5 },
+        resultText: "They say four years is fine. They have said that before, about a different four years.",
+      },
+    ],
+  },
+  {
+    id: "child-school-call",
+    title: "The Call From School",
+    brief: (s) => {
+      const kid = troubledChild(s, { maxAge: 18 });
+      const name = kid?.name ?? "your youngest";
+      return `The head of ${name}'s school has called the residence three times. The third time they asked whether the President was aware. Nobody had told you.${kid?.strain ? ` ${name} has been ${kid.strain.label} since the spring.` : ""}`;
+    },
+    source: "The Residence",
+    category: "personal",
+    tags: ["personal"],
+    weight: 1.2,
+    pressure: (s) =>
+      childrenOf(s).some((k) => k.age <= 18)
+        ? strainOn(s, "child", ["child-school", "child-bullied"])
+        : 0,
+    cooldown: 10,
+    choices: [
+      {
+        id: "go-yourself",
+        label: "Go in yourself",
+        detail: "No detail in the room, no press, one hour, and you sit in the small chair.",
+        capitalCost: 3,
+        effects: { "personal.family": 15, "personal.stress": -2, "politics.capital": -2 },
+        resultText:
+          "An hour in a room built for eleven-year-olds. You learn three things nobody had put in a briefing.",
+      },
+      {
+        id: "move-school",
+        label: "Move them somewhere quieter",
+        detail: "A smaller school, further out, and a longer drive for the detail.",
+        effects: { "personal.family": 6, "personal.stress": 3, "politics.capital": -3 },
+        risk: 0.3,
+        onFail: { "personal.family": -8, "personal.stress": 6 },
+        failText: "They lose the two friends who were keeping them upright, and say so, once, loudly.",
+        resultText: "It is quieter. By November they have stopped flinching when a phone rings.",
+      },
+      {
+        id: "let-spouse",
+        label: "Let your spouse handle it",
+        detail: "They have the time and you have a summit. It is the honest division of labour.",
+        effects: { "personal.family": -6, "personal.marriage": -4, "politics.capital": 3 },
+        resultText: "It gets handled. You are told about it afterwards, in the past tense.",
+      },
+    ],
+  },
+  {
+    id: "child-name-trading",
+    title: "The Surname",
+    brief: (s) =>
+      `A firm has been paying ${childName(s, { minAge: 19, ids: ["child-money"] })} very well for work that is mostly a phone number and a surname. Nothing about it is illegal. A reporter has the invoices anyway.`,
+    source: "The Residence",
+    category: "personal",
+    tags: ["personal", "scandal"],
+    weight: 1,
+    pressure: (s) =>
+      childrenOf(s).some((k) => k.age >= 19)
+        ? strainOn(s, "child", ["child-money"]) + Math.max(0, s.politics.scandal - 25) * 0.02
+        : 0,
+    cooldown: 14,
+    choices: [
+      {
+        id: "cut-it-off",
+        label: "End it, publicly",
+        detail: "They resign the contract this week and you say so from the podium before anyone asks.",
+        effects: {
+          "personal.family": -7,
+          "personal.integrity": 6,
+          "politics.scandal": -4,
+          "politics.media": 3,
+          "blocs.suburban": 3,
+        },
+        resultText:
+          "The story lasts one day and dies. Your child does not speak to you for three weeks, and then does.",
+      },
+      {
+        id: "lawyer-it",
+        label: "Put lawyers between you",
+        detail: "White House counsel, an ethics letter, and no comment from anybody.",
+        capitalCost: 5,
+        effects: { "politics.scandal": 3, "personal.family": 2, "politics.media": -3 },
+        risk: 0.35,
+        onFail: {
+          "politics.scandal": 12,
+          "politics.approval": -4,
+          "personal.integrity": -6,
+          "blocs.suburban": -5,
+        },
+        failText: "The ethics letter leaks before the invoices do, which makes both of them a story.",
+        resultText: "Counsel builds a wall. It holds, and it is visibly a wall.",
+      },
+      {
+        id: "defend-them",
+        label: "Defend them",
+        detail: "They are an adult with their own career. Say that, and mean it.",
+        effects: {
+          "personal.family": 10,
+          "politics.scandal": 7,
+          "politics.approval": -2,
+          "blocs.traditionalists": -3,
+        },
+        resultText: "You say it well. Nobody believes it and your child hears you say it anyway.",
+      },
+    ],
+  },
+  {
+    id: "child-not-well",
+    title: "The Appointment",
+    brief: (s) =>
+      `There is a specialist appointment on ${childName(s, { ids: ["child-health", "child-drinking"] })}'s calendar that nobody has briefed you on, because you never asked. It is on Thursday. So is the vote.`,
+    source: "The Residence",
+    category: "personal",
+    tags: ["personal", "health"],
+    weight: 1,
+    pressure: (s) => strainOn(s, "child", ["child-health", "child-drinking"]),
+    cooldown: 16,
+    choices: [
+      {
+        id: "be-there",
+        label: "Be in the waiting room",
+        detail: "The vote moves or it fails without you. You are in the waiting room either way.",
+        effects: {
+          "personal.family": 18,
+          "personal.marriage": 6,
+          "politics.capital": -10,
+          "politics.house": -2,
+          "personal.stress": 4,
+        },
+        resultText:
+          "Two hours in a corridor with a magazine from 2019. Whatever the news is, you hear it in the room.",
+      },
+      {
+        id: "call-after",
+        label: "Call the moment it's done",
+        detail: "You cannot be in two places. You can be on the phone at four o'clock.",
+        effects: { "personal.family": 3, "personal.stress": 7 },
+        resultText: "You call at four. It goes to voicemail. They ring back at nine, and it is fine, mostly.",
+      },
+      {
+        id: "quietly-fund",
+        label: "Get them the best there is",
+        detail: "The best team in the country, arranged quietly, without you in the room.",
+        capitalCost: 4,
+        effects: { "personal.family": 7, "personal.stress": -2, "personal.integrity": -2 },
+        resultText:
+          "The care is exceptional. Somebody in the family notes that you solved it the way you solve everything.",
+      },
+    ],
+  },
+  {
+    id: "anniversary",
+    title: "The Twenty-Ninth",
+    brief: (s) =>
+      `It is your anniversary on Thursday. ${spouseName(s)} has not mentioned it, which is how you know it matters. The Chief of Staff has put three things in that evening.`,
+    source: "The Residence",
+    category: "personal",
+    tags: ["personal"],
+    weight: 0.9,
+    pressure: (s) => 0.35 + lack(s.personal.marriage, 70, 0.04),
+    cooldown: 18,
+    choices: [
+      {
+        id: "clear-it",
+        label: "Clear the evening",
+        detail: "All three things move. Somebody senior is annoyed and will get over it.",
+        effects: { "personal.marriage": 14, "personal.stress": -8, "politics.capital": -4 },
+        resultText: "One dinner, no staff, no phone. They had not expected it, which is the sad part and the good part.",
+      },
+      {
+        id: "half-measure",
+        label: "Do the first thing and leave",
+        detail: "Twenty minutes at the reception, then upstairs. Everybody gets something.",
+        effects: { "personal.marriage": 5, "personal.stress": -2, "politics.capital": 1 },
+        resultText: "You are upstairs by nine, still wearing the day. It counts for about half.",
+      },
+      {
+        id: "work-it",
+        label: "Work the evening",
+        detail: "The donors are in town for one night and the midterms are not moving.",
+        effects: { "personal.marriage": -13, "politics.capital": 9, "personal.stress": 4 },
+        resultText:
+          "You raise a great deal of money. There is a plate left out for you upstairs, covered, cold.",
+      },
+    ],
+  },
+  {
+    id: "exhaustion",
+    title: "The Doctor Puts It in Writing",
+    brief: (s) =>
+      `Your physician has stopped suggesting and started documenting. The memo says you are running a sleep debt no schedule can absorb${s.personal.condition ? `, on top of ${s.personal.condition}` : ""}, and it is now in your file.`,
+    source: "White House Physician",
+    category: "personal",
+    tags: ["personal", "health"],
+    weight: 1.1,
+    pressure: (s) => Math.max(0, s.personal.sleepDebt - 55) * 0.045 + lack(s.personal.health, 50, 0.05),
+    cooldown: 10,
+    choices: [
+      {
+        id: "cut-the-schedule",
+        label: "Cut the schedule by a third",
+        detail: "Fewer events, no 5am calls, and a Chief of Staff who guards it like a dog.",
+        effects: {
+          "personal.sleepDebt": -40,
+          "personal.health": 6,
+          "personal.stress": -12,
+          "politics.capital": -7,
+          "politics.media": -2,
+        },
+        resultText:
+          "The week has holes in it for the first time in two years. Two columnists notice and write about your stamina.",
+      },
+      {
+        id: "medicate",
+        label: "Take what they prescribe and carry on",
+        detail: "Something to sleep, something for the mornings, and no change to the diary.",
+        effects: { "personal.sleepDebt": -18, "personal.stress": -5, "personal.health": -2 },
+        risk: 0.3,
+        onFail: {
+          "personal.health": -7,
+          "personal.sleepDebt": 12,
+          "politics.scandal": 4,
+        },
+        failText:
+          "A story runs about what the President is taking to get through the day. It is accurate, which is the problem.",
+        resultText: "You sleep. It is not rest, but it is sleep, and the diary survives intact.",
+      },
+      {
+        id: "ignore-memo",
+        label: "Note it and move on",
+        detail: "The memo goes in the file. The file goes in a drawer.",
+        effects: { "personal.sleepDebt": 8, "personal.health": -3, "politics.capital": 3 },
+        resultText: "It is in the file. Your physician makes sure it is dated.",
       },
     ],
   },

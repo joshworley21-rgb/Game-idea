@@ -3,6 +3,7 @@ import { describeEffects } from "../game/effects.ts";
 import { BLOCS } from "../game/blocs.ts";
 import { PASS_THRESHOLD } from "../game/bills.ts";
 import { FACTION_BY_KEY } from "../game/congress.ts";
+import { memberById, stateOf } from "../game/family.ts";
 import { electionMargin, gradeFor, scoreLegacy } from "../game/endings.ts";
 import type { MonthReport } from "../game/sim.ts";
 import {
@@ -110,6 +111,43 @@ function panel(
   ]);
 }
 
+/**
+ * The people upstairs, as people: what they are doing, how long since you gave
+ * them an evening, and whatever they are carrying while you are at work.
+ */
+function familyRoster(s: GameState): HTMLElement[] {
+  const kids = [...(s.family ?? [])].filter((m) => m.kind === "child").sort((a, b) => b.age - a.age);
+  const rank = (member: (typeof kids)[number]): string => {
+    if (kids.length < 2) return "your child";
+    if (member.id === kids[0].id) return "your eldest";
+    if (member.id === kids[kids.length - 1].id) return "your youngest";
+    return "your middle";
+  };
+  return (s.family ?? []).map((member) => {
+    const tone = member.bond >= 65 ? "ok" : member.bond >= 42 ? "warn" : "bad";
+    const waiting =
+      member.since === 0
+        ? "you saw them this month"
+        : `${member.since} ${member.since === 1 ? "month" : "months"} since you gave them an evening`;
+    return el("div", { class: "cabinet-row" }, [
+      el("div", { class: "bloc-head" }, [
+        el("span", {}, [member.name]),
+        el("span", { class: "bloc-share" }, [
+          member.kind === "spouse" ? `your spouse, ${member.age}` : `${rank(member)}, ${member.age}`,
+        ]),
+        el("span", { class: `v ${tone}` }, [Math.round(member.bond).toString()]),
+      ]),
+      el("div", { class: "cabinet-meta" }, [member.doing]),
+      el("div", { class: "meter-track" }, [
+        el("div", { class: `meter-fill ${tone}`, style: `width:${member.bond}%` }),
+      ]),
+      el("div", { class: `family-state${member.strain ? " strained" : ""}` }, [
+        member.strain ? `${member.name} is ${member.strain.label}. ${member.strain.detail}` : `${stateOf(member)} · ${waiting}`,
+      ]),
+    ]);
+  });
+}
+
 // ------------------------------------------------------------------ station
 
 export function stationPanel(
@@ -155,6 +193,27 @@ export function stationPanel(
     );
   }
 
+  if (station === "family" && s.family?.length) {
+    body.append(el("div", { class: "section-title" }, ["Upstairs"]), ...familyRoster(s));
+  }
+  if (station === "rest") {
+    const p = s.personal;
+    body.append(
+      el("div", { class: "section-title" }, ["The body you are doing this in"]),
+      meter("Health", p.health),
+      meter("Sleep debt", p.sleepDebt, true),
+      meter("Fitness", p.fitness),
+      meter("Stress", p.stress, true),
+      el("div", { class: "option-detail" }, [
+        p.condition
+          ? `Walter Reed is managing ${p.condition}. It does not manage itself.`
+          : p.sleepDebt > 60
+            ? "You are running on less sleep than the physician has written down anywhere."
+            : "Nothing on the chart your physician wants to talk about yet.",
+      ]),
+    );
+  }
+
   const actions = actionsFor(s, station);
   if (actions.length) {
     body.append(el("div", { class: "section-title" }, ["What you can do this month"]));
@@ -187,7 +246,18 @@ export function stationPanel(
               el("span", { class: "option-cost" }, [cost]),
             ]),
             el("div", { class: "option-detail" }, [action.detail]),
-            chips(describeEffects(action.effects)),
+            // An hour upstairs is worth naming the person it goes to.
+            chips([
+              ...(action.target && action.attention
+                ? [
+                    {
+                      text: `${action.target === "all" ? "Everyone" : (memberById(s, action.target)?.name ?? "Them")} +${action.attention}`,
+                      good: true,
+                    },
+                  ]
+                : []),
+              ...describeEffects(action.effects),
+            ]),
             cooldown > 0
               ? el("div", { class: "reason" }, [`Not again for ${cooldown} month${cooldown > 1 ? "s" : ""}.`])
               : shortAp
@@ -504,7 +574,9 @@ export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HT
     from.length
       ? el("div", { class: "crisis-origin" }, [`This follows from: ${from.map((t) => t.label).join(", ")}`])
       : null,
-    el("div", { class: "crisis-brief" }, [crisis.brief]),
+    el("div", { class: "crisis-brief" }, [
+      typeof crisis.brief === "function" ? crisis.brief(engine.state) : crisis.brief,
+    ]),
   ]);
   const grid = el("div", { class: "option-grid" });
 
@@ -639,6 +711,8 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
       : []),
     el("div", { class: "section-title" }, ["Public services"]),
     ...BUDGET_KEYS.map((k) => meter(BUDGET_LABELS[k], s.nation.sectors[k])),
+    el("div", { class: "section-title" }, ["Upstairs"]),
+    ...familyRoster(s),
     el("div", { class: "section-title" }, ["Your cabinet"]),
     ...(s.cabinet ?? []).map((person) => {
       const def = FACTION_BY_KEY.get(person.faction);
