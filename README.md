@@ -52,10 +52,29 @@ cut. Revenue is the tax rate against GDP; the gap becomes debt, and the debt
 charges interest that rises with inflation and leverage. The opening books run a
 deficit of roughly 6% of GDP, so the debt grows unless you do something about it.
 
-**Approval** settles toward a weighted read of the economy, public services,
-security, unrest and your own character, then gets compressed toward the middle
-because the country is polarised. It moves about 30% of the way there each month,
-so nothing you do lands instantly.
+**Approval is a coalition, not a number.** Eight constituencies each hold their
+own opinion of you — labour, business, seniors, younger voters, rural,
+suburban, the activist left and the traditionalist right — weighted by their
+share of the electorate. Each one drifts toward a target computed from the
+things that bloc actually cares about: labour reads unemployment, wages and
+welfare; business reads growth, the tax rate and the debt; seniors read
+healthcare and prices; the suburbs read schools, crime and the absence of
+scandal. Approval is what the arithmetic adds up to, compressed toward the
+middle because the country is polarised, and shaded by your character and the
+press.
+
+Every bloc also carries a standing lean for or against your party, so part of
+the country is never coming home however well you govern. Your own party's mood
+follows its base rather than the country at large, and elections are decided
+bloc by bloc with turnout that rises with enthusiasm — a constituency that has
+given up on you stays home, which cuts both ways.
+
+This makes policy genuinely two-sided. Nearly every bill and most crisis choices
+move specific constituencies in opposite directions: the wealth surtax buys the
+left and labour and costs you business badly; energy independence buys rural and
+business and loses the young; imposing a rail settlement gets the trains running
+and turns labour against you for the rest of the term. The dashboard shows the
+whole coalition, sorted, with a live re-election forecast.
 
 **Legislation.** A bill's floor score is your chamber support plus the capital
 you commit, adjusted for approval and party standing, minus how divisive the bill

@@ -82,6 +82,10 @@ function run(strat: Strategy, seed: number) {
     grade: s.ending?.grade ?? "?",
     legacy: Math.round(legacy.total),
     approval: +s.politics.approval.toFixed(1),
+    coalition: Object.entries(s.blocs)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k.slice(0, 4)}${Math.round(v)}`)
+      .join(" "),
     growth: +s.nation.growth.toFixed(2),
     unemp: +s.nation.unemployment.toFixed(2),
     infl: +s.nation.inflation.toFixed(2),

@@ -67,11 +67,23 @@ export interface Personal {
   age: number;
 }
 
+/** The constituencies that together make up your approval. */
+export type BlocKey =
+  | "labour"
+  | "business"
+  | "seniors"
+  | "young"
+  | "rural"
+  | "suburban"
+  | "activists"
+  | "traditionalists";
+
 export type EffectPath =
   | `nation.${Exclude<keyof Nation, "sectors">}`
   | `nation.sectors.${SectorKey}`
   | `politics.${keyof Politics}`
-  | `personal.${keyof Personal}`;
+  | `personal.${keyof Personal}`
+  | `blocs.${BlocKey}`;
 
 /** A flat bag of additive deltas applied to state. */
 export type Effects = Partial<Record<EffectPath, number>>;
@@ -286,6 +298,8 @@ export interface GameState {
   threads: Thread[];
   /** Per-domain temperature, 0-100. Decays a little every month. */
   heat: Partial<Record<CrisisTag, number>>;
+  /** How each constituency feels about you, 0-100. */
+  blocs: Record<BlocKey, number>;
   /** Crisis ids unlocked by earlier decisions. */
   unlocked: string[];
   /** crisisId -> month it last fired. */

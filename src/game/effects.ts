@@ -95,11 +95,23 @@ const INVERTED = new Set([
   "politics.scandal",
 ]);
 
+const BLOC_LABELS: Record<string, string> = {
+  labour: "Labour",
+  business: "Business",
+  seniors: "Seniors",
+  young: "Young voters",
+  rural: "Rural",
+  suburban: "Suburban",
+  activists: "The left",
+  traditionalists: "The right",
+};
+
 export function effectLabel(path: string): string {
   if (path.startsWith("nation.sectors.")) {
     const key = path.split(".")[2];
     return key.charAt(0).toUpperCase() + key.slice(1);
   }
+  if (path.startsWith("blocs.")) return BLOC_LABELS[path.split(".")[1]] ?? path;
   return LABELS[path] ?? path;
 }
 

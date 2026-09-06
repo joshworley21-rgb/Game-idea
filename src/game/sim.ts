@@ -1,5 +1,6 @@
 import { Rng } from "../core/rng.ts";
 import { addPath, applyEffects } from "./effects.ts";
+import { BLOCS, coalitionApproval, driftBlocs } from "./blocs.ts";
 import {
   BUDGET_KEYS,
   NEED_DRIFT,
@@ -43,41 +44,18 @@ function drift(current: number, target: number, rate: number): number {
   return current + (target - current) * rate;
 }
 
-const SERVICE_WEIGHTS: Partial<Record<SectorKey, number>> = {
-  healthcare: 0.28,
-  welfare: 0.2,
-  education: 0.16,
-  infrastructure: 0.16,
-  justice: 0.1,
-  veterans: 0.1,
-};
-
-function serviceScore(s: GameState): number {
-  let total = 0;
-  for (const [key, weight] of Object.entries(SERVICE_WEIGHTS)) {
-    total += s.nation.sectors[key as SectorKey] * (weight as number);
-  }
-  return total;
-}
-
-/** The approval number the public would settle on given today's conditions. */
+/**
+ * The approval number the public would settle on given today's conditions.
+ *
+ * This is no longer a formula over the nation's statistics: it is the weighted
+ * sum of what each constituency thinks of you, which is what approval actually
+ * is. Character and press relations shade it, and deep polarisation compresses
+ * every president toward the middle.
+ */
 export function approvalTarget(s: GameState): number {
-  const n = s.nation;
-  const econ =
-    52 +
-    (n.growth - 2) * 7 -
-    (n.unemployment - 4.6) * 5 -
-    Math.max(0, n.inflation - 2.5) * 6 -
-    Math.max(0, n.debtToGdp - 110) * 0.15;
+  const coalition = coalitionApproval(s);
   const character = s.personal.integrity * 0.5 + (100 - s.politics.scandal) * 0.5;
-  const raw =
-    0.36 * econ +
-    0.26 * serviceScore(s) +
-    0.12 * n.security +
-    0.12 * (100 - n.unrest) +
-    0.14 * character;
-  // Deep partisan polarisation compresses every president toward the middle.
-  return 44 + (raw - 50) * 0.9 + (s.politics.media - 50) * 0.06;
+  return 47.5 + (coalition - 50) * 0.92 + (character - 75) * 0.09 + (s.politics.media - 50) * 0.06;
 }
 
 /** Long-run growth the economy is capable of, before cycle and shocks. */
@@ -127,6 +105,7 @@ export function simulateMonth(
   crisisCount: number,
 ): MonthReport {
   const before = new Map(TRACKED.map((t) => [t.label, t.get(s)]));
+  const blocsBefore = new Map(BLOCS.map((b) => [b.key, s.blocs[b.key] ?? 50]));
   const notes: string[] = [];
 
   // --- Running situations: wars, epidemics, investigations ---
@@ -231,6 +210,9 @@ export function simulateMonth(
   s.nation.standing = drift(s.nation.standing, standingTarget, 0.14);
 
   // --- Politics ---
+  // Constituencies move first: approval is the sum of what they now think.
+  driftBlocs(s);
+
   let target = approvalTarget(s);
   if (s.month <= 6) target += (7 - s.month) * 1.1; // honeymoon
   if (s.month >= 40) target -= (s.month - 39) * 0.25; // late-term fatigue
@@ -240,7 +222,12 @@ export function simulateMonth(
   addPath(s, "politics.capital", capitalGain);
 
   s.politics.media = drift(s.politics.media, 50 - s.politics.scandal * 0.25, 0.07);
-  s.politics.party = drift(s.politics.party, 45 + (s.politics.approval - 45) * 0.7, 0.09);
+  // Your party's mood follows its own base rather than the country at large.
+  const coreKeys = s.party === "blue"
+    ? (["labour", "young", "activists"] as const)
+    : (["rural", "business", "traditionalists"] as const);
+  const core = coreKeys.reduce((sum, k) => sum + (s.blocs[k] ?? 50), 0) / coreKeys.length;
+  s.politics.party = drift(s.politics.party, 40 + core * 0.55 + (s.politics.approval - 45) * 0.2, 0.09);
   addPath(s, "politics.scandal", s.politics.media < 40 ? -0.6 : -1.2);
 
   // --- The person in the chair ---
@@ -260,6 +247,22 @@ export function simulateMonth(
   addPath(s, "personal.marriage", -1.05 - strain);
   addPath(s, "personal.family", -0.95 - strain * 0.8);
   s.personal.age += 1 / 12;
+
+  // Name the constituency that shifted hardest, so movement is legible.
+  let biggest: { name: string; delta: number } | null = null;
+  for (const def of BLOCS) {
+    const delta = (s.blocs[def.key] ?? 50) - (blocsBefore.get(def.key) ?? 50);
+    if (!biggest || Math.abs(delta) > Math.abs(biggest.delta)) {
+      biggest = { name: def.short, delta };
+    }
+  }
+  if (biggest && Math.abs(biggest.delta) >= 1.4) {
+    notes.push(
+      biggest.delta > 0
+        ? `${biggest.name} are warming to you.`
+        : `${biggest.name} are drifting away.`,
+    );
+  }
 
   if (s.personal.health < 35) {
     addPath(s, "personal.stress", 2.5);

@@ -457,3 +457,14 @@ body {
   /* The phone HUD has no room for the board; the dashboard carries it. */
   #hud-situations { display: none !important; }
 }
+
+/* -------------------------------------------------------- coalition board */
+
+.bloc-row { margin-bottom: 9px; }
+.bloc-row:last-of-type { margin-bottom: 0; }
+.bloc-head {
+  display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; margin-bottom: 4px;
+}
+.bloc-head > span:first-child { flex: 1; }
+.bloc-share { font-size: 10.5px; color: var(--ink-faint); }
+.bloc-head .v { font-variant-numeric: tabular-nums; min-width: 26px; text-align: right; }

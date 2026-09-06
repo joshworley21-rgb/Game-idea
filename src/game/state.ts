@@ -122,6 +122,17 @@ export function createInitialState(opts: NewGameOptions): GameState {
     pendingCrises: [],
     threads: [],
     heat: {},
+    // Everyone starts a little above water; the leans are applied on the first tick.
+    blocs: {
+      labour: 54,
+      business: 50,
+      seniors: 53,
+      young: 51,
+      rural: 48,
+      suburban: 52,
+      activists: 50,
+      traditionalists: 48,
+    },
     unlocked: [],
     crisisHistory: {},
     history: [],

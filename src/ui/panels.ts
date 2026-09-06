@@ -1,6 +1,7 @@
 import { actionCooldownLeft, actionsFor, STATION_INFO } from "../game/actions.ts";
 import { describeEffects } from "../game/effects.ts";
-import { gradeFor, scoreLegacy } from "../game/endings.ts";
+import { BLOCS } from "../game/blocs.ts";
+import { electionMargin, gradeFor, scoreLegacy } from "../game/endings.ts";
 import type { MonthReport } from "../game/sim.ts";
 import {
   BUDGET_KEYS,
@@ -622,6 +623,35 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
   ]);
 
   const right = el("div", {});
+
+  // The coalition board: approval broken into the people it is made of.
+  right.append(el("div", { class: "section-title" }, ["Your coalition"]));
+  const ranked = [...BLOCS].sort((a, b) => (s.blocs[b.key] ?? 50) - (s.blocs[a.key] ?? 50));
+  for (const def of ranked) {
+    const support = s.blocs[def.key] ?? 50;
+    const tone = support >= 55 ? "ok" : support >= 45 ? "warn" : "bad";
+    right.append(
+      el("div", { class: "bloc-row", title: def.cares }, [
+        el("div", { class: "bloc-head" }, [
+          el("span", {}, [def.short]),
+          el("span", { class: "bloc-share" }, [`${Math.round(def.weight * 100)}% of voters`]),
+          el("span", { class: `v ${tone}` }, [Math.round(support).toString()]),
+        ]),
+        el("div", { class: "meter-track" }, [
+          el("div", { class: `meter-fill ${tone}`, style: `width:${support}%` }),
+        ]),
+      ]),
+    );
+  }
+  const margin = electionMargin(s);
+  right.append(
+    el("div", { class: "option-detail", style: "margin-top:10px" }, [
+      margin > 0
+        ? `On these numbers you win re-election by about ${Math.round(margin)} points.`
+        : `On these numbers you lose re-election by about ${Math.round(-margin)} points.`,
+    ]),
+  );
+
   if (history.length > 1) {
     right.append(el("div", { class: "section-title" }, ["Since the inauguration"]));
     const series: [string, number[], number, number, string][] = [

@@ -1,4 +1,5 @@
 import { Rng } from "../core/rng.ts";
+import { BLOCS } from "./blocs.ts";
 import { TERM_MONTHS } from "./state.ts";
 import type { Ending, GameState } from "./types.ts";
 
@@ -89,17 +90,35 @@ export function gradeFor(score: number): string {
   return "F";
 }
 
-/** Margin of the re-election result, in points. Positive means a win. */
+/**
+ * Margin of the re-election result, in points. Positive means a win.
+ *
+ * Elections are won bloc by bloc. Turnout is not uniform: a constituency that
+ * likes you turns out for you, and one that has given up on you stays home,
+ * which cuts both ways.
+ */
 export function electionMargin(s: GameState): number {
+  let margin = 0;
+  for (const def of BLOCS) {
+    const support = s.blocs[def.key] ?? 50;
+    // Enthusiasm at the extremes, apathy in the middle.
+    const turnout = 0.75 + Math.abs(support - 50) / 100;
+    margin += def.weight * turnout * (support - 50) * 2.2;
+  }
   return (
-    (s.politics.approval - 48) * 1.1 +
-    (s.nation.growth - 2) * 3 -
-    (s.nation.unemployment - 4.6) * 2.5 -
-    Math.max(0, s.nation.inflation - 3) * 2 -
-    (s.nation.unrest - 40) * 0.12 +
-    (s.politics.party - 55) * 0.15 -
-    s.politics.scandal * 0.12
+    margin +
+    (s.nation.growth - 2) * 1.5 -
+    Math.max(0, s.nation.inflation - 3) * 1.5 +
+    (s.politics.party - 55) * 0.12 -
+    s.politics.scandal * 0.1
   );
+}
+
+/** The constituencies that decided it, for the ending text. */
+export function decisiveBlocs(s: GameState): { name: string; support: number }[] {
+  return BLOCS.map((b) => ({ name: b.short, support: s.blocs[b.key] ?? 50 }))
+    .sort((a, b) => Math.abs(b.support - 50) - Math.abs(a.support - 50))
+    .slice(0, 3);
 }
 
 function personalCoda(s: GameState): string {
@@ -172,6 +191,16 @@ export function buildEnding(s: GameState, rng: Rng, fail: FailState | null): End
         ? "You lose by a point and a half. The concession call is short and the drive back from the hotel is very long."
         : "You lose, and not narrowly. The country decided somewhere around the middle of year three and never really revisited it.",
     );
+  }
+
+  // Name the coalition that decided it: an election is people, not a number.
+  const decisive = decisiveBlocs(s);
+  const won = decisive.filter((b) => b.support >= 55).map((b) => b.name);
+  const lost = decisive.filter((b) => b.support < 45).map((b) => b.name);
+  if (won.length || lost.length) {
+    const held = won.length ? `${won.join(" and ")} stayed with you` : "";
+    const gone = lost.length ? `${lost.join(" and ")} did not` : "";
+    parts.push([held, gone].filter(Boolean).join(", and ") + ".");
   }
 
   parts.push(nationCoda(s, legacy));
