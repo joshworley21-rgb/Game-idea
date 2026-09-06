@@ -136,6 +136,62 @@ export interface Choice {
   failText?: string;
   resultText: string;
   modifier?: Omit<Modifier, "id"> & { id?: string };
+  /** What this choice sets in motion. Applied whether or not the risk lands. */
+  consequence?: Consequence;
+  /** Applied instead when the risk lands, if the failure changes the fallout. */
+  failConsequence?: Consequence;
+}
+
+/** Broad domains a crisis belongs to. Trouble in one heats up its neighbours. */
+export type CrisisTag =
+  | "economy"
+  | "foreign"
+  | "war"
+  | "health"
+  | "security"
+  | "justice"
+  | "climate"
+  | "scandal"
+  | "labour"
+  | "politics"
+  | "personal";
+
+/**
+ * A situation that outlives the meeting it started in: a war, an epidemic, an
+ * investigation. Threads tick every month, push their own effects, and make
+ * related crises more likely until they burn out or are resolved.
+ */
+export interface Thread {
+  id: string;
+  label: string;
+  /** A line for the situation board. */
+  detail: string;
+  /** 0-100. Effects and pressure scale with it. */
+  intensity: number;
+  /** Added to intensity each month: positive festers, negative fades. */
+  drift: number;
+  /** Applied monthly, scaled by intensity. */
+  perMonth?: Effects;
+  /** Crisis ids this situation makes more likely. */
+  feeds?: string[];
+  /** Domains this situation keeps hot. */
+  tags?: CrisisTag[];
+  /** Months since it began. */
+  age: number;
+}
+
+/** What taking a choice does to the wider world, beyond its immediate effects. */
+export interface Consequence {
+  /** Opens an ongoing situation. */
+  startsThread?: Omit<Thread, "age">;
+  /** Adds to an existing situation's intensity, by thread id. */
+  escalates?: { id: string; by: number };
+  /** Reduces or ends one, by thread id. */
+  eases?: { id: string; by: number };
+  /** Crisis ids that become possible from now on. */
+  unlocks?: string[];
+  /** Raises the temperature of these domains. */
+  heats?: Partial<Record<CrisisTag, number>>;
 }
 
 export interface Crisis {
@@ -145,6 +201,8 @@ export interface Crisis {
   /** Where the news breaks from. */
   source: string;
   category: "domestic" | "foreign" | "economic" | "disaster" | "personal";
+  /** Domains this belongs to, for heat and clustering. */
+  tags: CrisisTag[];
   /** Relative likelihood; scaled by `pressure`. */
   weight: number;
   /** 0 means impossible right now, higher means more likely. */
@@ -152,6 +210,11 @@ export interface Crisis {
   choices: Choice[];
   /** Months before this crisis can fire again. */
   cooldown: number;
+  /**
+   * Consequences only: never fires from ambient pressure, only once something
+   * else has unlocked it or an active situation feeds it.
+   */
+  gated?: boolean;
 }
 
 export interface OfficeAction {
@@ -219,6 +282,12 @@ export interface GameState {
   log: LogEntry[];
   /** Crises awaiting a decision before the month can end. */
   pendingCrises: string[];
+  /** Situations currently running. */
+  threads: Thread[];
+  /** Per-domain temperature, 0-100. Decays a little every month. */
+  heat: Partial<Record<CrisisTag, number>>;
+  /** Crisis ids unlocked by earlier decisions. */
+  unlocked: string[];
   /** crisisId -> month it last fired. */
   crisisHistory: Record<string, number>;
   /** One snapshot per completed month, for the trend charts. */

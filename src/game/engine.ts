@@ -2,7 +2,7 @@ import { Emitter } from "../core/emitter.ts";
 import { Rng } from "../core/rng.ts";
 import { ACTIONS, actionCooldownLeft } from "./actions.ts";
 import { billCatalog, forecastVote, holdVote, voteAftermath } from "./bills.ts";
-import { CRISES, eligibleCrises } from "./crises.ts";
+import { CRISES, applyConsequence, crisisPressure, eligibleCrises } from "./crises.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
 import {
   buildEnding,
@@ -271,6 +271,13 @@ export class Engine extends Emitter<EngineEvents> {
     const effects = failed && choice.onFail ? choice.onFail : choice.effects;
     applyEffects(s, effects);
 
+    // What the decision sets in motion, which may differ when it goes wrong.
+    const before = s.threads.map((t) => t.id);
+    applyConsequence(s, failed && choice.failConsequence ? choice.failConsequence : choice.consequence);
+    for (const t of s.threads) {
+      if (!before.includes(t.id)) this.log("crisis", `${t.label} begins.`);
+    }
+
     if (choice.modifier) {
       s.modifiers.push({
         id: choice.modifier.id ?? `${crisisId}-${choiceId}`,
@@ -417,18 +424,18 @@ export class Engine extends Emitter<EngineEvents> {
     const s = this.state;
     const pool = eligibleCrises(s);
     if (pool.length === 0) return;
-    const totalPressure = pool.reduce((sum, c) => sum + c.pressure(s), 0);
+    const totalPressure = pool.reduce((sum, c) => sum + crisisPressure(s, c), 0);
     const chance = Math.min(0.8, Math.max(0.15, 0.12 + totalPressure * 0.03));
 
     const fired: string[] = [];
     if (this.rng.chance(chance)) {
-      const picked = this.rng.weighted(pool, (c) => c.weight * c.pressure(s));
+      const picked = this.rng.weighted(pool, (c) => c.weight * crisisPressure(s, c));
       if (picked) fired.push(picked.id);
     }
     // A second, rarer crisis when the country is genuinely under strain.
     if (fired.length === 1 && this.rng.chance(Math.min(0.25, totalPressure * 0.012))) {
       const rest = pool.filter((c) => !fired.includes(c.id));
-      const second = this.rng.weighted(rest, (c) => c.weight * c.pressure(s));
+      const second = this.rng.weighted(rest, (c) => c.weight * crisisPressure(s, c));
       if (second) fired.push(second.id);
     }
 

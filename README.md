@@ -70,6 +70,33 @@ underfund healthcare and the overdose surge arrives; let unrest and scandal buil
 and the leaks and challengers follow. Some options carry an explicit risk of
 backfiring.
 
+**Crises also cause each other**, through three connected mechanisms.
+
+*Situations* are crises that outlive the meeting they started in. Commit troops
+to a treaty ally and you open a war that runs for the rest of the term, bleeding
+debt and approval every month, ageing you, and generating its own crises —
+casualty convoys, protests in the square, a coalition that wants an exit ramp.
+Each has an intensity that drifts up if ignored and down if handled, and its
+effects scale with it, so a war winding down hurts less than one at its height.
+Impose a rail settlement and labour organises against you. Downplay an outbreak
+badly and you get an epidemic *and* the inquiry into how you handled it.
+
+*Consequence crises* exist only as results. Nine of the twenty-eight can never
+fire on their own: they are unlocked by a specific decision. Stonewall a leak and
+lose the gamble, and the investigation you opened can end in drafted articles of
+impeachment. Fix a grid intrusion quietly, and what you knew and when becomes a
+story of its own.
+
+*Domain heat* clusters trouble. Every crisis is tagged by domain, and a crisis
+raises the temperature of its own domains, as does any running situation. Hot
+domains produce more crises and cool off over a few months when nothing feeds
+them — so the country has bad years in particular areas rather than uniformly
+random trouble.
+
+Running situations show on a board in the HUD and in the dashboard, and a crisis
+produced by one says which, so trouble can be traced back to the decision that
+caused it.
+
 **You.** Health decays with the job and faster under stress. Marriage and family
 decay every single month and only recover if you spend actions on them, with
 diminishing returns near the top — restoring a marriage from 30 is much easier

@@ -470,7 +470,15 @@ export function budgetPanel(engine: Engine, host: PanelHost): HTMLElement {
 // ------------------------------------------------------------------ crisis
 
 export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HTMLElement {
-  const body = el("div", {}, [el("div", { class: "crisis-brief" }, [crisis.brief])]);
+  // If a running situation produced this, say so: the player should be able to
+  // trace trouble back to the decision that caused it.
+  const from = engine.state.threads.filter((t) => t.feeds?.includes(crisis.id));
+  const body = el("div", {}, [
+    from.length
+      ? el("div", { class: "crisis-origin" }, [`This follows from: ${from.map((t) => t.label).join(", ")}`])
+      : null,
+    el("div", { class: "crisis-brief" }, [crisis.brief]),
+  ]);
   const grid = el("div", { class: "option-grid" });
 
   for (const choice of crisis.choices) {
@@ -580,6 +588,28 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
   const history = s.history;
 
   const left = el("div", {}, [
+    ...(s.threads.length
+      ? [
+          el("div", { class: "section-title" }, ["Situations running"]),
+          ...s.threads.map((t) =>
+            el("div", { class: "option", style: "margin-bottom:9px" }, [
+              el("div", { class: "option-top" }, [
+                el("span", { class: "option-label" }, [t.label]),
+                el("span", { class: "option-cost" }, [
+                  `${Math.round(t.intensity)} · ${t.drift > 0 ? "worsening" : "easing"} · month ${t.age + 1}`,
+                ]),
+              ]),
+              el("div", { class: "option-detail" }, [t.detail]),
+              el("div", { class: "meter-track", style: "margin-top:8px" }, [
+                el("div", {
+                  class: `meter-fill ${t.intensity > 60 ? "bad" : t.intensity > 30 ? "warn" : "ok"}`,
+                  style: `width:${t.intensity}%`,
+                }),
+              ]),
+            ]),
+          ),
+        ]
+      : []),
     el("div", { class: "section-title" }, ["Public services"]),
     ...BUDGET_KEYS.map((k) => meter(BUDGET_LABELS[k], s.nation.sectors[k])),
     el("div", { class: "section-title" }, ["Conditions"]),

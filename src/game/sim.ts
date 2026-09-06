@@ -129,6 +129,28 @@ export function simulateMonth(
   const before = new Map(TRACKED.map((t) => [t.label, t.get(s)]));
   const notes: string[] = [];
 
+  // --- Running situations: wars, epidemics, investigations ---
+  for (const thread of s.threads) {
+    // Effects scale with intensity, so a situation winding down hurts less.
+    if (thread.perMonth) applyEffects(s, thread.perMonth, thread.intensity / 60);
+    thread.intensity = Math.max(0, Math.min(100, thread.intensity + thread.drift));
+    thread.age += 1;
+    // A live situation keeps its domains hot, which is what clusters trouble.
+    for (const tag of thread.tags ?? []) {
+      s.heat[tag] = Math.max(s.heat[tag] ?? 0, thread.intensity * 0.6);
+    }
+  }
+  const ended = s.threads.filter((t) => t.intensity <= 0);
+  for (const t of ended) notes.push(`${t.label} is over, after ${t.age} months.`);
+  s.threads = s.threads.filter((t) => t.intensity > 0);
+
+  // Domains cool off when nothing is feeding them.
+  for (const key of Object.keys(s.heat) as (keyof typeof s.heat)[]) {
+    const value = (s.heat[key] ?? 0) * 0.86;
+    if (value < 1) delete s.heat[key];
+    else s.heat[key] = value;
+  }
+
   // --- Standing effects: temporary modifiers and laws on the books ---
   for (const mod of s.modifiers) applyEffects(s, mod.perMonth);
   s.modifiers = s.modifiers.filter((m) => {

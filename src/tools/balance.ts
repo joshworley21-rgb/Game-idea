@@ -36,10 +36,14 @@ function run(strat: Strategy, seed: number) {
   const engine = new Engine({ name: "Test", party: "blue", seed });
   const rng = new Rng(seed + 991);
   const s = engine.state;
+  const seenThreads = new Set<string>();
+  const gatedFired = new Set<string>();
 
   while (s.phase === "playing") {
     // Resolve every crisis with a random affordable option.
+    for (const t of s.threads) seenThreads.add(t.id);
     for (const crisis of [...engine.pendingCrises]) {
+      if (crisis.gated) gatedFired.add(crisis.id);
       const options = crisis.choices.filter((c) => engine.affordable(crisis, c));
       if (!options.length) throw new Error(`No resolvable option for crisis ${crisis.id}`);
       const choice = rng.pick(options);
@@ -68,6 +72,9 @@ function run(strat: Strategy, seed: number) {
 
   const legacy = scoreLegacy(s);
   return {
+    threads: seenThreads.size,
+    threadNames: [...seenThreads].join("|") || "-",
+    gated: gatedFired.size,
     strat,
     seed,
     endMonth: s.month,

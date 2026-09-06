@@ -29,6 +29,8 @@ export class Hud {
   private legend = el("div", { class: "hud-card", id: "hud-legend" });
   /** Compact stat row shown only on small screens, where the cards are hidden. */
   private strip = el("div", { class: "hud-card", id: "hud-strip" });
+  /** Situations currently running; hidden when the country is calm. */
+  private situations = el("div", { class: "hud-card", id: "hud-situations" });
 
   private muteButton: HTMLButtonElement;
 
@@ -78,6 +80,7 @@ export class Hud {
       this.actions,
       this.legend,
       this.strip,
+      this.situations,
     ]);
     document.body.append(this.crosshair, this.prompt);
   }
@@ -155,6 +158,26 @@ export class Hud {
       statLine("Unrest", Math.round(n.unrest).toString(), bandLow(n.unrest, 40, 60)),
       statLine("Congress", `${Math.round((s.politics.house + s.politics.senate) / 2)}%`, band((s.politics.house + s.politics.senate) / 2, 50, 42)),
     );
+
+    clear(this.situations);
+    this.situations.style.display = s.threads.length ? "block" : "none";
+    if (s.threads.length) {
+      this.situations.append(el("div", { class: "hud-title" }, ["Running"]));
+      for (const thread of s.threads.slice(0, 4)) {
+        const severity = thread.intensity > 60 ? "bad" : thread.intensity > 30 ? "warn" : "ok";
+        this.situations.append(
+          el("div", { class: "situation", title: thread.detail }, [
+            el("div", { class: "situation-head" }, [
+              el("span", {}, [thread.label]),
+              el("span", { class: `v ${severity}` }, [`${Math.round(thread.intensity)}`]),
+            ]),
+            el("div", { class: "meter-track" }, [
+              el("div", { class: `meter-fill ${severity}`, style: `width:${thread.intensity}%` }),
+            ]),
+          ]),
+        );
+      }
+    }
 
     clear(this.strip);
     for (const [label, value, tone] of [
