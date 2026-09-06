@@ -1,5 +1,16 @@
 import type { GameState, OfficeAction, StationId } from "./types.ts";
 
+/** Fixed order, used for the number-key shortcuts and the HUD legend. */
+export const STATION_ORDER: StationId[] = [
+  "desk",
+  "budget",
+  "staff",
+  "phone",
+  "press",
+  "family",
+  "rest",
+];
+
 export const STATION_INFO: Record<StationId, { name: string; blurb: string }> = {
   desk: {
     name: "The Resolute Desk",

@@ -243,10 +243,15 @@ export interface VoteForecast {
   crossesParty: boolean;
 }
 
+/** A simple majority of the chamber carries a bill. */
+export const PASS_THRESHOLD = 50;
+
+/** How hard the opposition fights, given where the bill sits ideologically. */
 function mismatchFactor(bill: Bill, state: GameState): { factor: number; crossesParty: boolean } {
   const mine = partyIdeology(state);
-  if (bill.ideology === "centrist") return { factor: 0.3, crossesParty: false };
-  if (bill.ideology === mine) return { factor: 0.7, crossesParty: false };
+  if (bill.ideology === "centrist") return { factor: 0.25, crossesParty: false };
+  if (bill.ideology === mine) return { factor: 0.45, crossesParty: false };
+  // Crossing the aisle costs you at home but picks up votes across it.
   return { factor: 0.5, crossesParty: true };
 }
 
@@ -267,7 +272,7 @@ export function forecastVote(state: GameState, bill: Bill, capitalSpent: number)
     (crossesParty ? 4 : 0);
 
   // The roll call adds +/-8 uniform noise, so odds are linear in that window.
-  const odds = Math.min(0.97, Math.max(0.03, (score - 55 + 8) / 16));
+  const odds = Math.min(0.97, Math.max(0.03, (score - PASS_THRESHOLD + 8) / 16));
   const read =
     odds > 0.85 ? "Locked up" :
     odds > 0.62 ? "Likely to pass" :
@@ -287,8 +292,8 @@ export function holdVote(state: GameState, bill: Bill, capitalSpent: number, rng
   const forecast = forecastVote(state, bill, capitalSpent);
   const roll = rng.range(-8, 8);
   const final = forecast.score + roll;
-  const passed = final > 55;
-  const margin = final - 55;
+  const passed = final > PASS_THRESHOLD;
+  const margin = final - PASS_THRESHOLD;
   const narrative = passed
     ? margin > 12
       ? "It sails through both chambers with votes to spare."
