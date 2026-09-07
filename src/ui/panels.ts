@@ -19,6 +19,18 @@ import type { Bill, BudgetKey, Crisis, Ending, GameState, StationId } from "../g
 import type { Engine, Outcome } from "../game/engine.ts";
 import { clear, el, meter, money, one, sparkline } from "./dom.ts";
 
+const band = (v: number, good: number, bad: number): "ok" | "warn" | "bad" =>
+  v >= good ? "ok" : v >= bad ? "warn" : "bad";
+const bandLow = (v: number, good: number, bad: number): "ok" | "warn" | "bad" =>
+  v <= good ? "ok" : v <= bad ? "warn" : "bad";
+
+function statLine(key: string, value: string, tone: "ok" | "warn" | "bad" | ""): HTMLElement {
+  return el("div", { class: "stat-line" }, [
+    el("span", { class: "k" }, [key]),
+    el("span", { class: `v ${tone}` }, [value]),
+  ]);
+}
+
 function chips(effects: { text: string; good: boolean }[]): HTMLElement {
   return el(
     "div",
@@ -686,7 +698,13 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
   const legacy = scoreLegacy(s);
   const history = s.history;
 
+  const n = s.nation;
   const left = el("div", {}, [
+    el("div", { class: "section-title" }, ["The nation"]),
+    statLine("Growth", `${one(n.growth)}%`, band(n.growth, 2, 0.8)),
+    statLine("Unemployment", `${one(n.unemployment)}%`, bandLow(n.unemployment, 5, 6.8)),
+    statLine("Inflation", `${one(n.inflation)}%`, bandLow(n.inflation, 3, 4.5)),
+    statLine("Debt / GDP", `${Math.round(n.debtToGdp)}%`, bandLow(n.debtToGdp, 105, 125)),
     ...(s.threads.length
       ? [
           el("div", { class: "section-title" }, ["Situations running"]),

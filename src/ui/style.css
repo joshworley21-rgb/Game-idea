@@ -365,14 +365,12 @@ body {
   pointer-events: none;
 }
 
-#hud-strip { display: none; }
-.strip-item { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
-.strip-item .k { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
-.strip-item .v { font-size: 14px; font-variant-numeric: tabular-nums; }
-
 /*
- * Phone layout. The four corner cards become one top bar and one stat strip,
- * and the station list moves to a thumb-reachable row along the bottom.
+ * Phone layout. The four corner cards become one top bar; the nation and
+ * personal stats that used to sit permanently on screen live in "Full stats"
+ * instead — one tap away, but not competing with the room for attention the
+ * rest of the time. The station list moves to a thumb-reachable row along
+ * the bottom.
  */
 @media (max-width: 900px), (pointer: coarse) {
   #hud-nation, #hud-self { display: none; }
@@ -397,14 +395,6 @@ body {
   .power-label { font-size: 9px; letter-spacing: 0.06em; }
   .power-value { font-size: 16px; }
   .pip { width: 10px; height: 10px; }
-
-  #hud-strip {
-    display: flex; gap: 14px;
-    top: calc(max(10px, env(safe-area-inset-top)) + 52px);
-    left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right));
-    overflow-x: auto; scrollbar-width: none; justify-content: space-between;
-  }
-  #hud-strip::-webkit-scrollbar { display: none; }
 
   /* Stations become a scrolling row of chips along the bottom edge. */
   #hud-legend {
@@ -466,7 +456,6 @@ body {
 @media (max-height: 480px) and (pointer: coarse) {
   #panel-root.open { padding: 8px; }
   .panel { max-height: calc(100vh - 16px); }
-  #hud-strip { display: none; }
   #toast-root { display: none; }
 }
 

@@ -28,8 +28,6 @@ export class Hud {
   private actions = el("div", { class: "hud-card", id: "hud-actions" });
   private endButton: HTMLButtonElement;
   private legend = el("div", { class: "hud-card", id: "hud-legend" });
-  /** Compact stat row shown only on small screens, where the cards are hidden. */
-  private strip = el("div", { class: "hud-card", id: "hud-strip" });
   /** Situations currently running; hidden when the country is calm. */
   private situations = el("div", { class: "hud-card", id: "hud-situations" });
   private roomReveal = el("div", { id: "room-reveal", "aria-live": "polite" });
@@ -82,7 +80,6 @@ export class Hud {
       this.self,
       this.actions,
       this.legend,
-      this.strip,
       this.situations,
       this.roomReveal,
     ]);
@@ -214,23 +211,6 @@ export class Hud {
           ]),
         );
       }
-    }
-
-    clear(this.strip);
-    for (const [label, value, tone] of [
-      ["Growth", `${one(n.growth)}%`, band(n.growth, 2, 0.8)],
-      ["Jobless", `${one(n.unemployment)}%`, bandLow(n.unemployment, 5, 6.8)],
-      ["Unrest", Math.round(n.unrest).toString(), bandLow(n.unrest, 40, 60)],
-      ["Health", Math.round(s.personal.health).toString(), band(s.personal.health, 60, 40)],
-      ["Stress", Math.round(s.personal.stress).toString(), bandLow(s.personal.stress, 45, 70)],
-      ["Family", Math.round(s.personal.family).toString(), band(s.personal.family, 55, 35)],
-    ] as const) {
-      this.strip.append(
-        el("div", { class: "strip-item" }, [
-          el("span", { class: "k" }, [label]),
-          el("span", { class: `v ${tone}` }, [value]),
-        ]),
-      );
     }
 
     clear(this.self);
