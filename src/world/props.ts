@@ -1,4 +1,5 @@
 import { ROOM } from "./office.ts";
+import type { RoomId } from "./roomkit.ts";
 
 /**
  * Where each downloaded model sits in the room.
@@ -28,7 +29,7 @@ export interface PropPlacement {
 
 const WALL_Z = ROOM.rz - 0.3;
 
-export const PROPS: PropPlacement[] = [
+const OVAL_PROPS: PropPlacement[] = [
   // --- The seating group on the rug ---
   { model: "Sofa_01", position: [0, 0, -1.15], rotation: 0, scale: 1.25 },
   { model: "Sofa_01", position: [0, 0, 1.5], rotation: Math.PI, scale: 1.25 },
@@ -63,3 +64,33 @@ export const PROPS: PropPlacement[] = [
   { model: "fancy_picture_frame_01", position: [0.2, 2.45, WALL_Z], rotation: Math.PI, scale: 2.3, noShadow: true },
   { model: "Chandelier_01", position: [0, 0, 0.3], ceilingAt: ROOM.height - 0.05, scale: 1.2, noShadow: true },
 ];
+
+/**
+ * Signature furniture for each playable room. Models are shared and loaded
+ * once, so giving secondary rooms a stronger identity does not multiply the
+ * download cost.
+ */
+export const PROPS_BY_ROOM: Partial<Record<RoomId, PropPlacement[]>> = {
+  oval: OVAL_PROPS,
+  cabinet: [
+    { model: "ClassicConsole_01", position: [0, 0, 3.48], rotation: Math.PI, scale: 0.9 },
+    { model: "vintage_grandfather_clock_01", position: [-4.62, 0, 3.3], rotation: Math.PI, scale: 0.88 },
+    { model: "potted_plant_01", position: [4.55, 0, 3.25], rotation: -0.45, scale: 1.05 },
+    { model: "Chandelier_01", position: [0, 0, 0], ceilingAt: 3.72, scale: 0.92, noShadow: true },
+  ],
+  press: [
+    { model: "potted_plant_01", position: [-3.65, 0, -5.35], rotation: 0.4, scale: 0.92 },
+    { model: "potted_plant_01", position: [3.65, 0, -5.35], rotation: -0.4, scale: 0.92 },
+  ],
+  residence: [
+    { model: "WoodenTable_02", position: [3.5, 0, -2.75], rotation: -Math.PI / 2, scale: 1.15 },
+    { model: "potted_plant_01", position: [4.15, 0, -3.35], rotation: -0.65, scale: 1.08 },
+    { model: "fancy_picture_frame_01", position: [4.66, 2.15, 1.6], rotation: -Math.PI / 2, scale: 1.35, noShadow: true },
+    { model: "Chandelier_01", position: [0.2, 0, 0.2], ceilingAt: 3.42, scale: 0.82, noShadow: true },
+  ],
+  study: [
+    { model: "vintage_grandfather_clock_01", position: [1.95, 0, -2.18], rotation: Math.PI, scale: 0.78 },
+    { model: "potted_plant_01", position: [2.03, 0, -1.45], rotation: -0.3, scale: 0.76 },
+    { model: "book_encyclopedia_set_01", position: [-2.31, 1.42, 0.38], rotation: Math.PI / 2, scale: 0.72, groundAt: 1.42, noShadow: true },
+  ],
+};

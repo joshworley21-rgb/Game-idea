@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { PROPS } from "./props.ts";
+import { PROPS_BY_ROOM } from "./props.ts";
 import type { PropPlacement } from "./props.ts";
+import type { RoomId } from "./roomkit.ts";
 
 /** Where the optimised .glb files live, relative to the site root. */
 const MODEL_DIR = "models";
@@ -83,12 +84,13 @@ function prepare(object: THREE.Object3D, placement: PropPlacement): THREE.Object
  * taking the whole room down with it.
  */
 export async function loadProps(
-  scene: THREE.Object3D,
+  rooms: ReadonlyMap<RoomId, THREE.Object3D>,
   onProgress?: (progress: LoadProgress) => void,
-  footprints?: Footprint[],
+  footprints?: Map<RoomId, Footprint[]>,
 ): Promise<number> {
   const loader = new GLTFLoader();
-  const unique = [...new Set(PROPS.map((p) => p.model))];
+  const manifests = Object.entries(PROPS_BY_ROOM) as [RoomId, PropPlacement[]][];
+  const unique = [...new Set(manifests.flatMap(([, placements]) => placements.map((p) => p.model)))];
   const cache = new Map<string, THREE.Object3D>();
   let loaded = 0;
   let failures = 0;
@@ -106,24 +108,29 @@ export async function loadProps(
   }
   onProgress?.({ loaded, total: unique.length, label: "" });
 
-  for (const placement of PROPS) {
-    const source = cache.get(placement.model);
-    if (!source) continue;
-    const group = prepare(source.clone(true), placement);
-    scene.add(group);
+  for (const [roomId, placements] of manifests) {
+    const scene = rooms.get(roomId);
+    if (!scene) continue;
+    const roomFootprints = footprints?.get(roomId);
+    for (const placement of placements) {
+      const source = cache.get(placement.model);
+      if (!source) continue;
+      const group = prepare(source.clone(true), placement);
+      scene.add(group);
 
-    if (!footprints) continue;
-    group.updateMatrixWorld(true);
-    const bounds = new THREE.Box3().setFromObject(group);
-    // Only furniture standing on the floor blocks movement; a chandelier and a
-    // framed painting are things you walk under and past.
-    if (bounds.min.y > FLOOR_HEIGHT) continue;
-    footprints.push({
-      minX: bounds.min.x,
-      maxX: bounds.max.x,
-      minZ: bounds.min.z,
-      maxZ: bounds.max.z,
-    });
+      if (!roomFootprints) continue;
+      group.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(group);
+      // Only furniture standing on the floor blocks movement; a chandelier and
+      // a framed painting are things you walk under and past.
+      if (bounds.min.y > FLOOR_HEIGHT) continue;
+      roomFootprints.push({
+        minX: bounds.min.x,
+        maxX: bounds.max.x,
+        minZ: bounds.min.z,
+        maxZ: bounds.max.z,
+      });
+    }
   }
 
   return unique.length - failures;

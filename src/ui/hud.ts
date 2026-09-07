@@ -32,6 +32,8 @@ export class Hud {
   private strip = el("div", { class: "hud-card", id: "hud-strip" });
   /** Situations currently running; hidden when the country is calm. */
   private situations = el("div", { class: "hud-card", id: "hud-situations" });
+  private roomReveal = el("div", { id: "room-reveal", "aria-live": "polite" });
+  private roomRevealTimer = 0;
 
   private muteButton: HTMLButtonElement;
 
@@ -82,6 +84,7 @@ export class Hud {
       this.legend,
       this.strip,
       this.situations,
+      this.roomReveal,
     ]);
     document.body.append(this.crosshair, this.prompt);
   }
@@ -117,6 +120,12 @@ export class Hud {
     this.roomName = name;
     const line = this.date.querySelector(".date-room");
     if (line) line.textContent = name;
+    this.roomReveal.textContent = name;
+    this.roomReveal.classList.remove("show");
+    void this.roomReveal.offsetWidth;
+    this.roomReveal.classList.add("show");
+    window.clearTimeout(this.roomRevealTimer);
+    this.roomRevealTimer = window.setTimeout(() => this.roomReveal.classList.remove("show"), 2400);
   }
 
   render(s: GameState): void {

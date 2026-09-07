@@ -39,17 +39,28 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 
 .hud-card {
   position: absolute;
-  background: linear-gradient(180deg, rgba(12, 15, 22, 0.86), rgba(12, 15, 22, 0.72));
+  background:
+    linear-gradient(135deg, rgba(226, 193, 110, 0.06), transparent 36%),
+    linear-gradient(180deg, rgba(12, 15, 22, 0.88), rgba(9, 12, 18, 0.76));
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 14px;
   backdrop-filter: blur(9px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 #hud-date { top: 18px; left: 18px; min-width: 232px; }
 .date-line { font-family: var(--serif); font-size: 20px; letter-spacing: 0.01em; }
 .date-sub { font-size: 12px; color: var(--ink-dim); margin-top: 3px; letter-spacing: 0.06em; text-transform: uppercase; }
+.date-room {
+  margin-top: 8px;
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
 .term-track { height: 4px; border-radius: 3px; background: rgba(255,255,255,0.12); margin-top: 9px; overflow: hidden; }
 .term-fill { height: 100%; background: linear-gradient(90deg, var(--gold), #f0dca6); }
 
@@ -88,6 +99,35 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
   pointer-events: none; transition: transform 0.18s ease, background 0.18s ease;
 }
 #crosshair.hot { transform: scale(1.9); background: var(--gold); }
+
+#room-reveal {
+  position: fixed;
+  top: 104px;
+  left: 50%;
+  transform: translate(-50%, 8px);
+  opacity: 0;
+  padding: 8px 18px 9px;
+  border-top: 1px solid rgba(226, 193, 110, 0.5);
+  border-bottom: 1px solid rgba(226, 193, 110, 0.18);
+  color: rgba(246, 237, 214, 0.92);
+  background: linear-gradient(90deg, transparent, rgba(8, 11, 17, 0.8) 22%, rgba(8, 11, 17, 0.8) 78%, transparent);
+  font-family: var(--serif);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+#room-reveal.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  animation: room-reveal 2.4s ease both;
+}
+@keyframes room-reveal {
+  0% { opacity: 0; transform: translate(-50%, 10px); letter-spacing: 0.14em; }
+  16%, 68% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -5px); letter-spacing: 0.1em; }
+}
 
 #prompt {
   position: fixed; left: 50%; top: calc(50% + 46px); transform: translateX(-50%);
@@ -327,6 +367,7 @@ body {
 @media (max-width: 900px), (pointer: coarse) {
   #hud-nation, #hud-self { display: none; }
   #crosshair { display: none; }
+  #room-reveal { top: 92px; font-size: 15px; }
 
   .hud-card { padding: 8px 10px; border-radius: 10px; }
 

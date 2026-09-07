@@ -148,11 +148,11 @@ class Game {
    * as they arrive, so a slow connection delays the furniture, not the game.
    */
   private async furnish(): Promise<void> {
-    const note = el("div", { id: "loading-note" }, ["Furnishing the Oval Office…"]);
+    const note = el("div", { id: "loading-note" }, ["Preparing the executive complex…"]);
     document.body.append(note);
     try {
       await this.world.loadAssets(({ loaded, total }) => {
-        note.textContent = `Furnishing the Oval Office… ${loaded}/${total}`;
+        note.textContent = `Preparing the executive complex… ${loaded}/${total}`;
       });
     } finally {
       note.style.opacity = "0";

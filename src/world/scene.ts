@@ -17,6 +17,7 @@ import { Doors } from "./doors.ts";
 import { Sound } from "../audio/sound.ts";
 import { loadProps } from "./assetLoader.ts";
 import type { Footprint, LoadProgress } from "./assetLoader.ts";
+import { PROPS_BY_ROOM } from "./props.ts";
 import type { GameState, StationId } from "../game/types.ts";
 
 /** Window light and mood shift with the season, so the term visibly passes. */
@@ -45,6 +46,20 @@ const AO_SCALE = 0.5;
 /** The five factions, left to right across the chamber. */
 const FACTION_COLOURS = [0x5b7fb4, 0x6a8cbd, 0x87858c, 0xa8836d, 0xb26f68];
 
+const ROOM_PRESENTATION: Record<RoomId, {
+  horizontalFov: number;
+  exposure: number;
+  fogNear: number;
+  fogFar: number;
+}> = {
+  oval: { horizontalFov: 82, exposure: 1.08, fogNear: 18, fogFar: 44 },
+  cabinet: { horizontalFov: 78, exposure: 1.02, fogNear: 16, fogFar: 38 },
+  capitol: { horizontalFov: 92, exposure: 1.12, fogNear: 25, fogFar: 62 },
+  press: { horizontalFov: 76, exposure: 0.98, fogNear: 14, fogFar: 34 },
+  residence: { horizontalFov: 74, exposure: 1.12, fogNear: 13, fogFar: 32 },
+  study: { horizontalFov: 70, exposure: 1.08, fogNear: 10, fogFar: 25 },
+};
+
 export class World {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -58,7 +73,6 @@ export class World {
   private people = new THREE.Group();
   private animator = new CharacterAnimator();
   private castKey = "";
-  private ovalProps: THREE.Group | null = null;
   private clock = new THREE.Clock();
   private hemisphere: THREE.HemisphereLight;
   private raf = 0;
@@ -73,6 +87,7 @@ export class World {
   /** A rolling frame-time sample, used to drop the extra passes if needed. */
   private frameCost = 0;
   private frameSamples = 0;
+  private horizontalFov = ROOM_PRESENTATION.oval.horizontalFov;
   readonly sound = new Sound();
   /** True on phones and tablets, where the GPU budget is much smaller. */
   readonly lowPower: boolean;
@@ -209,7 +224,13 @@ export class World {
     if (this.current) this.current.group.visible = false;
     this.current = room;
     room.group.visible = true;
-    if (this.ovalProps) this.ovalProps.visible = id === "oval";
+    const presentation = ROOM_PRESENTATION[id];
+    this.horizontalFov = presentation.horizontalFov;
+    this.renderer.toneMappingExposure = presentation.exposure;
+    if (this.scene.fog instanceof THREE.Fog) {
+      this.scene.fog.near = presentation.fogNear;
+      this.scene.fog.far = presentation.fogFar;
+    }
 
     // Arrive at the door you would have come through, if there is one.
     const back = arrivingFrom ? room.doors.find((d) => d.to === arrivingFrom) : undefined;
@@ -222,6 +243,7 @@ export class World {
     }
     this.player.teleport(spawn);
     this.player.lookAt(look);
+    this.resize();
 
     this.player.colliders = room.colliders;
     this.player.clamp = room.clamp;
@@ -326,16 +348,22 @@ export class World {
 
   /** Fetches the furniture models, adds them, and makes them solid. */
   async loadAssets(onProgress?: (progress: LoadProgress) => void): Promise<number> {
-    const footprints: Footprint[] = [];
-    const props = new THREE.Group();
-    this.scene.add(props);
-    this.ovalProps = props;
-    const count = await loadProps(props, onProgress, footprints);
-    // The props are the Oval's furniture, so they travel with that room.
-    const oval = this.roomOf("oval");
-    oval.colliders = [...oval.colliders, ...footprints];
-    if (this.current.id === "oval") this.player.colliders = oval.colliders;
-    props.visible = this.current.id === "oval";
+    const propGroups = new Map<RoomId, THREE.Object3D>();
+    const footprints = new Map<RoomId, Footprint[]>();
+    for (const id of Object.keys(PROPS_BY_ROOM) as RoomId[]) {
+      const room = this.roomOf(id);
+      const props = new THREE.Group();
+      props.name = `${id}-signature-props`;
+      room.group.add(props);
+      propGroups.set(id, props);
+      footprints.set(id, []);
+    }
+    const count = await loadProps(propGroups, onProgress, footprints);
+    for (const [id, roomFootprints] of footprints) {
+      const room = this.roomOf(id);
+      room.colliders = [...room.colliders, ...roomFootprints];
+    }
+    this.player.colliders = this.current.colliders;
     return count;
   }
 
@@ -408,7 +436,7 @@ export class World {
     this.camera.aspect = w / h;
     // three's fov is vertical, so a portrait phone would crush the horizontal
     // view to a slot. Hold the horizontal field steady and derive the vertical.
-    const targetHorizontal = (88 * Math.PI) / 180;
+    const targetHorizontal = (this.horizontalFov * Math.PI) / 180;
     const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
     this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
     this.camera.updateProjectionMatrix();
