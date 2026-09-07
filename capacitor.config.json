@@ -1,6 +1,6 @@
 {
   "appId": "com.ovalgame.app",
-  "appName": "Oval",
+  "appName": "Oval — A President Simulator",
   "webDir": "dist",
   "android": {
     "backgroundColor": "#05070b",
