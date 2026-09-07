@@ -1,16 +1,23 @@
+/*
+ * Lighter, flatter tokens than the game started with: less-opaque panels, a
+ * softer shadow, a thinner border. Heavy near-black cards with deep drop
+ * shadows read as oppressive fast when they're on screen constantly — a
+ * lighter card that still contrasts against the room behind it does the same
+ * job without the weight.
+ */
 :root {
-  --ink: #f1ece0;
-  --ink-dim: rgba(241, 236, 224, 0.62);
-  --ink-faint: rgba(241, 236, 224, 0.38);
-  --gold: #e2c16e;
-  --gold-soft: rgba(226, 193, 110, 0.16);
-  --ok: #7fc294;
+  --ink: #f5f2ea;
+  --ink-dim: rgba(245, 242, 234, 0.7);
+  --ink-faint: rgba(245, 242, 234, 0.46);
+  --gold: #dcb96e;
+  --gold-soft: rgba(220, 185, 110, 0.13);
+  --ok: #8bcca0;
   --warn: #e0b565;
-  --bad: #e07a68;
-  --panel: rgba(14, 17, 24, 0.92);
-  --panel-soft: rgba(22, 26, 35, 0.86);
-  --line: rgba(226, 193, 110, 0.22);
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --bad: #e28a79;
+  --panel: rgba(36, 40, 50, 0.82);
+  --panel-soft: rgba(255, 255, 255, 0.05);
+  --line: rgba(226, 193, 110, 0.16);
+  --shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
   --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -21,7 +28,7 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #05070b;
+  background: #0a0d13;
   color: var(--ink);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
@@ -50,14 +57,14 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 .hud-card {
   position: absolute;
   background:
-    linear-gradient(135deg, rgba(226, 193, 110, 0.06), transparent 36%),
-    linear-gradient(180deg, rgba(12, 15, 22, 0.88), rgba(9, 12, 18, 0.76));
+    linear-gradient(135deg, rgba(226, 193, 110, 0.05), transparent 36%),
+    linear-gradient(180deg, rgba(28, 32, 42, 0.72), rgba(24, 28, 37, 0.6));
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 14px;
-  backdrop-filter: blur(9px);
+  backdrop-filter: blur(7px);
   box-shadow:
-    0 16px 38px rgba(0, 0, 0, 0.44),
+    0 10px 24px rgba(0, 0, 0, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
@@ -142,7 +149,8 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 #prompt {
   position: fixed; left: 50%; top: calc(50% + 46px); transform: translateX(-50%);
   padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line);
-  background: rgba(10, 13, 19, 0.82); font-size: 13.5px; letter-spacing: 0.02em;
+  background: rgba(28, 32, 42, 0.72); backdrop-filter: blur(6px);
+  font-size: 13.5px; letter-spacing: 0.02em;
   opacity: 0; transition: opacity 0.18s ease; pointer-events: none; white-space: nowrap;
 }
 #prompt.show { opacity: 1; }
@@ -164,8 +172,9 @@ kbd {
 
 #hud-actions { bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; }
 .btn {
-  border: 1px solid var(--line); background: rgba(16, 20, 28, 0.86); color: var(--ink);
+  border: 1px solid var(--line); background: rgba(34, 38, 48, 0.72); color: var(--ink);
   border-radius: 10px; padding: 10px 18px; font-size: 14px; transition: all 0.15s ease;
+  backdrop-filter: blur(7px);
 }
 .btn:hover:not(:disabled) { border-color: var(--gold); background: rgba(226, 193, 110, 0.14); }
 .btn.primary { background: linear-gradient(180deg, #e6c878, #c9a752); color: #17130a; border-color: #e6c878; font-weight: 600; }
@@ -177,7 +186,7 @@ kbd {
 
 #panel-root { position: fixed; inset: 0; display: none; z-index: 40; }
 #panel-root.open { display: flex; align-items: center; justify-content: center; padding: 116px 24px 24px; }
-.scrim { position: absolute; inset: 0; background: rgba(4, 6, 10, 0.66); backdrop-filter: blur(3px); }
+.scrim { position: absolute; inset: 0; background: rgba(8, 10, 16, 0.5); backdrop-filter: blur(2px); }
 
 .panel {
   position: relative;
@@ -200,7 +209,7 @@ kbd {
   flex: none;
   padding: 14px 22px; border-top: 1px solid rgba(255,255,255,0.08);
   display: flex; justify-content: space-between; align-items: center; gap: 14px;
-  background: rgba(0,0,0,0.2);
+  background: rgba(255,255,255,0.02);
 }
 .close-x {
   border: 1px solid var(--line); background: transparent; border-radius: 8px;
@@ -243,7 +252,7 @@ kbd {
 .budget-amount { font-variant-numeric: tabular-nums; text-align: right; font-size: 13.5px; }
 .budget-note { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
 input[type="range"] { width: 100%; accent-color: var(--gold); }
-.ledger { display: grid; gap: 7px; padding: 14px; border-radius: 12px; background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.08); }
+.ledger { display: grid; gap: 7px; padding: 14px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
 .ledger .stat-line { font-size: 13.5px; }
 .ledger-total { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 4px; padding-top: 9px; font-size: 15px; }
 
@@ -297,7 +306,7 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 
 .overlay {
   position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
-  background: radial-gradient(ellipse at 50% 40%, #171b25 0%, #05070b 72%);
+  background: radial-gradient(ellipse at 50% 40%, #232837 0%, #0a0d13 72%);
   padding: 28px; overflow-y: auto;
 }
 .overlay.hidden { display: none; }
@@ -462,7 +471,7 @@ body {
 #loading-note {
   position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
   padding: 8px 16px; border-radius: 999px; z-index: 30;
-  background: rgba(10, 13, 19, 0.86); border: 1px solid var(--line);
+  background: rgba(28, 32, 42, 0.72); backdrop-filter: blur(6px); border: 1px solid var(--line);
   font-size: 13px; color: var(--ink-dim); letter-spacing: 0.02em;
   transition: opacity 0.5s ease; pointer-events: none; white-space: nowrap;
 }
@@ -513,7 +522,7 @@ body {
 .whip-board {
   margin-top: 10px; padding: 9px 10px;
   border: 1px solid var(--line); border-radius: 6px;
-  background: rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.03);
 }
 .whip-total {
   font-size: 11px; color: var(--ink-faint); letter-spacing: 0.03em;
