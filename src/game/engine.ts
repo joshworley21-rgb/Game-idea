@@ -40,7 +40,6 @@ import type {
   BlocKey,
   Ending,
   GameState,
-  OfficeAction,
   StationId,
 } from "./types.ts";
 
@@ -174,7 +173,19 @@ export class Engine extends Emitter<EngineEvents> {
 
     s.ap -= action.ap;
     if (action.capitalCost) applyEffects(s, { "politics.capital": -action.capitalCost });
-    applyEffects(s, action.effects);
+
+    // Same shape as a crisis choice: a chance this backfires, and what it
+    // sets in motion either way — so a decision made here can still be
+    // paying (or costing) something months from now, not just this month.
+    const failed = action.risk !== undefined && this.rng.chance(action.risk);
+    const effects = failed && action.onFail ? action.onFail : action.effects;
+    applyEffects(s, effects);
+    const before = s.threads.map((t) => t.id);
+    applyConsequence(s, failed && action.failConsequence ? action.failConsequence : action.consequence);
+    for (const t of s.threads) {
+      if (!before.includes(t.id)) this.log("crisis", `${t.label} begins.`);
+    }
+
     // An hour given to one person lands on that person, not on an average;
     // an evening with all of them lands on all of them.
     if (action.target && action.attention) {
@@ -185,20 +196,15 @@ export class Engine extends Emitter<EngineEvents> {
     s.actionHistory[action.id] = s.month;
     this.log(action.station === "family" || action.station === "rest" ? "personal" : "policy", action.label);
 
+    const shown = { ...effects };
+    if (action.capitalCost) shown["politics.capital"] = (shown["politics.capital"] ?? 0) - action.capitalCost;
     this.outcome({
       title: action.label,
-      text: action.resultText,
-      effects: describeEffects(this.effectsWithCost(action)),
-      tone: "neutral",
+      text: failed && action.failText ? action.failText : action.resultText,
+      effects: describeEffects(shown),
+      tone: failed ? "bad" : "neutral",
     });
     return true;
-  }
-
-  private effectsWithCost(action: OfficeAction) {
-    if (!action.capitalCost) return action.effects;
-    const merged = { ...action.effects };
-    merged["politics.capital"] = (merged["politics.capital"] ?? 0) - action.capitalCost;
-    return merged;
   }
 
   // ----------------------------------------------------------- conversations

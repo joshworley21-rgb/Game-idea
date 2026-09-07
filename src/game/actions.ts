@@ -54,7 +54,7 @@ export const ACTIONS: OfficeAction[] = [
     id: "executive-order",
     station: "desk",
     label: "Sign an executive order",
-    detail: "Act alone. Fast, narrow, and reversible by the next person to sit here.",
+    detail: "Act alone. Fast, narrow, and reversible by the next person to sit here — or by a judge before that.",
     ap: 1,
     capitalCost: 6,
     cooldown: 2,
@@ -65,6 +65,10 @@ export const ACTIONS: OfficeAction[] = [
       "nation.unrest": 2,
       "politics.approval": 1,
     },
+    // Acting alone instead of through Congress is exactly the kind of thing
+    // a court eventually gets to review. It doesn't strike anything down
+    // today, but it puts the case on file — see "court-defeat" in crises.ts.
+    consequence: { unlocks: ["court-defeat"], heats: { justice: 6 } },
     resultText:
       "Three agencies have new marching orders by Monday and a district judge has the filing by Friday.",
   },
@@ -88,7 +92,7 @@ export const ACTIONS: OfficeAction[] = [
     id: "veto",
     station: "desk",
     label: "Veto the opposition bill",
-    detail: "Kill the bill Congress sent over and dare them to override.",
+    detail: "Kill the bill Congress sent over and dare them to override. Daring them is the risky part.",
     ap: 1,
     capitalCost: 8,
     cooldown: 6,
@@ -99,6 +103,17 @@ export const ACTIONS: OfficeAction[] = [
       "politics.media": -2,
       "politics.approval": -1,
     },
+    // A veto is safe most of the time. It is not safe every time, and
+    // finding out which kind this was happens on the floor, not before.
+    risk: 0.14,
+    onFail: {
+      "politics.party": -10,
+      "politics.house": -4,
+      "politics.senate": -4,
+      "politics.approval": -3,
+      "politics.media": -4,
+    },
+    failText: "The override succeeds by four votes. Congress has just overturned you for the first time this term.",
     resultText: "The override attempt fails by nine votes. Your side is delighted; the Hill is not.",
   },
 
@@ -125,7 +140,7 @@ export const ACTIONS: OfficeAction[] = [
     id: "fundraiser",
     station: "staff",
     label: "Headline a fundraiser",
-    detail: "An evening of handshakes for money that is not, technically, yours.",
+    detail: "An evening of handshakes for money that is not, technically, yours. Someone is always counting who thanked whom.",
     ap: 1,
     cooldown: 3,
     effects: {
@@ -136,13 +151,17 @@ export const ACTIONS: OfficeAction[] = [
       "personal.family": -3,
       "personal.stress": 4,
     },
+    // A room full of donors and one grateful phone call is how these stories
+    // always start. It doesn't cost you anything today; it just means there
+    // is more for a reporter to eventually find.
+    consequence: { heats: { scandal: 5 } },
     resultText: "Eleven million in a hotel ballroom. Your party chair stops returning other people's calls.",
   },
   {
     id: "reshuffle",
     station: "staff",
     label: "Reshuffle the cabinet",
-    detail: "Move the dead weight. It buys a headline and costs you loyalty.",
+    detail: "Move the dead weight. It buys a headline and costs you loyalty — and whoever you cut has a phone.",
     ap: 2,
     capitalCost: 10,
     cooldown: 12,
@@ -153,6 +172,19 @@ export const ACTIONS: OfficeAction[] = [
       "politics.party": -4,
       "personal.stress": 6,
     },
+    // Most people who get pushed out take the severance and stay quiet.
+    // Not all of them, and you don't get to pick which kind this one is
+    // until it's already happened.
+    risk: 0.22,
+    onFail: {
+      "politics.capital": 2,
+      "politics.media": -6,
+      "politics.approval": -3,
+      "politics.party": -6,
+      "politics.scandal": 8,
+    },
+    failText:
+      "Three new faces, and the fourth one gives an interview about what it was really like. It runs for a week.",
     resultText: "Three new faces, one genuinely good one. The reset lasts about six weeks.",
   },
 
@@ -174,6 +206,10 @@ export const ACTIONS: OfficeAction[] = [
       "personal.health": -2,
       "personal.family": -5,
     },
+    // Real face time with an ally is exactly what talks a drifting
+    // relationship back — if there's one running to talk back. Nothing
+    // to ease and this is a no-op, the same as it is for any other thread.
+    consequence: { eases: { id: "alliance-drift", by: 18 } },
     resultText: "A joint statement with real commitments in it, and a photograph you will use for two years.",
   },
   {
@@ -191,6 +227,9 @@ export const ACTIONS: OfficeAction[] = [
       "politics.party": -4,
       "nation.unrest": 2,
     },
+    // Good for the relationship it's actually with; the factory towns it
+    // costs are exactly where labour's anger comes from.
+    consequence: { eases: { id: "alliance-drift", by: 10 }, heats: { labour: 8 } },
     resultText: "Tariffs fall in eleven categories. Two states will hold this against you forever.",
   },
   {
@@ -227,7 +266,7 @@ export const ACTIONS: OfficeAction[] = [
     id: "rally",
     station: "press",
     label: "Hold a rally",
-    detail: "An arena, your people, and no follow-up questions.",
+    detail: "An arena, your people, and no follow-up questions. The people it doesn't feed notice too.",
     ap: 1,
     cooldown: 2,
     effects: {
@@ -238,6 +277,9 @@ export const ACTIONS: OfficeAction[] = [
       "personal.family": -3,
       "politics.media": -2,
     },
+    // A crowd that size, that fed, leaves a temperature behind it — not
+    // every time, but enough that it's worth knowing this is what feeds it.
+    consequence: { heats: { politics: 6 } },
     resultText: "Eighteen thousand people and a clip that runs for two days. Your base is fed.",
   },
   {

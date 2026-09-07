@@ -356,6 +356,15 @@ export interface OfficeAction {
   target?: string;
   /** Bond added to the target on top of the effects. */
   attention?: number;
+  /** Chance this backfires, 0-1 — same meaning as on a crisis `Choice`. */
+  risk?: number;
+  /** Applied instead of `effects` when the risk lands. */
+  onFail?: Effects;
+  failText?: string;
+  /** What taking this sets in motion — a thread, an unlock, heat in a domain. */
+  consequence?: Consequence;
+  /** Applied instead when the risk lands, if the failure changes the fallout. */
+  failConsequence?: Consequence;
 }
 
 export type StationId =

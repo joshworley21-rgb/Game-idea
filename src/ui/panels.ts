@@ -315,6 +315,11 @@ export function stationPanel(
                 : []),
               ...describeEffects(action.effects),
             ]),
+            action.risk
+              ? el("div", { class: "risk-note" }, [
+                  `Roughly a ${Math.round(action.risk * 100)}% chance this goes wrong.`,
+                ])
+              : null,
             cooldown > 0
               ? el("div", { class: "reason" }, [`Not again for ${cooldown} month${cooldown > 1 ? "s" : ""}.`])
               : shortAp
