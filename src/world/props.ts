@@ -65,6 +65,9 @@ export const PROPS_BY_ROOM: Partial<Record<RoomId, PropPlacement[]>> = {
     { model: "vintage_grandfather_clock_01", position: [-4.62, 0, 3.3], rotation: Math.PI, scale: 0.88 },
     { model: "potted_plant_01", position: [4.55, 0, 3.25], rotation: -0.45, scale: 1.05 },
     { model: "Chandelier_01", position: [0, 0, 0], ceilingAt: 3.72, scale: 0.92, noShadow: true },
+    // A reference shelf against the east wall, clear of the door and the
+    // portrait opposite it — the room some department always leaves binders in.
+    { model: "Shelf_01", position: [5.15, 0, -3.0], rotation: -Math.PI / 2, scale: 0.85 },
     // Portrait over the console, clear of the door on each side wall.
     { model: "fancy_picture_frame_01", position: [0, 2.3, 3.75], rotation: Math.PI, scale: 1.6, noShadow: true },
     { model: "fancy_picture_frame_01", position: [5.3, 2.1, -1.0], rotation: -Math.PI / 2, scale: 1.3, noShadow: true },
@@ -90,6 +93,9 @@ export const PROPS_BY_ROOM: Partial<Record<RoomId, PropPlacement[]>> = {
     { model: "potted_plant_01", position: [4.15, 0, -3.35], rotation: -0.65, scale: 1.08 },
     { model: "fancy_picture_frame_01", position: [4.66, 2.15, 1.6], rotation: -Math.PI / 2, scale: 1.35, noShadow: true },
     { model: "Chandelier_01", position: [0.2, 0, 0.2], ceilingAt: 3.42, scale: 0.82, noShadow: true },
+    // A display shelf against the west wall, clear of the sofa and the
+    // dining table, for the mementoes that do not fit on the mantel.
+    { model: "Shelf_01", position: [-4.7, 0, 1.0], rotation: Math.PI / 2, scale: 0.85 },
   ],
   study: [
     { model: "vintage_grandfather_clock_01", position: [1.95, 0, -2.18], rotation: Math.PI, scale: 0.78 },

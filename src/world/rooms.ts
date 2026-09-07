@@ -2,12 +2,18 @@ import * as THREE from "three";
 import { PALETTE, marbleMat, metal, place, standard, weaveMat, woodMat } from "./materials.ts";
 import {
   boardTable,
+  bookStack,
   chair,
   daylightFor,
   doorway,
+  fruitBowl,
+  mug,
+  newspaper,
+  openBook,
   rectClamp,
   rectShell,
   sconces,
+  tumbler,
   window_,
 } from "./roomkit.ts";
 import type { CastSlot, Door, Footprint, RoomBuild, StationAnchor } from "./roomkit.ts";
@@ -479,6 +485,11 @@ export function buildResidence(): RoomBuild {
   for (const [lx, lz] of [[-0.5, -0.28], [0.5, -0.28], [-0.5, 0.28], [0.5, 0.28]]) {
     place(group, new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.5 }), 0.1 + lx, 0.21, 1.5 + lz);
   }
+  // A table somebody actually uses: a mug going cold, a book left open, the
+  // evening paper folded over the arm.
+  mug(group, -0.28, 0.45, 1.32, 0xd8c9a8);
+  bookStack(group, 0.42, 0.45, 1.62, 0.3);
+  newspaper(group, 0.15, 0.45, 1.68, -0.4);
 
   // The dinner table, which is the one that matters upstairs.
   const dining = new THREE.Group();
@@ -489,6 +500,8 @@ export function buildResidence(): RoomBuild {
   for (const [lx, lz] of [[-0.85, -0.42], [0.85, -0.42], [-0.85, 0.42], [0.85, 0.42]]) {
     place(dining, new THREE.CylinderGeometry(0.045, 0.04, 0.76, 8), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.5 }), lx, 0.38, lz);
   }
+  // A centrepiece, so the family table is set rather than bare.
+  fruitBowl(dining, 0, 0.795, 0);
   colliders.push({ minX: -3.7, maxX: -1.5, minZ: -2.55, maxZ: -1.25 });
   const seats: [number, number, number][] = [
     [-3.35, -1.9, Math.PI / 2],
@@ -621,6 +634,16 @@ export function buildStudy(): RoomBuild {
   group.add(lamp);
   place(group, new THREE.CylinderGeometry(0.16, 0.2, 0.28, 14), standard(0xf0e2c4, 0.9), 1.9, 1.5, 1.9);
   place(group, new THREE.CylinderGeometry(0.02, 0.02, 1.3, 8), metal(PALETTE.brass, 0.35), 1.9, 0.75, 1.9);
+
+  // A small table at the lamp's elbow, with the evening's reading on it.
+  const side = new THREE.Group();
+  side.position.set(2.1, 0, 1.55);
+  group.add(side);
+  place(side, new THREE.CylinderGeometry(0.17, 0.17, 0.03, 20), woodMat(PALETTE.walnut, { repeat: 1, planks: 1, roughness: 0.42 }), 0, 0.44, 0).castShadow = true;
+  place(side, new THREE.CylinderGeometry(0.02, 0.02, 0.42, 8), woodMat(PALETTE.walnut, { repeat: 1, planks: 1 }), 0, 0.22, 0);
+  tumbler(side, 0.05, 0.455, -0.05);
+  openBook(side, -0.02, 0.455, 0.06, 0.4);
+  colliders.push({ minX: 1.93, maxX: 2.27, minZ: 1.38, maxZ: 1.72 });
 
   const hearth = new THREE.Group();
   hearth.position.set(0, 0, D / 2 - 0.3);

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { suitingMat, weaveMat } from "./materials.ts";
 
 /**
  * People, built in code.
@@ -709,22 +710,25 @@ export function buildCharacter(spec: CharacterSpec): Character {
   const scale = look.height / 1.75;
   const build = look.build;
   // The painted face carries its own shading, so the flat skin on the neck and
-  // hands is toned down to sit with it rather than glowing beside it.
-  const skinMat = new THREE.MeshStandardMaterial({
+  // hands is toned down to sit with it rather than glowing beside it. A thin
+  // clearcoat is what stops skin reading as matte plastic: real skin has a
+  // faint oily sheen that catches a highlight a pure-diffuse material cannot.
+  const skinMat = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(look.skin).multiplyScalar(0.9),
     roughness: 0.62,
     metalness: 0.01,
+    clearcoat: 0.18,
+    clearcoatRoughness: 0.4,
   });
   const dress = spec.dress ?? "suit";
-  const suitMat = new THREE.MeshStandardMaterial({
-    color: look.suit,
-    roughness: dress === "robe" ? 0.92 : 0.78,
-    metalness: 0.01,
-  });
-  const shirtMat = new THREE.MeshStandardMaterial({
-    color: dress === "casual" ? look.accent : 0xf2efe6,
-    roughness: 0.8,
-  });
+  // Wool suiting and woven shirt cloth, not flat colour: the same procedural
+  // fabric the furniture already uses, cached by colour so a chamber full of
+  // the same five suit tones costs one texture, not fifty.
+  const suitMat = suitingMat(look.suit, 5);
+  suitMat.roughness = dress === "robe" ? 0.92 : 0.78;
+  const shirtMat = weaveMat(dress === "casual" ? look.accent : 0xf2efe6, 9);
+  shirtMat.roughness = 0.8;
+  shirtMat.normalScale.set(0.25, 0.25); // a shirt's weave is finer than a sofa's
   const accentMat = new THREE.MeshStandardMaterial({ color: look.accent, roughness: 0.6 });
   const shoeMat = new THREE.MeshStandardMaterial({ color: 0x241d18, roughness: 0.45, metalness: 0.08 });
 

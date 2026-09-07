@@ -315,6 +315,141 @@ export function sconces(root: THREE.Group, points: [number, number][], y = 2.1):
   }
 }
 
+/**
+ * Small clutter that makes a surface look used rather than staged: a mug, a
+ * stack of books, a bowl of fruit. Cheap primitives, placed by the hand-built
+ * rooms wherever a table would otherwise sit bare.
+ */
+
+/** A mug with a handle, the way one gets left on a table. */
+export function mug(root: THREE.Group, x: number, y: number, z: number, colour = 0xf2efe6): void {
+  const mat = standard(colour, 0.4, 0.05);
+  place(root, new THREE.CylinderGeometry(0.032, 0.028, 0.075, 16), mat, x, y + 0.0375, z);
+  const inner = place(
+    root,
+    new THREE.CylinderGeometry(0.026, 0.026, 0.01, 16),
+    standard(0x2b241c, 0.5),
+    x,
+    y + 0.072,
+    z,
+  );
+  inner.castShadow = false;
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 8, 14, Math.PI * 1.4), mat);
+  handle.position.set(x + 0.03, y + 0.04, z);
+  handle.rotation.y = Math.PI / 2;
+  handle.rotation.z = -0.2;
+  root.add(handle);
+}
+
+/** A short tumbler, for the study rather than the nursery. */
+export function tumbler(root: THREE.Group, x: number, y: number, z: number): void {
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: 0xcfead0,
+    roughness: 0.05,
+    transmission: 0.85,
+    thickness: 0.05,
+    transparent: true,
+    opacity: 0.5,
+  });
+  place(root, new THREE.CylinderGeometry(0.026, 0.024, 0.06, 16), glass, x, y + 0.03, z).castShadow = false;
+  place(
+    root,
+    new THREE.CylinderGeometry(0.024, 0.024, 0.022, 16),
+    standard(0x8a5a2c, 0.15, 0.02),
+    x,
+    y + 0.02,
+    z,
+  ).castShadow = false;
+}
+
+/** A handful of books, splayed rather than squared off. */
+export function bookStack(
+  root: THREE.Group,
+  x: number,
+  y: number,
+  z: number,
+  ry: number,
+  colours: number[] = [0x6b2f2f, 0x2f4a6b, 0x3f5c3a],
+): void {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.y = ry;
+  root.add(g);
+  let h = 0;
+  colours.forEach((colour, i) => {
+    const w = 0.19 - i * 0.008;
+    const d = 0.26 - i * 0.01;
+    const th = 0.032;
+    const book = place(g, new THREE.BoxGeometry(w, th, d), standard(colour, 0.75), 0, h + th / 2, 0);
+    book.rotation.y = (i - (colours.length - 1) / 2) * 0.09;
+    book.castShadow = true;
+    h += th;
+  });
+}
+
+/** An open book, lying face-up as though someone just set it down. */
+export function openBook(root: THREE.Group, x: number, y: number, z: number, ry: number): void {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.y = ry;
+  root.add(g);
+  const pages = standard(0xf1ead9, 0.85);
+  for (const side of [-1, 1]) {
+    const page = place(g, new THREE.BoxGeometry(0.13, 0.012, 0.17), pages, side * 0.068, 0.006, 0);
+    page.rotation.y = side * 0.06;
+    page.rotation.z = side * -0.03;
+    page.castShadow = false;
+  }
+  place(g, new THREE.BoxGeometry(0.012, 0.016, 0.175), standard(0x5c3a2c, 0.7), 0, 0.008, 0).castShadow = false;
+}
+
+/** A shallow bowl with a few pieces of fruit, for a table that needs life. */
+export function fruitBowl(root: THREE.Group, x: number, y: number, z: number): void {
+  const bowlProfile = [
+    [0, 0.09],
+    [0.05, 0.1],
+    [0.09, 0.075],
+    [0.1, 0.04],
+    [0.095, 0],
+  ].map(([py, r]) => new THREE.Vector2(r, py));
+  const bowl = place(
+    root,
+    new THREE.LatheGeometry(bowlProfile, 24),
+    standard(PALETTE.marble, 0.35, 0.03),
+    x,
+    y,
+    z,
+  );
+  bowl.castShadow = true;
+  const fruitColours = [0xb3382c, 0xd9a72c, 0x7fa04a];
+  const rnd = ((seed: number) => () => (seed = (seed * 9301 + 49297) % 233280) / 233280)(x * 977 + z * 131);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const r = 0.045 + rnd() * 0.02;
+    const fx = x + Math.cos(a) * r;
+    const fz = z + Math.sin(a) * r;
+    const fruit = place(
+      root,
+      new THREE.SphereGeometry(0.026 + rnd() * 0.006, 12, 10),
+      standard(fruitColours[i % fruitColours.length], 0.5),
+      fx,
+      y + 0.05 + rnd() * 0.015,
+      fz,
+    );
+    fruit.castShadow = true;
+  }
+}
+
+/** A folded newspaper, dropped rather than squared to the edge of the table. */
+export function newspaper(root: THREE.Group, x: number, y: number, z: number, ry: number): void {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.set(0, ry, 0.02);
+  root.add(g);
+  place(g, new THREE.BoxGeometry(0.22, 0.008, 0.3), standard(0xece6d6, 0.92), 0, 0.004, 0).castShadow = false;
+  place(g, new THREE.BoxGeometry(0.2, 0.006, 0.05), standard(0x2a2622, 0.8), 0, 0.011, -0.1).castShadow = false;
+}
+
 /** Keeps a position inside a rectangular room, with clearance from the walls. */
 export function rectClamp(w: number, d: number, margin = 0.5) {
   return (p: THREE.Vector3): void => {
