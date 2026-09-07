@@ -378,6 +378,11 @@ sideloading but is not for distribution. For a release build, generate your own
 keystore and add a `signingConfig` — no keystore or password belongs in this
 repository.
 
+**Getting a build.** The current APK is committed at
+[`releases/oval-president-debug.apk`](releases/oval-president-debug.apk) —
+download it from GitHub, allow installs when Android asks, and open it. It is
+debug-signed, so it is for sideloading rather than the Play Store.
+
 ## Project layout
 
 ```
