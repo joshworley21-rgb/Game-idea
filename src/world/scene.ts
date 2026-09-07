@@ -3,6 +3,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { buildOffice } from "./office.ts";
@@ -84,6 +85,7 @@ export class World {
   /** Ambient occlusion and anti-aliasing, on hardware that can afford them. */
   private composer: EffectComposer | null = null;
   private gtao: GTAOPass | null = null;
+  private bloom: UnrealBloomPass | null = null;
   /** A rolling frame-time sample, used to drop the extra passes if needed. */
   private frameCost = 0;
   private frameSamples = 0;
@@ -176,6 +178,14 @@ export class World {
     gtao.blendIntensity = 0.85;
     composer.addPass(gtao);
     this.gtao = gtao;
+
+    // A light bloom, so the windows, the fire and the chandeliers actually
+    // glow instead of just being a bright flat patch. Threshold is high and
+    // strength is low: this should only catch real highlights, not wash out
+    // the room.
+    const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.4, 0.86);
+    composer.addPass(bloom);
+    this.bloom = bloom;
 
     composer.addPass(new OutputPass());
     composer.addPass(new SMAAPass(w, h));
@@ -433,6 +443,7 @@ export class World {
     this.renderer.setSize(w, h, false);
     this.composer?.setSize(w, h);
     this.gtao?.setSize(w * AO_SCALE, h * AO_SCALE);
+    this.bloom?.setSize(w, h);
     this.camera.aspect = w / h;
     // three's fov is vertical, so a portrait phone would crush the horizontal
     // view to a slot. Hold the horizontal field steady and derive the vertical.
@@ -499,6 +510,7 @@ export class World {
     this.composer?.dispose();
     this.composer = null;
     this.gtao = null;
+    this.bloom = null;
   }
 
   stop(): void {

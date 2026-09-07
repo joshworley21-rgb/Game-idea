@@ -107,17 +107,9 @@ export function buildCabinetRoom(lowPower: boolean): RoomBuild {
     }
   }
 
-  // A sideboard and a clock, for the far wall.
-  const sideboard = place(
-    group,
-    new THREE.BoxGeometry(2.2, 0.9, 0.5),
-    woodMat(PALETTE.mahogany, { repeat: 2, planks: 3 }),
-    0,
-    0.45,
-    D / 2 - 0.35,
-  );
-  sideboard.castShadow = true;
-  colliders.push({ minX: -1.1, maxX: 1.1, minZ: D / 2 - 0.6, maxZ: D / 2 - 0.1 });
+  // The far wall's sideboard is a loaded model (see props.ts), so nothing is
+  // hand-built here any more — a placeholder box under it was doubling the
+  // furniture up.
 
   sconces(group, [
     [-W / 2 + 0.2, -2.4],
