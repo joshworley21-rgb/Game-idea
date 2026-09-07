@@ -263,11 +263,53 @@ and style, facial hair, glasses, brow weight, nose length, jaw width. Hair greys
 with age rather than being randomly grey, and past fifty the face picks up crow's
 feet and nasolabial folds.
 
+**The face gets most of the texture.** A sphere's UVs spend the bulk of their
+area on the back of the head, which nobody looks at, and squeeze the face into
+about a tenth of the width. Both UV axes are warped toward the face, which
+leaves the seam at the back of the skull under the hair and gives roughly four
+times the texel density where the features are. That is what buys the lash
+line, the individual brow hairs, the vermillion border on the lips and the
+stubble — none of which survive at the density a plain sphere gives you.
+
+**The eye is geometry, not paint.** A painted eye drifts away from a
+protruding eyeball the moment the head turns, so the ball, the limbal ring, the
+glossy cornea, both lids and the lash line are all meshes. The lash rides the
+upper lid's leading edge, so it cannot come apart from the eye it belongs to,
+and blinking rotates the lid down rather than scaling anything.
+
 **Crowds are instanced.** A hundred members of Congress as full characters would
 cost hundreds of draw calls, so anonymous people are drawn as three instanced
 meshes per group — body, head, hair — with a matrix and a colour each. The
 chamber's 114 members cost 15 draw calls and 8ms to build; one full character
 costs 7ms. Nobody in a crowd is a clone: build, skin and hair vary per instance.
+
+## Surfaces and light
+
+Every material used to be a flat colour, which is what made the rooms read as
+cardboard however good the lighting was. `src/world/textures.ts` generates them
+instead: oak with growth rings distorted by low-frequency noise and a seam
+between the boards, carpet with tufts, cloth with an over-under weave, plaster
+with a float, marble with veins, wool suiting with a twill. Each one produces a
+colour map **and a normal map derived from the same height field**, which is the
+part that actually makes a surface catch light — a colour map alone is a
+photograph glued to a plane. Nothing is downloaded; it is a few hundred lines of
+canvas work, cached by key.
+
+One trap worth naming: three multiplies `roughnessMap` into `roughness`. A map
+centred on 0.4 with a material roughness of 0.4 gives you 0.16, and every
+wooden surface in the building turns into a mirror. The maps here sit near 1
+and only vary.
+
+**Ambient occlusion** does more for the picture than another thousand polygons
+would — the darkening where a chair leg meets the floor is what stops furniture
+hovering. It runs as a half-resolution GTAO pass with SMAA on top, and it is
+low-frequency enough that the missing pixels cost nothing.
+
+It is also the first thing to go on hardware that cannot afford it. Phones and
+tablets never build the chain, and on anything else the renderer times its own
+frames: one frame over 120ms, or a 24-frame average over 22ms, and the passes
+are dropped for good. A beautiful eight frames a second is worse than a plain
+thirty. `?plain` in the URL turns them off by hand.
 
 ## The 3D assets
 

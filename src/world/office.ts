@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PALETTE, metal, place, standard } from "./materials.ts";
+import { PALETTE, carpetMat, metal, place, plasterMat, standard, weaveMat, woodMat } from "./materials.ts";
 import type { Door, RoomBuild, RoomId, StationAnchor } from "./roomkit.ts";
 import type { StationId } from "../game/types.ts";
 
@@ -21,7 +21,7 @@ function ellipseShape(rx: number, rz: number): THREE.Shape {
 function buildShell(root: THREE.Group): void {
   // Floor: parquet-toned ellipse.
   const floorGeo = new THREE.ShapeGeometry(ellipseShape(ROOM.rx, ROOM.rz), 96);
-  const floor = new THREE.Mesh(floorGeo, standard(PALETTE.floor, 0.62));
+  const floor = new THREE.Mesh(floorGeo, woodMat(PALETTE.floor, { repeat: 4, planks: 7 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   root.add(floor);
@@ -36,18 +36,14 @@ function buildShell(root: THREE.Group): void {
     bevelEnabled: false,
     curveSegments: 96,
   });
-  const walls = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({
-    color: PALETTE.wall,
-    roughness: 0.95,
-    side: THREE.DoubleSide,
-  }));
+  const walls = new THREE.Mesh(wallGeo, plasterMat(PALETTE.wall, 3));
   walls.rotation.x = -Math.PI / 2;
   walls.receiveShadow = true;
   root.add(walls);
 
   // Ceiling with a shallow cove.
   const ceilGeo = new THREE.ShapeGeometry(ellipseShape(ROOM.rx + 0.02, ROOM.rz + 0.02), 96);
-  const ceiling = new THREE.Mesh(ceilGeo, standard(PALETTE.ceiling, 1));
+  const ceiling = new THREE.Mesh(ceilGeo, plasterMat(PALETTE.ceiling, 3));
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.y = ROOM.height;
   root.add(ceiling);
@@ -81,10 +77,7 @@ function buildShell(root: THREE.Group): void {
 }
 
 function buildRug(root: THREE.Group): void {
-  const rug = new THREE.Mesh(
-    new THREE.CircleGeometry(3.05, 72),
-    standard(PALETTE.rug, 0.98),
-  );
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(3.05, 72), carpetMat(PALETTE.rug, 7));
   rug.rotation.x = -Math.PI / 2;
   rug.position.set(0, 0.012, 0.35);
   rug.scale.set(1.28, 1, 1);
@@ -152,14 +145,14 @@ function buildWindows(root: THREE.Group, sunGroup: THREE.Group): void {
     for (const sx of [-0.79, 0.79]) {
       place(g, new THREE.BoxGeometry(0.13, 2.9, 0.16), wood, sx, 1.8, 0.1);
     }
-    // Drapes.
-    const drape = standard(PALETTE.drape, 0.95);
-    for (const dx of [-0.92, 0.92]) {
-      const curtain = place(g, new THREE.CylinderGeometry(0.09, 0.15, 3.0, 12, 1, true), drape, dx, 1.7, 0.14);
-      curtain.material = drape;
-      (curtain.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    // Drapes: gathered at the reveals rather than columns across the glass.
+    const drape = weaveMat(PALETTE.drape, 2.5);
+    drape.side = THREE.DoubleSide;
+    for (const dx of [-0.9, 0.9]) {
+      const curtain = place(g, new THREE.CylinderGeometry(0.055, 0.11, 2.9, 10, 1, true), drape, dx, 1.75, 0.13);
+      curtain.castShadow = true;
     }
-    place(g, new THREE.BoxGeometry(2.05, 0.2, 0.16), drape, 0, 3.34, 0.13);
+    place(g, new THREE.BoxGeometry(2.0, 0.16, 0.14), drape, 0, 3.3, 0.12);
 
     // Light spilling in through this window.
     const spill = new THREE.PointLight(0xf3f0e2, 4.5, 9, 2);
@@ -194,8 +187,9 @@ function buildDoors(root: THREE.Group): void {
 function buildDesk(root: THREE.Group): THREE.Vector3 {
   const g = new THREE.Group();
   g.position.set(0, 0, -2.75);
-  const wood = standard(PALETTE.mahogany, 0.55);
-  const dark = standard(PALETTE.walnut, 0.5);
+  // The desk is the thing you stand closest to, so it gets the finest grain.
+  const wood = woodMat(PALETTE.mahogany, { repeat: 3, planks: 4, roughness: 0.34 });
+  const dark = woodMat(PALETTE.walnut, { repeat: 2, planks: 3, roughness: 0.4 });
 
   // Top and the carved front panel of the Resolute desk.
   place(g, new THREE.BoxGeometry(2.35, 0.09, 1.15), wood, 0, 0.76, 0);
@@ -283,8 +277,8 @@ function buildFireplace(root: THREE.Group): THREE.Object3D {
  * belongs in, and the wall now has doors to those rooms instead.
  */
 function buildStationFurniture(root: THREE.Group): StationAnchor[] {
-  const wood = standard(PALETTE.mahogany, 0.55);
-  const dark = standard(PALETTE.walnut, 0.6);
+  const wood = woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.42 });
+  const dark = woodMat(PALETTE.walnut, { repeat: 1, planks: 2 });
 
   // The credenza with the secure telephone, on the east side.
   const cred = new THREE.Group();

@@ -130,6 +130,8 @@ class Game {
     this.onState(engine.state);
     this.world.start();
     currentGame = this;
+    // A read-only handle, so a test can see what the renderer settled on.
+    (window as unknown as { __oval?: unknown }).__oval = this.world;
     void this.furnish();
     // Any crises already waiting from a loaded save.
     for (const crisis of engine.pendingCrises) {

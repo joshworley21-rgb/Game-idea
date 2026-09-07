@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PALETTE, metal, place, standard } from "./materials.ts";
+import { PALETTE, marbleMat, metal, place, standard, weaveMat, woodMat } from "./materials.ts";
 import {
   boardTable,
   chair,
@@ -111,7 +111,7 @@ export function buildCabinetRoom(lowPower: boolean): RoomBuild {
   const sideboard = place(
     group,
     new THREE.BoxGeometry(2.2, 0.9, 0.5),
-    standard(PALETTE.mahogany, 0.5),
+    woodMat(PALETTE.mahogany, { repeat: 2, planks: 3 }),
     0,
     0.45,
     D / 2 - 0.35,
@@ -171,7 +171,7 @@ export function buildCapitol(lowPower: boolean): RoomBuild {
     const step = place(
       rostrum,
       new THREE.BoxGeometry(5.2 - tier * 1.1, 0.34, 1.2 - tier * 0.24),
-      standard(PALETTE.mahogany, 0.45),
+      woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.42 }),
       0,
       0.17 + tier * 0.34,
       -tier * 0.62,
@@ -179,11 +179,11 @@ export function buildCapitol(lowPower: boolean): RoomBuild {
     step.castShadow = true;
     step.receiveShadow = true;
   }
-  const dais = place(rostrum, new THREE.BoxGeometry(1.9, 0.95, 0.45), standard(PALETTE.walnut, 0.4), 0, 1.5, 0.28);
+  const dais = place(rostrum, new THREE.BoxGeometry(1.9, 0.95, 0.45), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.4 }), 0, 1.5, 0.28);
   dais.castShadow = true;
-  place(rostrum, new THREE.BoxGeometry(2.1, 0.07, 0.55), standard(PALETTE.mahogany, 0.3), 0, 1.99, 0.28);
+  place(rostrum, new THREE.BoxGeometry(2.1, 0.07, 0.55), woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.3 }), 0, 1.99, 0.28);
   // The clerks' desk below, and the flag and seal above.
-  place(rostrum, new THREE.BoxGeometry(3.4, 0.75, 0.5), standard(PALETTE.walnut, 0.45), 0, 1.05, 1.15);
+  place(rostrum, new THREE.BoxGeometry(3.4, 0.75, 0.5), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.45 }), 0, 1.05, 1.15);
   place(rostrum, new THREE.BoxGeometry(4.6, 3.0, 0.1), standard(0x1d2f52, 0.9), 0, 4.4, -1.5);
   const seal = place(rostrum, new THREE.CylinderGeometry(0.62, 0.62, 0.07, 40), metal(PALETTE.brass, 0.3), 0, 4.5, -1.4);
   seal.rotation.x = Math.PI / 2;
@@ -191,8 +191,10 @@ export function buildCapitol(lowPower: boolean): RoomBuild {
   // Tiered benches in an arc facing the rostrum, in five faction blocks.
   const cast: CastSlot[] = [];
   const colliders: Footprint[] = [];
-  const benchMat = standard(0x4a3527, 0.6);
-  const riserMat = standard(0x6b4a33, 0.8);
+  // The benches are swept cylinders and rings, whose UVs stretch badly around
+  // the arc, so they take a plain material rather than a tiled grain.
+  const benchMat = standard(0x4a3527, 0.62);
+  const riserMat = standard(0x6b4a33, 0.78);
   const rows = 6;
   const span = Math.PI * 0.86;
 
@@ -227,7 +229,7 @@ export function buildCapitol(lowPower: boolean): RoomBuild {
     group.add(desk);
     const ledge = new THREE.Mesh(
       new THREE.RingGeometry(radius - 0.78, radius - 0.6, 72, 1, -span / 2 - Math.PI / 2, span),
-      standard(PALETTE.walnut, 0.45),
+      woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.45 }),
     );
     ledge.rotation.x = -Math.PI / 2;
     ledge.position.set(0, y + 0.74, HUB);
@@ -361,7 +363,7 @@ export function buildPressRoom(lowPower: boolean): RoomBuild {
   const podium = new THREE.Group();
   podium.position.set(0, 0, -4.1);
   group.add(podium);
-  const body = place(podium, new THREE.BoxGeometry(0.72, 1.15, 0.5), standard(PALETTE.mahogany, 0.4), 0, 0.575, 0);
+  const body = place(podium, new THREE.BoxGeometry(0.72, 1.15, 0.5), woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.38 }), 0, 0.575, 0);
   body.castShadow = true;
   const top = place(podium, new THREE.BoxGeometry(0.82, 0.06, 0.56), standard(PALETTE.walnut, 0.35), 0, 1.18, 0);
   top.rotation.x = -0.14;
@@ -453,7 +455,7 @@ export function buildResidence(lowPower: boolean): RoomBuild {
   doorway(group, W / 2 - 0.07, -1.8, -Math.PI / 2);
 
   const colliders: Footprint[] = [];
-  const warm = standard(0xa8865c, 0.85);
+  const warm = weaveMat(0xa8865c, 3);
 
   // A sofa and two armchairs round a low table, facing the fire.
   const sofa = new THREE.Group();
@@ -475,25 +477,25 @@ export function buildResidence(lowPower: boolean): RoomBuild {
     ac.position.set(ax, 0, az);
     ac.rotation.y = ry;
     group.add(ac);
-    place(ac, new THREE.BoxGeometry(0.9, 0.4, 0.85), standard(0x8c6a4a, 0.85), 0, 0.34, 0).castShadow = true;
-    place(ac, new THREE.BoxGeometry(0.9, 0.66, 0.2), standard(0x8c6a4a, 0.85), 0, 0.76, -0.33).castShadow = true;
+    place(ac, new THREE.BoxGeometry(0.9, 0.4, 0.85), weaveMat(0x8c6a4a, 2.5), 0, 0.34, 0).castShadow = true;
+    place(ac, new THREE.BoxGeometry(0.9, 0.66, 0.2), weaveMat(0x8c6a4a, 2.5), 0, 0.76, -0.33).castShadow = true;
     colliders.push({ minX: ax - 0.5, maxX: ax + 0.5, minZ: az - 0.5, maxZ: az + 0.5 });
   }
 
-  const low = place(group, new THREE.BoxGeometry(1.2, 0.06, 0.7), standard(PALETTE.mahogany, 0.4), 0.1, 0.42, 1.5);
+  const low = place(group, new THREE.BoxGeometry(1.2, 0.06, 0.7), woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.38 }), 0.1, 0.42, 1.5);
   low.castShadow = true;
   for (const [lx, lz] of [[-0.5, -0.28], [0.5, -0.28], [-0.5, 0.28], [0.5, 0.28]]) {
-    place(group, new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8), standard(PALETTE.walnut, 0.5), 0.1 + lx, 0.21, 1.5 + lz);
+    place(group, new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.5 }), 0.1 + lx, 0.21, 1.5 + lz);
   }
 
   // The dinner table, which is the one that matters upstairs.
   const dining = new THREE.Group();
   dining.position.set(-2.6, 0, -1.9);
   group.add(dining);
-  const dtop = place(dining, new THREE.BoxGeometry(2.0, 0.07, 1.1), standard(PALETTE.mahogany, 0.35), 0, 0.76, 0);
+  const dtop = place(dining, new THREE.BoxGeometry(2.0, 0.07, 1.1), woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.34 }), 0, 0.76, 0);
   dtop.castShadow = true;
   for (const [lx, lz] of [[-0.85, -0.42], [0.85, -0.42], [-0.85, 0.42], [0.85, 0.42]]) {
-    place(dining, new THREE.CylinderGeometry(0.045, 0.04, 0.76, 8), standard(PALETTE.walnut, 0.5), lx, 0.38, lz);
+    place(dining, new THREE.CylinderGeometry(0.045, 0.04, 0.76, 8), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.5 }), lx, 0.38, lz);
   }
   colliders.push({ minX: -3.7, maxX: -1.5, minZ: -2.55, maxZ: -1.25 });
   const seats: [number, number, number][] = [
@@ -509,7 +511,7 @@ export function buildResidence(lowPower: boolean): RoomBuild {
   hearth.position.set(W / 2 - 0.4, 0, 1.6);
   hearth.rotation.y = -Math.PI / 2;
   group.add(hearth);
-  place(hearth, new THREE.BoxGeometry(2.0, 1.3, 0.35), standard(PALETTE.marble, 0.6), 0, 0.65, 0);
+  place(hearth, new THREE.BoxGeometry(2.0, 1.3, 0.35), marbleMat(PALETTE.marble, 1.4), 0, 0.65, 0);
   place(hearth, new THREE.BoxGeometry(1.2, 0.85, 0.2), standard(0x1a1512, 0.95), 0, 0.45, 0.12);
   const fireLight = new THREE.PointLight(0xff9a45, 5, 7, 2);
   fireLight.position.set(0, 0.5, 0.35);
@@ -583,10 +585,10 @@ export function buildStudy(lowPower: boolean): RoomBuild {
   const colliders: Footprint[] = [];
 
   // A small desk in the window, and a reading chair by the lamp.
-  const desk = place(group, new THREE.BoxGeometry(1.5, 0.07, 0.75), standard(PALETTE.mahogany, 0.35), -1.1, 0.75, -1.6);
+  const desk = place(group, new THREE.BoxGeometry(1.5, 0.07, 0.75), woodMat(PALETTE.mahogany, { repeat: 2, planks: 3, roughness: 0.34 }), -1.1, 0.75, -1.6);
   desk.castShadow = true;
   for (const [lx, lz] of [[-0.62, -0.3], [0.62, -0.3], [-0.62, 0.3], [0.62, 0.3]]) {
-    place(group, new THREE.BoxGeometry(0.07, 0.75, 0.07), standard(PALETTE.walnut, 0.5), -1.1 + lx, 0.375, -1.6 + lz);
+    place(group, new THREE.BoxGeometry(0.07, 0.75, 0.07), woodMat(PALETTE.walnut, { repeat: 1, planks: 2, roughness: 0.5 }), -1.1 + lx, 0.375, -1.6 + lz);
   }
   colliders.push({ minX: -1.9, maxX: -0.3, minZ: -2.05, maxZ: -1.15 });
   chair(group, -1.1, -0.85, Math.PI, 0x3a2a1e, 0.45);
@@ -595,10 +597,10 @@ export function buildStudy(lowPower: boolean): RoomBuild {
   armchair.position.set(1.3, 0, 1.2);
   armchair.rotation.y = -2.3;
   group.add(armchair);
-  place(armchair, new THREE.BoxGeometry(0.95, 0.42, 0.9), standard(0x5c4331, 0.9), 0, 0.35, 0).castShadow = true;
-  place(armchair, new THREE.BoxGeometry(0.95, 0.75, 0.22), standard(0x5c4331, 0.9), 0, 0.8, -0.35).castShadow = true;
+  place(armchair, new THREE.BoxGeometry(0.95, 0.42, 0.9), weaveMat(0x5c4331, 2.5), 0, 0.35, 0).castShadow = true;
+  place(armchair, new THREE.BoxGeometry(0.95, 0.75, 0.22), weaveMat(0x5c4331, 2.5), 0, 0.8, -0.35).castShadow = true;
   for (const side of [-1, 1]) {
-    place(armchair, new THREE.BoxGeometry(0.2, 0.5, 0.9), standard(0x5c4331, 0.9), side * 0.38, 0.6, 0).castShadow = true;
+    place(armchair, new THREE.BoxGeometry(0.2, 0.5, 0.9), weaveMat(0x5c4331, 2.5), side * 0.38, 0.6, 0).castShadow = true;
   }
   colliders.push({ minX: 0.75, maxX: 1.85, minZ: 0.65, maxZ: 1.75 });
 
@@ -632,7 +634,7 @@ export function buildStudy(lowPower: boolean): RoomBuild {
   hearth.position.set(0, 0, D / 2 - 0.3);
   hearth.rotation.y = Math.PI;
   group.add(hearth);
-  place(hearth, new THREE.BoxGeometry(1.5, 1.1, 0.3), standard(PALETTE.marble, 0.6), 0, 0.55, 0);
+  place(hearth, new THREE.BoxGeometry(1.5, 1.1, 0.3), marbleMat(PALETTE.marble, 1.4), 0, 0.55, 0);
   place(hearth, new THREE.BoxGeometry(0.9, 0.7, 0.18), standard(0x1a1512, 0.95), 0, 0.38, 0.1);
   const fireLight = new THREE.PointLight(0xff8f3c, 4, 6, 2);
   fireLight.position.set(0, 0.45, 0.3);

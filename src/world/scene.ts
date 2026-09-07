@@ -1,5 +1,10 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { buildOffice } from "./office.ts";
 import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
@@ -34,6 +39,9 @@ export const STATION_ROOM: Record<StationId, RoomId> = {
   rest: "study",
 };
 
+/** Ambient occlusion renders at half resolution; it is low-frequency anyway. */
+const AO_SCALE = 0.5;
+
 /** The five factions, left to right across the chamber. */
 const FACTION_COLOURS = [0x5b7fb4, 0x6a8cbd, 0x87858c, 0xa8836d, 0xb26f68];
 
@@ -59,6 +67,12 @@ export class World {
   private lastPosition = new THREE.Vector3();
   private month = 1;
   private state: GameState | null = null;
+  /** Ambient occlusion and anti-aliasing, on hardware that can afford them. */
+  private composer: EffectComposer | null = null;
+  private gtao: GTAOPass | null = null;
+  /** A rolling frame-time sample, used to drop the extra passes if needed. */
+  private frameCost = 0;
+  private frameSamples = 0;
   readonly sound = new Sound();
   /** True on phones and tablets, where the GPU budget is much smaller. */
   readonly lowPower: boolean;
@@ -80,7 +94,7 @@ export class World {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = this.lowPower ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.05;
 
     this.scene.background = new THREE.Color(0x0b0d12);
     this.scene.fog = new THREE.Fog(0x1a1712, 18, 46);
@@ -96,7 +110,7 @@ export class World {
     // them that, and it costs one texture rather than a light rig.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
-    this.scene.environmentIntensity = 0.55;
+    this.scene.environmentIntensity = 0.62;
     pmrem.dispose();
 
     this.camera.add(this.listener);
@@ -111,8 +125,46 @@ export class World {
     };
 
     this.enterRoom("oval");
+    // `?plain` turns the extra passes off, for a machine that struggles or a
+    // player who would rather have the frames.
+    const plain = new URLSearchParams(location.search).has("plain");
+    if (!this.lowPower && !plain) this.buildComposer();
     this.resize();
     window.addEventListener("resize", this.resize);
+  }
+
+  /**
+   * Ambient occlusion is what stops furniture looking like it is hovering: the
+   * darkening where a chair leg meets the floor is doing more for the picture
+   * than another thousand polygons would. It costs two extra passes, so phones
+   * and tablets render straight to the canvas instead.
+   */
+  private buildComposer(): void {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const composer = new EffectComposer(this.renderer);
+    composer.addPass(new RenderPass(this.scene, this.camera));
+
+    // Half resolution: occlusion is low-frequency, and the denoise pass is
+    // what actually sells it, so the extra pixels buy nothing.
+    const gtao = new GTAOPass(this.scene, this.camera, w * AO_SCALE, h * AO_SCALE);
+    gtao.output = GTAOPass.OUTPUT.Default;
+    gtao.updateGtaoMaterial({
+      radius: 0.3,
+      distanceExponent: 1.4,
+      thickness: 0.6,
+      scale: 1.05,
+      samples: 8,
+      distanceFallOff: 1,
+      screenSpaceRadius: false,
+    });
+    gtao.blendIntensity = 0.85;
+    composer.addPass(gtao);
+    this.gtao = gtao;
+
+    composer.addPass(new OutputPass());
+    composer.addPass(new SMAAPass(w, h));
+    this.composer = composer;
   }
 
   // ------------------------------------------------------------------ rooms
@@ -351,6 +403,8 @@ export class World {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
+    this.gtao?.setSize(w * AO_SCALE, h * AO_SCALE);
     this.camera.aspect = w / h;
     // three's fov is vertical, so a portrait phone would crush the horizontal
     // view to a slot. Hold the horizontal field steady and derive the vertical.
@@ -374,9 +428,49 @@ export class World {
       if (nearest !== before) this.onNearestChange(nearest);
       this.doors.update(dt, this.camera.position);
       this.animator.update(dt, this.camera.position);
-      this.renderer.render(this.scene, this.camera);
+      if (this.composer) {
+        const t0 = performance.now();
+        this.composer.render();
+        this.measure(performance.now() - t0);
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
     };
     loop();
+  }
+
+  /**
+   * Watches what the extra passes actually cost on this machine. Software
+   * renderers and weak integrated GPUs cannot afford ambient occlusion, and a
+   * beautiful eight-frames-a-second is worse than a plain thirty, so if the
+   * first second of rendering is slow the composer is dropped for good.
+   */
+  private measure(ms: number): void {
+    if (!this.composer) return;
+    // Skip the first few frames: shader compilation lands in those.
+    this.frameSamples += 1;
+    if (this.frameSamples < 8) return;
+    // A single catastrophic frame is enough: a software renderer does not need
+    // twenty more samples to prove it cannot afford this.
+    if (ms > 120) {
+      this.dropComposer();
+      return;
+    }
+    if (this.frameSamples > 32) return;
+    this.frameCost += ms;
+    if (this.frameSamples === 32 && this.frameCost / 24 > 22) this.dropComposer();
+  }
+
+  /** Whether the extra passes are still running on this machine. */
+  get composerActive(): boolean {
+    return this.composer !== null;
+  }
+
+  /** Falls back to rendering straight to the canvas, for good. */
+  private dropComposer(): void {
+    this.composer?.dispose();
+    this.composer = null;
+    this.gtao = null;
   }
 
   stop(): void {

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PALETTE, place, standard } from "./materials.ts";
+import { PALETTE, carpetMat, place, plasterMat, standard, weaveMat, woodMat } from "./materials.ts";
 import type { StationId } from "../game/types.ts";
 import type { Pose } from "./character.ts";
 
@@ -78,7 +78,7 @@ export function rectShell(
   h: number,
   opts: { floor?: number; wall?: number; ceiling?: number; carpet?: number } = {},
 ): void {
-  const floorMat = standard(opts.floor ?? PALETTE.floor, 0.66);
+  const floorMat = woodMat(opts.floor ?? PALETTE.floor, { repeat: Math.max(2, Math.round(w / 3)), planks: 6 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -87,7 +87,7 @@ export function rectShell(
   if (opts.carpet !== undefined) {
     const rug = new THREE.Mesh(
       new THREE.PlaneGeometry(w - 1.2, d - 1.2),
-      standard(opts.carpet, 0.95),
+      carpetMat(opts.carpet, Math.max(4, Math.round(w))),
     );
     rug.rotation.x = -Math.PI / 2;
     rug.position.y = 0.012;
@@ -95,11 +95,7 @@ export function rectShell(
     root.add(rug);
   }
 
-  const wallMat = new THREE.MeshStandardMaterial({
-    color: opts.wall ?? PALETTE.wall,
-    roughness: 0.95,
-    side: THREE.DoubleSide,
-  });
+  const wallMat = plasterMat(opts.wall ?? PALETTE.wall, Math.max(2, Math.round(w / 4)));
   const walls: [number, number, number, number][] = [
     [0, -d / 2, w, 0],
     [0, d / 2, w, Math.PI],
@@ -114,7 +110,7 @@ export function rectShell(
     root.add(wall);
   }
 
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d), standard(opts.ceiling ?? PALETTE.ceiling, 1));
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w, d), plasterMat(opts.ceiling ?? PALETTE.ceiling, 3));
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.y = h;
   root.add(ceiling);
@@ -179,18 +175,31 @@ export function window_(
   rail.translateZ(0.06);
   root.add(rail);
 
-  // Narrow drapes at the reveals, hung from a pole above the frame.
+  // Drapes at the reveals, built as pleats rather than a solid slab: a box in
+  // curtain fabric reads as a gilded pillar, four half-round folds do not.
+  const drapeMat = weaveMat(0x8f6f2a, 2.4);
+  drapeMat.side = THREE.DoubleSide;
   for (const side of [-1, 1]) {
-    const drape = new THREE.Mesh(
-      new THREE.BoxGeometry(0.16, h + 0.14, 0.07),
-      standard(PALETTE.drape, 0.92),
-    );
-    drape.position.set(x, h / 2 + 0.74, z);
-    drape.rotation.y = ry;
-    drape.translateX(side * (w / 2 + 0.11));
-    drape.translateZ(0.07);
-    drape.castShadow = true;
-    root.add(drape);
+    const panel = new THREE.Group();
+    panel.position.set(x, 0, z);
+    panel.rotation.y = ry;
+    panel.translateX(side * (w / 2 + 0.1));
+    panel.translateZ(0.07);
+    root.add(panel);
+    for (let i = 0; i < 4; i++) {
+      const fold = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.036, 0.052, h + 0.12, 8, 1, true, 0, Math.PI * 1.35),
+        drapeMat,
+      );
+      fold.position.set((i - 1.5) * 0.055 * side, h / 2 + 0.74, 0);
+      fold.rotation.y = -Math.PI / 2 + (i % 2) * 0.3;
+      fold.castShadow = true;
+      panel.add(fold);
+    }
+    // A gathered head, where the folds meet the pole.
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.1), drapeMat);
+    head.position.set(-side * 0.02, h + 0.82, 0);
+    panel.add(head);
   }
 }
 
@@ -201,7 +210,7 @@ export function doorway(root: THREE.Group, x: number, z: number, ry: number, w =
   casing.rotation.y = ry;
   root.add(casing);
 
-  const leaf = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), standard(PALETTE.mahogany, 0.6));
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), woodMat(PALETTE.mahogany, { repeat: 1, planks: 2 }));
   leaf.position.set(x, h / 2, z);
   leaf.rotation.y = ry;
   leaf.translateZ(0.05);
@@ -243,18 +252,18 @@ export function chair(
   g.rotation.y = ry;
   root.add(g);
 
-  const seat = place(g, new THREE.BoxGeometry(0.46, 0.07, 0.44), standard(colour, 0.65), 0, height, 0);
+  const seat = place(g, new THREE.BoxGeometry(0.46, 0.07, 0.44), weaveMat(colour, 2), 0, height, 0);
   seat.castShadow = true;
   const back = place(
     g,
     new THREE.BoxGeometry(0.46, 0.62, 0.06),
-    standard(colour, 0.65),
+    weaveMat(colour, 2),
     0,
     height + 0.34,
     -0.2,
   );
   back.castShadow = true;
-  const legMat = standard(PALETTE.walnut, 0.6);
+  const legMat = woodMat(PALETTE.walnut, { repeat: 1, planks: 1 });
   for (const [lx, lz] of [
     [-0.19, -0.18],
     [0.19, -0.18],
@@ -275,14 +284,14 @@ export function boardTable(
   const shape = new THREE.Shape();
   shape.absellipse(0, 0, w / 2, d / 2, 0, Math.PI * 2, false, 0);
   const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015, curveSegments: 48 });
-  const top = new THREE.Mesh(geo, standard(PALETTE.mahogany, 0.35, 0.05));
+  const top = new THREE.Mesh(geo, woodMat(PALETTE.mahogany, { repeat: 0.6, planks: 1, roughness: 0.3 }));
   top.rotation.x = -Math.PI / 2;
   top.position.y = y;
   top.castShadow = true;
   top.receiveShadow = true;
   root.add(top);
 
-  const baseMat = standard(PALETTE.walnut, 0.6);
+  const baseMat = woodMat(PALETTE.walnut, { repeat: 1, planks: 2 });
   for (const bx of [-w / 4, w / 4]) {
     place(root, new THREE.BoxGeometry(0.3, y - 0.06, 0.5), baseMat, bx, (y - 0.06) / 2, 0);
   }
