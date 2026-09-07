@@ -489,7 +489,7 @@ export function buildResidence(): RoomBuild {
   // evening paper folded over the arm.
   mug(group, -0.28, 0.45, 1.32, 0xd8c9a8);
   bookStack(group, 0.42, 0.45, 1.62, 0.3);
-  newspaper(group, 0.15, 0.45, 1.68, -0.4);
+  newspaper(group, 0, 0.45, 1.35, 0.15);
 
   // The dinner table, which is the one that matters upstairs.
   const dining = new THREE.Group();
@@ -639,11 +639,13 @@ export function buildStudy(): RoomBuild {
   const side = new THREE.Group();
   side.position.set(2.1, 0, 1.55);
   group.add(side);
-  place(side, new THREE.CylinderGeometry(0.17, 0.17, 0.03, 20), woodMat(PALETTE.walnut, { repeat: 1, planks: 1, roughness: 0.42 }), 0, 0.44, 0).castShadow = true;
+  place(side, new THREE.CylinderGeometry(0.19, 0.19, 0.03, 20), woodMat(PALETTE.walnut, { repeat: 1, planks: 1, roughness: 0.42 }), 0, 0.44, 0).castShadow = true;
   place(side, new THREE.CylinderGeometry(0.02, 0.02, 0.42, 8), woodMat(PALETTE.walnut, { repeat: 1, planks: 1 }), 0, 0.22, 0);
-  tumbler(side, 0.05, 0.455, -0.05);
-  openBook(side, -0.02, 0.455, 0.06, 0.4);
-  colliders.push({ minX: 1.93, maxX: 2.27, minZ: 1.38, maxZ: 1.72 });
+  // Centred, so its corners stay inside the table's round edge; the tumbler
+  // sits off to the side rather than on top of it.
+  openBook(side, 0, 0.455, 0, 0.4);
+  tumbler(side, -0.1, 0.455, -0.08);
+  colliders.push({ minX: 1.91, maxX: 2.29, minZ: 1.36, maxZ: 1.74 });
 
   const hearth = new THREE.Group();
   hearth.position.set(0, 0, D / 2 - 0.3);

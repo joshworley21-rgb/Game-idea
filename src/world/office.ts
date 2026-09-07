@@ -208,8 +208,10 @@ function buildDesk(root: THREE.Group): THREE.Vector3 {
   // Desk furniture.
   place(g, new THREE.BoxGeometry(0.46, 0.02, 0.32), standard(PALETTE.paper, 0.9), -0.55, 0.815, 0.08);
   place(g, new THREE.BoxGeometry(0.4, 0.05, 0.28), standard(PALETTE.leather, 0.6), 0.6, 0.83, 0.1);
-  // A cup that has gone cold, the way one always does on this desk.
-  mug(g, -0.15, 0.79, -0.22, 0xf2efe6);
+  // A cup that has gone cold, the way one always does on this desk. `mug`
+  // takes the surface height, not the cup's centre — the desktop sits at
+  // 0.805 (0.76 top box, half its 0.09 height above that).
+  mug(g, -0.15, 0.805, -0.22, 0xf2efe6);
   const lampBase = place(g, new THREE.CylinderGeometry(0.09, 0.12, 0.06, 16), metal(PALETTE.brass), 0.85, 0.83, -0.3);
   lampBase.castShadow = false;
   place(g, new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8), metal(PALETTE.brass), 0.85, 0.98, -0.3);

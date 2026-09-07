@@ -100,7 +100,10 @@ export const PROPS_BY_ROOM: Partial<Record<RoomId, PropPlacement[]>> = {
   study: [
     { model: "vintage_grandfather_clock_01", position: [1.95, 0, -2.18], rotation: Math.PI, scale: 0.78 },
     { model: "potted_plant_01", position: [2.03, 0, -1.45], rotation: -0.3, scale: 0.76 },
-    { model: "book_encyclopedia_set_01", position: [-2.31, 1.42, 0.38], rotation: Math.PI / 2, scale: 0.72, groundAt: 1.42, noShadow: true },
+    // On the desk, not the shelf: the shelf's own hand-built books already
+    // run the full length of every board, and `groundAt` already sets the
+    // height, so `position`'s y must stay 0 or the two offsets stack.
+    { model: "book_encyclopedia_set_01", position: [-1.3, 0, -1.7], rotation: Math.PI / 2, scale: 0.72, groundAt: 0.785, noShadow: true },
     // A small painting over the hearth, and one by the door, clear of the shelves.
     { model: "fancy_picture_frame_01", position: [0, 2.0, 2.65], rotation: Math.PI, scale: 0.85, noShadow: true },
     { model: "fancy_picture_frame_01", position: [2.45, 1.85, -1.0], rotation: -Math.PI / 2, scale: 0.75, noShadow: true },
