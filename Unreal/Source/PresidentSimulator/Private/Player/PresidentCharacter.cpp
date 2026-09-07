@@ -1,0 +1,15 @@
+#include "Player/PresidentCharacter.h"
+#include "World/PresidentialInteractable.h"
+#include "Camera/CameraComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputActionValue.h"
+#include "GameFramework/CharacterMovementComponent.h"
+APresidentCharacter::APresidentCharacter() { FirstPersonCamera=CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera")); FirstPersonCamera->SetupAttachment(GetCapsuleComponent()); FirstPersonCamera->bUsePawnControlRotation=true; GetCharacterMovement()->MaxWalkSpeed=WalkSpeed; }
+void APresidentCharacter::BeginPlay() { Super::BeginPlay(); if(APlayerController* PC=Cast<APlayerController>(Controller)) if(UEnhancedInputLocalPlayerSubsystem* Input=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer())) if(DefaultMappingContext) Input->AddMappingContext(DefaultMappingContext,0); }
+void APresidentCharacter::SetupPlayerInputComponent(UInputComponent* Component) { Super::SetupPlayerInputComponent(Component); if(UEnhancedInputComponent* Input=Cast<UEnhancedInputComponent>(Component)) { if(MoveAction) Input->BindAction(MoveAction,ETriggerEvent::Triggered,this,&APresidentCharacter::Move); if(LookAction) Input->BindAction(LookAction,ETriggerEvent::Triggered,this,&APresidentCharacter::Look); if(SprintAction) { Input->BindAction(SprintAction,ETriggerEvent::Started,this,&APresidentCharacter::StartSprint); Input->BindAction(SprintAction,ETriggerEvent::Completed,this,&APresidentCharacter::StopSprint); } if(InteractAction) Input->BindAction(InteractAction,ETriggerEvent::Started,this,&APresidentCharacter::TryInteract); if(DashboardAction) Input->BindAction(DashboardAction,ETriggerEvent::Started,this,&APresidentCharacter::OpenDashboard); } }
+void APresidentCharacter::Move(const FInputActionValue& Value) { const FVector2D Axis=Value.Get<FVector2D>(); AddMovementInput(GetActorForwardVector(),Axis.Y); AddMovementInput(GetActorRightVector(),Axis.X); UpdateNearbyInteractable(); }
+void APresidentCharacter::Look(const FInputActionValue& Value) { const FVector2D Axis=Value.Get<FVector2D>(); AddControllerYawInput(Axis.X); AddControllerPitchInput(Axis.Y); }
+void APresidentCharacter::StartSprint() { GetCharacterMovement()->MaxWalkSpeed=SprintSpeed; } void APresidentCharacter::StopSprint() { GetCharacterMovement()->MaxWalkSpeed=WalkSpeed; }
+void APresidentCharacter::UpdateNearbyInteractable() { TArray<AActor*> Found; GetOverlappingActors(Found); NearbyInteractable=nullptr; float Nearest=BIG_NUMBER; for(AActor* Candidate:Found) if(Candidate->GetClass()->ImplementsInterface(UPresidentialInteractable::StaticClass())) { float Distance=FVector::DistSquared(GetActorLocation(),Candidate->GetActorLocation()); if(Distance<Nearest){Nearest=Distance;NearbyInteractable=Candidate;} } }
+void APresidentCharacter::TryInteract() { UpdateNearbyInteractable(); if(NearbyInteractable) IPresidentialInteractable::Execute_Interact(NearbyInteractable,this); }

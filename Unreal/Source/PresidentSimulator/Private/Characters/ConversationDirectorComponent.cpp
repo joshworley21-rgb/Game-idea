@@ -1,0 +1,3 @@
+#include "Characters/ConversationDirectorComponent.h"
+#include "Characters/PresidentialNpcCharacter.h"
+void UConversationDirectorComponent::FrameConversation(APresidentialNpcCharacter* InSpeaker, APresidentialNpcCharacter* InListener) { if(Speaker) Speaker->SetDialogueFocus(false); if(Listener) Listener->SetDialogueFocus(false); Speaker=InSpeaker; Listener=InListener; if(Speaker) Speaker->SetDialogueFocus(true); if(Listener) Listener->SetDialogueFocus(true); OnConversationFrameRequested(Speaker,Listener); }

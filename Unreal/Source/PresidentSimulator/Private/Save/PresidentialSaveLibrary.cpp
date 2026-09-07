@@ -1,0 +1,6 @@
+#include "Save/PresidentialSaveLibrary.h"
+#include "Save/PresidentialSaveGame.h"
+#include "Simulation/PresidentialGameInstance.h"
+#include "Kismet/GameplayStatics.h"
+bool UPresidentialSaveLibrary::SaveSimulation(UPresidentialGameInstance* Simulation,const FString& SlotName,int32 UserIndex) { if(!Simulation || SlotName.IsEmpty()) return false; UPresidentialSaveGame* Save=Cast<UPresidentialSaveGame>(UGameplayStatics::CreateSaveGameObject(UPresidentialSaveGame::StaticClass())); Save->SavedState=Simulation->State; return UGameplayStatics::SaveGameToSlot(Save,SlotName,UserIndex); }
+bool UPresidentialSaveLibrary::LoadSimulation(UPresidentialGameInstance* Simulation,const FString& SlotName,int32 UserIndex) { if(!Simulation || !UGameplayStatics::DoesSaveGameExist(SlotName,UserIndex)) return false; if(UPresidentialSaveGame* Save=Cast<UPresidentialSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName,UserIndex))) { Simulation->State=Save->SavedState; Simulation->OnStateChanged.Broadcast(Simulation->State); return true; } return false; }
