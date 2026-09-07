@@ -71,6 +71,11 @@ class Game {
     this.world.onStationTap = (station) => {
       if (!this.host.isOpen && !this.ended) this.openStation(station);
     };
+    // Tapping anywhere while standing at a door walks through it — there is
+    // no "E" key on a phone.
+    this.world.onDoorTap = () => {
+      if (!this.host.isOpen && !this.ended) this.walkThrough();
+    };
 
     // Android's back button closes what is open rather than leaving the game.
     this.onBack = () => {
@@ -356,9 +361,9 @@ function titleScreen(): void {
           : null,
       ]),
       el("div", { class: "help-list" }, [
-        el("div", {}, [el("b", {}, ["Move"]), " — W A S D, mouse to look. Click to capture the mouse."]),
-        el("div", {}, [el("b", {}, ["E"]), " — use whatever you are standing at."]),
-        el("div", {}, [el("b", {}, ["Tab"]), " — the full dashboard. ", el("b", {}, ["Enter"]), " — end the month."]),
+        el("div", {}, [el("b", {}, ["Move"]), " — the stick to walk, drag anywhere else to look."]),
+        el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're standing at, or walk through the door under your feet."]),
+        el("div", {}, [el("b", {}, ["Full stats"]), " and ", el("b", {}, ["End the month"]), " are the buttons in the bar below."]),
         el("div", {}, [
           "You get two or three actions a month, and rather more than three things that need doing.",
         ]),

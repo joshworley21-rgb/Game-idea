@@ -326,7 +326,6 @@ export function rectClamp(w: number, d: number, margin = 0.5) {
 /** The standard lighting rig for a room that has windows on one side. */
 export function daylightFor(
   root: THREE.Group,
-  lowPower: boolean,
   from: THREE.Vector3,
   at: THREE.Vector3,
 ): THREE.DirectionalLight {
@@ -334,7 +333,7 @@ export function daylightFor(
   light.position.copy(from);
   light.target.position.copy(at);
   light.castShadow = true;
-  light.shadow.mapSize.set(lowPower ? 1024 : 2048, lowPower ? 1024 : 2048);
+  light.shadow.mapSize.set(2048, 2048);
   light.shadow.camera.near = 1;
   light.shadow.camera.far = 34;
   light.shadow.camera.left = -11;

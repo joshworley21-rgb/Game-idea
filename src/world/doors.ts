@@ -24,7 +24,7 @@ function labelTexture(label: string, active: boolean): THREE.CanvasTexture {
   ctx.fillText(label, 256, 58);
   ctx.font = "500 20px system-ui, sans-serif";
   ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.4)";
-  ctx.fillText(active ? "E — go through" : "walk here", 256, 88);
+  ctx.fillText(active ? "tap to go through" : "walk here", 256, 88);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;

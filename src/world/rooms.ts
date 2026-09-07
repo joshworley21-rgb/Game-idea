@@ -38,7 +38,7 @@ function door(to: Door["to"], label: string, x: number, z: number, fx: number, f
 
 // ------------------------------------------------------------ Cabinet Room
 
-export function buildCabinetRoom(lowPower: boolean): RoomBuild {
+export function buildCabinetRoom(): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -117,7 +117,7 @@ export function buildCabinetRoom(lowPower: boolean): RoomBuild {
     [W / 2 - 0.2, -2.4],
     [W / 2 - 0.2, 2.4],
   ]);
-  const daylight = daylightFor(group, lowPower, new THREE.Vector3(-1, 7, -11), new THREE.Vector3(0, 0.8, 0));
+  const daylight = daylightFor(group, new THREE.Vector3(-1, 7, -11), new THREE.Vector3(0, 0.8, 0));
   group.add(new THREE.PointLight(0xfff0d8, 4, 16, 2).translateY(3.2));
 
   return {
@@ -140,7 +140,7 @@ export function buildCabinetRoom(lowPower: boolean): RoomBuild {
 
 // ------------------------------------------------------------- The Capitol
 
-export function buildCapitol(lowPower: boolean): RoomBuild {
+export function buildCapitol(): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -269,7 +269,7 @@ export function buildCapitol(lowPower: boolean): RoomBuild {
 
   // The way in is a door in the north wall, inside the well.
   doorway(group, -4.2, -D / 2 + 0.07, 0, 1.2, 2.5);
-  const daylight = daylightFor(group, lowPower, new THREE.Vector3(0, 17, 7), new THREE.Vector3(0, 1, -4));
+  const daylight = daylightFor(group, new THREE.Vector3(0, 17, 7), new THREE.Vector3(0, 1, -4));
 
   return {
     id: "capitol",
@@ -303,7 +303,7 @@ export function buildCapitol(lowPower: boolean): RoomBuild {
 
 // ------------------------------------------------------- The Briefing Room
 
-export function buildPressRoom(lowPower: boolean): RoomBuild {
+export function buildPressRoom(): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -408,12 +408,12 @@ export function buildPressRoom(lowPower: boolean): RoomBuild {
   const key = new THREE.SpotLight(0xfff4e2, 22, 12, 0.65, 0.5, 1.6);
   key.position.set(0, 3.1, -1.6);
   key.target.position.set(0, 1.3, -4.1);
-  key.castShadow = !lowPower;
+  key.castShadow = true;
   group.add(key, key.target);
   group.add(new THREE.PointLight(0xffeccf, 4, 16, 2).translateY(2.9).translateZ(2));
 
   doorway(group, W / 2 - 0.07, D / 2 - 1.6, -Math.PI / 2);
-  const daylight = daylightFor(group, lowPower, new THREE.Vector3(6, 8, 4), new THREE.Vector3(0, 1, -2));
+  const daylight = daylightFor(group, new THREE.Vector3(6, 8, 4), new THREE.Vector3(0, 1, -2));
   daylight.intensity = 0.5;
 
   return {
@@ -433,7 +433,7 @@ export function buildPressRoom(lowPower: boolean): RoomBuild {
 
 // -------------------------------------------------------------- The Residence
 
-export function buildResidence(lowPower: boolean): RoomBuild {
+export function buildResidence(): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -542,7 +542,7 @@ export function buildResidence(lowPower: boolean): RoomBuild {
   lamp.position.set(2.2, 1.4, 2.6);
   group.add(lamp);
   group.add(new THREE.PointLight(0xffeccf, 3.2, 14, 2).translateY(2.9));
-  const daylight = daylightFor(group, lowPower, new THREE.Vector3(-2, 7, -10), new THREE.Vector3(0, 0.9, 0));
+  const daylight = daylightFor(group, new THREE.Vector3(-2, 7, -10), new THREE.Vector3(0, 0.9, 0));
 
   return {
     id: "residence",
@@ -562,7 +562,7 @@ export function buildResidence(lowPower: boolean): RoomBuild {
 
 // ----------------------------------------------------------- The Private Study
 
-export function buildStudy(lowPower: boolean): RoomBuild {
+export function buildStudy(): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -636,7 +636,7 @@ export function buildStudy(lowPower: boolean): RoomBuild {
   group.add(fireplace);
 
   group.add(new THREE.PointLight(0xffe8c8, 2.2, 9, 2).translateY(2.6));
-  const daylight = daylightFor(group, lowPower, new THREE.Vector3(0, 6, -8), new THREE.Vector3(0, 0.9, 0));
+  const daylight = daylightFor(group, new THREE.Vector3(0, 6, -8), new THREE.Vector3(0, 0.9, 0));
   daylight.intensity = 0.9;
 
   return {

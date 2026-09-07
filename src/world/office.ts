@@ -357,7 +357,7 @@ function buildRoomDoors(root: THREE.Group): Door[] {
   return doors;
 }
 
-export function buildOffice(lowPower = false): RoomBuild {
+export function buildOffice(): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -376,7 +376,7 @@ export function buildOffice(lowPower = false): RoomBuild {
   daylight.position.set(-2.5, 7.5, -9);
   daylight.target.position.set(0, 0.5, 0.5);
   daylight.castShadow = true;
-  daylight.shadow.mapSize.set(lowPower ? 1024 : 2048, lowPower ? 1024 : 2048);
+  daylight.shadow.mapSize.set(2048, 2048);
   daylight.shadow.camera.near = 1;
   daylight.shadow.camera.far = 30;
   daylight.shadow.camera.left = -9;

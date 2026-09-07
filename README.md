@@ -11,14 +11,15 @@ The whole game is the tension between those two facts.
 
 ## Playing
 
-```bash
-npm install
-npm run dev      # http://localhost:5173
-```
+Oval ships as a standalone Android app, not a website. Grab the APK from
+[`releases/oval-president-debug.apk`](releases/oval-president-debug.apk),
+allow installs from unknown sources when Android asks, and open it — no
+network connection needed once it's installed. See [Android](#android) below
+for the details, including how to build it yourself.
 
 You walk six rooms in first person, and each one does what that room really
-does. Doors on the floor take you between them; the number keys walk you
-straight to a station, wherever it lives.
+does. Doors on the floor take you between them; the station chips along the
+bottom take you straight to a station, wherever it lives.
 
 | Room | Station | What happens there |
 | --- | --- | --- |
@@ -36,14 +37,12 @@ table, your family is upstairs, a press corps fills the briefing room, and the
 House chamber holds a hundred members seated in their five faction blocks. They
 breathe, blink, shift their weight, and turn to look at you when you walk in.
 
-**Controls** — `W A S D` and the mouse to move and look, `E` to use what you are
-standing at or to walk through the door you are standing in, `1`–`8` to go
-straight to a station in whatever room it lives in, `Tab` for the dashboard,
-`Enter` to end the month, `Esc` to close a panel. Click an object in the room to
-open it, or click empty space to capture the mouse. Everything is reachable from
-the keyboard alone, and on a touch screen from a thumb alone.
+**Controls** — a thumb stick to walk, drag anywhere else to look around, and a
+tap opens whatever you're standing at or walks you through the door under your
+feet. The station chips, the dashboard and ending the month are all buttons in
+the HUD. Everything is reachable from a thumb alone.
 
-Progress saves to `localStorage` after every action.
+Progress saves to the device after every action.
 
 ## How the simulation works
 
@@ -214,8 +213,8 @@ economy, society, the world, politics and your own life.
 
 Every sound in the game is synthesised at runtime with the Web Audio API.
 Nothing is sampled, so the whole soundscape costs no download, no licence and
-no asset pipeline — which matters when the game ships as one HTML file and a
-small APK.
+no asset pipeline — which matters when the whole thing has to fit in a small
+APK.
 
 **Positional ambience.** The fire is a filtered noise bed with crackles
 scheduled on top; the grandfather clock is silent between ticks, alternating
@@ -232,8 +231,9 @@ Ambient timing runs off the audio clock, not accumulated frame deltas — the
 render loop clamps its delta to stop the player teleporting after a tab switch,
 and a clock driven by that would tick in slow motion on a slow device.
 
-Sound starts on the click that takes the oath, because browsers will not open
-an audio context any other way, and the mute preference persists.
+Sound starts on the tap that takes the oath, because Chromium (the engine
+behind the Android WebView this ships in) will not open an audio context any
+other way, and the mute preference persists.
 
 ## The people
 
@@ -302,14 +302,17 @@ and only vary.
 
 **Ambient occlusion** does more for the picture than another thousand polygons
 would — the darkening where a chair leg meets the floor is what stops furniture
-hovering. It runs as a half-resolution GTAO pass with SMAA on top, and it is
-low-frequency enough that the missing pixels cost nothing.
+hovering. It runs as a half-resolution GTAO pass, with a light bloom on the
+windows and firelight and SMAA over the top, and it is low-frequency enough
+that the missing pixels cost nothing. There is no per-device quality tier —
+the app targets one class of hardware (a Galaxy S22+ or better) and asks for
+the full picture everywhere.
 
-It is also the first thing to go on hardware that cannot afford it. Phones and
-tablets never build the chain, and on anything else the renderer times its own
-frames: one frame over 120ms, or a 24-frame average over 22ms, and the passes
-are dropped for good. A beautiful eight frames a second is worse than a plain
-thirty. `?plain` in the URL turns them off by hand.
+The renderer still watches itself: it times its own frames, and one frame
+over 120ms, or a 24-frame average over 22ms, drops the extra passes for good.
+A beautiful eight frames a second is worse than a plain thirty — this is what
+actually catches a device that turns out not to keep up, rather than a guess
+made from screen size or touch support.
 
 ## The 3D assets
 
@@ -341,18 +344,19 @@ box, so `position` means where the thing goes. `ceilingAt` hangs it instead,
 `groundAt` puts it on a shelf. Every floor-standing prop also becomes solid: its
 footprint is collected at load time and the player is pushed out of it.
 
-Two dev pages help when placing things — `/preview.html` renders every model on a
-turntable with its real dimensions, and `/overview.html` renders the room in plan
-view. Both are dev-server only and are not part of the production build.
-
 Models load after the title screen, so the room appears immediately and fills in
 as they arrive. A model that fails to load is skipped with a warning rather than
 taking the room down.
 
 ## Android
 
-The game also ships as an Android app: the same web build running in a WebView
-through Capacitor, with the assets bundled into the APK so it works offline.
+Oval is an Android app, full stop — there is no web deployment. It is a
+three.js scene running in a Capacitor WebView, but that is an implementation
+detail: the assets are bundled into the APK so it works offline, and nothing
+about the shipped product asks the player to open a browser or a URL. The
+`npm run dev` web server exists for development only — iterating in a
+desktop browser is faster than rebuilding the APK for every change — and is
+covered under [Development](#development) below.
 
 ```bash
 npm run android:apk    # build + sync + assembleDebug
@@ -364,14 +368,21 @@ build-tools 36. Point `ANDROID_HOME` at the SDK before building.
 
 **Touch play.** The phone build is not the desktop build in a frame. Input runs
 on pointer events, so a thumb drag looks around exactly as a mouse drag does; a
-stick in the bottom-left corner walks; and tapping an object in the room opens
-it. The HUD reflows below 900px: the four corner cards collapse into a top bar
-and a stat strip, the stations become a scrolling row of chips along the bottom
-edge, and panels take the full screen. The camera's vertical field of view is
-derived from a fixed horizontal one, because three.js measures FOV vertically
-and a portrait phone would otherwise show the room through a slot. Shadow
-resolution, pixel ratio and antialiasing all step down on touch hardware, and
-the Android back button closes a panel rather than quitting.
+stick in the bottom-left corner walks; and tapping an object in the room, or a
+door under your feet, opens or uses it. The HUD reflows below 900px: the four
+corner cards collapse into a top bar and a stat strip, the stations become a
+scrolling row of chips along the bottom edge, and panels take the full screen.
+The camera's vertical field of view is derived from a fixed horizontal one,
+because three.js measures FOV vertically and a portrait phone would otherwise
+show the room through a slot, and the Android back button closes a panel
+rather than quitting.
+
+One CSS trap worth naming: a `<canvas>` is a replaced element, so
+`position: fixed; inset: 0` alone is not enough to make it fill the screen —
+without an explicit `width`/`height: 100%`, its layout box follows its own
+drawing-buffer size (the CSS size times the device pixel ratio) instead of the
+viewport. On a 1:1-pixel-ratio desktop browser that is invisible; on every
+phone it renders the scene oversized and puts every tap in the wrong place.
 
 **Signing.** `android:apk` produces a debug-signed APK, which installs fine for
 sideloading but is not for distribution. For a release build, generate your own
@@ -402,12 +413,17 @@ the balance harness possible.
 ## Development
 
 ```bash
-npm run dev        # dev server
+npm run dev        # dev server, http://localhost:5173 — iterate here, then build the APK
 npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production build
 npm run balance    # play the term headlessly under four strategies
 npm run assets     # rebuild the 3D props from Poly Haven
 ```
+
+`npm run dev` is where you make changes — a Chrome mobile-device emulation
+(touch + a matching device pixel ratio) is a close enough stand-in for the
+phone that most iteration never needs a real APK build. It is not, itself,
+a way to play the game; see [Android](#android) for that.
 
 `npm run balance` plays six seeds under each of four crude strategies — each
 one expressed as the rooms that president actually walks to — and prints

@@ -91,25 +91,34 @@ export class World {
   private frameSamples = 0;
   private horizontalFov = ROOM_PRESENTATION.oval.horizontalFov;
   readonly sound = new Sound();
-  /** True on phones and tablets, where the GPU budget is much smaller. */
-  readonly lowPower: boolean;
+  /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
+  readonly touch: boolean;
 
   onNearestChange: (station: StationId | null) => void = () => {};
   /** A tap or click that landed on a station. */
   onStationTap: (station: StationId) => void = () => {};
+  /** A tap that landed near a door, with none open. */
+  onDoorTap: () => void = () => {};
   /** The player has walked through a door into another room. */
   onRoomChange: (room: RoomId, name: string) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement) {
-    this.lowPower = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+    this.touch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+    // The game only ships as an Android app now, on hardware at or above a
+    // Galaxy S22+: no browser fallback to keep light for, so the renderer
+    // asks for the full picture and leans on the frame-time watchdog below
+    // (see `measure`) rather than a device guess to catch anything that
+    // actually can't keep up.
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: !this.lowPower,
+      // The composer's SMAA pass handles anti-aliasing; MSAA on top of that
+      // would just double the cost for no visible gain.
+      antialias: false,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, this.lowPower ? 1.5 : 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = this.lowPower ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
@@ -133,19 +142,21 @@ export class World {
     this.camera.add(this.listener);
     this.player = new PlayerController(this.camera, this.renderer.domElement);
     this.lastPosition.copy(this.camera.position);
-    this.stations = new Stations(this.scene, [], this.lowPower);
+    this.stations = new Stations(this.scene, [], this.touch);
     this.doors = new Doors(this.scene);
     this.player.onTap = ({ x, y }) => {
       const station = this.pickStation(x, y);
       if (station) this.onStationTap(station);
+      // A door has no hitbox of its own: standing at one and tapping
+      // anywhere is enough, the same way "E" is on a keyboard.
+      else if (this.doors.nearest) this.onDoorTap();
       else this.player.lock();
     };
 
     this.enterRoom("oval");
-    // `?plain` turns the extra passes off, for a machine that struggles or a
-    // player who would rather have the frames.
+    // `?plain` turns the extra passes off, for local debugging.
     const plain = new URLSearchParams(location.search).has("plain");
-    if (!this.lowPower && !plain) this.buildComposer();
+    if (!plain) this.buildComposer();
     this.resize();
     window.addEventListener("resize", this.resize);
   }
@@ -153,8 +164,8 @@ export class World {
   /**
    * Ambient occlusion is what stops furniture looking like it is hovering: the
    * darkening where a chair leg meets the floor is doing more for the picture
-   * than another thousand polygons would. It costs two extra passes, so phones
-   * and tablets render straight to the canvas instead.
+   * than another thousand polygons would. Every device gets the full chain;
+   * `measure` below is what actually catches hardware that cannot afford it.
    */
   private buildComposer(): void {
     const w = window.innerWidth;
@@ -208,16 +219,16 @@ export class World {
     if (!room) {
       room =
         id === "oval"
-          ? buildOffice(this.lowPower)
+          ? buildOffice()
           : id === "cabinet"
-            ? buildCabinetRoom(this.lowPower)
+            ? buildCabinetRoom()
             : id === "capitol"
-              ? buildCapitol(this.lowPower)
+              ? buildCapitol()
               : id === "press"
-                ? buildPressRoom(this.lowPower)
+                ? buildPressRoom()
                 : id === "residence"
-                  ? buildResidence(this.lowPower)
-                  : buildStudy(this.lowPower);
+                  ? buildResidence()
+                  : buildStudy();
       room.group.visible = false;
       this.scene.add(room.group);
       this.rooms.set(id, room);

@@ -73,7 +73,9 @@ function finish(canvas: HTMLCanvasElement, repeat: number, srgb: boolean): THREE
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeat, repeat);
-  tex.anisotropy = 8;
+  // three clamps this to whatever the GPU actually supports, so asking for
+  // more than a phone can give costs nothing.
+  tex.anisotropy = 16;
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
