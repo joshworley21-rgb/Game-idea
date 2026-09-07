@@ -1,17 +1,10 @@
 import * as THREE from "three";
 import { PALETTE, metal, place, standard } from "./materials.ts";
+import type { Door, RoomBuild, RoomId, StationAnchor } from "./roomkit.ts";
 import type { StationId } from "../game/types.ts";
 
 /** Interior half-axes of the oval room, in metres. */
 export const ROOM = { rx: 5.45, rz: 4.4, height: 4.3, wallThickness: 0.35 };
-
-export interface StationAnchor {
-  id: StationId;
-  /** Where the marker sits on the floor. */
-  position: THREE.Vector3;
-  /** Where the player should be looking when they interact. */
-  focus: THREE.Vector3;
-}
 
 /** The point on the inside face of the wall directly behind a given x. */
 function wallPointNorth(x: number): number {
@@ -284,103 +277,32 @@ function buildFireplace(root: THREE.Group): THREE.Object3D {
 }
 
 /** Small furniture pieces that carry the interactive stations. */
-function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnchor> {
+/**
+ * The Oval keeps only the two things that actually happen in it: the desk you
+ * sign at, and the phone you pick up. Everything else has moved to the room it
+ * belongs in, and the wall now has doors to those rooms instead.
+ */
+function buildStationFurniture(root: THREE.Group): StationAnchor[] {
   const wood = standard(PALETTE.mahogany, 0.55);
   const dark = standard(PALETTE.walnut, 0.6);
 
-  // Cabinet table (budget) on the west side.
-  // The table itself is a model; these are the papers stacked on top of it.
-  const cab = new THREE.Group();
-  cab.position.set(-4.05, 0, -1.55);
-  cab.rotation.y = Math.PI / 2.4;
-  for (let i = 0; i < 4; i += 1) {
-    place(
-      cab,
-      new THREE.BoxGeometry(0.3, 0.03 + i * 0.01, 0.22),
-      standard(i % 2 ? 0xd9cdb4 : PALETTE.paper, 0.95),
-      -0.55 + i * 0.36,
-      1.0,
-      0.05,
-    );
-  }
-  root.add(cab);
-
-  // Credenza with the secure telephone, east side.
+  // The credenza with the secure telephone, on the east side.
   const cred = new THREE.Group();
   cred.position.set(4.15, 0, -1.55);
   cred.rotation.y = -Math.PI / 2.4;
+  place(cred, new THREE.BoxGeometry(1.5, 0.85, 0.45), wood, 0, 0.42, 0).castShadow = true;
   place(cred, new THREE.BoxGeometry(0.26, 0.1, 0.2), standard(0xa81c1c, 0.5), -0.1, 0.95, 0);
   place(cred, new THREE.BoxGeometry(0.24, 0.06, 0.08), standard(0xa81c1c, 0.5), -0.1, 1.03, 0.02);
   place(cred, new THREE.BoxGeometry(0.3, 0.2, 0.22), standard(0x2b2b2b, 0.7), 0.4, 1.0, 0);
   root.add(cred);
 
-  // Press corner: podium, camera, lights.
-  const press = new THREE.Group();
-  press.position.set(4.25, 0, 0.95);
-  press.rotation.y = -Math.PI / 2;
-  place(press, new THREE.BoxGeometry(0.62, 1.15, 0.45), wood, 0, 0.58, 0);
-  place(press, new THREE.BoxGeometry(0.72, 0.06, 0.52), dark, 0, 1.18, 0);
-  place(press, new THREE.CylinderGeometry(0.012, 0.012, 0.3, 8), metal(0x2a2a2a), 0, 1.3, 0.05);
-  place(press, new THREE.SphereGeometry(0.04, 10, 10), metal(0x2a2a2a), 0, 1.45, 0.05);
-  const cam = new THREE.Group();
-  cam.position.set(0.95, 0, 0.75);
-  for (const a of [0, 2.1, 4.2]) {
-    const leg = place(cam, new THREE.CylinderGeometry(0.02, 0.02, 1.3, 6), metal(0x333333), Math.sin(a) * 0.2, 0.65, Math.cos(a) * 0.2);
-    leg.rotation.z = Math.sin(a) * 0.18;
-    leg.rotation.x = Math.cos(a) * 0.18;
-  }
-  place(cam, new THREE.BoxGeometry(0.32, 0.26, 0.5), standard(0x1c1c1c, 0.6), 0, 1.42, 0);
-  place(cam, new THREE.CylinderGeometry(0.09, 0.09, 0.2, 14), standard(0x111111, 0.4), 0, 1.42, -0.3);
-  press.add(cam);
-  root.add(press);
-
-  // West Wing door side: staff chairs and a globe.
-  const staff = new THREE.Group();
-  staff.position.set(-4.35, 0, 0.95);
-  staff.rotation.y = Math.PI / 2.6;
+  // A globe on the west side, where the cabinet table used to be.
   const globe = new THREE.Group();
-  globe.position.set(0, 0, 0.9);
+  globe.position.set(-4.1, 0, -1.6);
   place(globe, new THREE.CylinderGeometry(0.22, 0.3, 0.06, 12), dark, 0, 0.03, 0);
   place(globe, new THREE.CylinderGeometry(0.03, 0.03, 0.75, 8), dark, 0, 0.4, 0);
   place(globe, new THREE.SphereGeometry(0.3, 24, 18), standard(0x2f6d8c, 0.75), 0, 1.05, 0);
-  staff.add(globe);
-  root.add(staff);
-
-  // Residence side table with family photographs.
-  const fam = new THREE.Group();
-  fam.position.set(3.2, 0, 3.15);
-  fam.rotation.y = -Math.PI / 4;
-  for (const [px, pw, ph, tilt] of [
-    [-0.24, 0.22, 0.28, 0.1],
-    [0.02, 0.3, 0.22, -0.05],
-    [0.28, 0.18, 0.24, 0.14],
-  ] as const) {
-    const frameMesh = place(fam, new THREE.BoxGeometry(pw, ph, 0.03), metal(PALETTE.brass, 0.5), px, 0.72 + ph / 2, 0);
-    frameMesh.rotation.y = tilt;
-    const photo = place(fam, new THREE.PlaneGeometry(pw * 0.8, ph * 0.8), standard(0xd7cbb6, 0.9), px, 0.72 + ph / 2, 0.02);
-    photo.rotation.y = tilt;
-  }
-  root.add(fam);
-
-  // Private study nook: armchair, floor lamp, books.
-  const study = new THREE.Group();
-  study.position.set(-3.0, 0, 3.35);
-  study.rotation.y = Math.PI / 1.3;
-  place(study, new THREE.CylinderGeometry(0.16, 0.2, 0.04, 14), dark, 0.75, 0.02, 0.1);
-  place(study, new THREE.CylinderGeometry(0.02, 0.02, 1.5, 8), metal(PALETTE.brass), 0.75, 0.77, 0.1);
-  const lampShade = place(
-    study,
-    new THREE.CylinderGeometry(0.18, 0.22, 0.22, 16, 1, true),
-    new THREE.MeshStandardMaterial({ color: 0xf1e2c0, roughness: 0.9, side: THREE.DoubleSide }),
-    0.75,
-    1.6,
-    0.1,
-  );
-  lampShade.castShadow = false;
-  const readLight = new THREE.PointLight(0xffe0b0, 3, 3.4, 2);
-  readLight.position.set(0.75, 1.5, 0.1);
-  study.add(readLight);
-  root.add(study);
+  root.add(globe);
 
   const anchor = (id: StationId, x: number, z: number, fx: number, fz: number): StationAnchor => ({
     id,
@@ -388,32 +310,60 @@ function buildStationFurniture(root: THREE.Group): Record<StationId, StationAnch
     focus: new THREE.Vector3(fx, 1.1, fz),
   });
 
-  // Laid out symmetrically around the oval: the desk holds the north, the two
-  // working stations sit either side of it, and the personal ones take the
-  // south corners. Nothing shares an arc with anything else any more.
-  return {
-    desk: anchor("desk", 0, -1.85, 0, -2.75),
-    budget: anchor("budget", -2.95, -1.35, -4.05, -1.55),
-    phone: anchor("phone", 2.95, -1.35, 4.15, -1.55),
-    staff: anchor("staff", -3.3, 0.95, -4.35, 0.95),
-    press: anchor("press", 3.3, 0.95, 4.25, 0.95),
-    rest: anchor("rest", -2.4, 2.95, -3.0, 3.35),
-    family: anchor("family", 2.4, 2.95, 3.2, 3.15),
-  };
+  return [
+    anchor("desk", 0, -1.85, 0, -2.75),
+    anchor("phone", 2.95, -1.35, 4.15, -1.55),
+  ];
 }
 
-export interface OfficeBuild {
-  group: THREE.Group;
-  /** Anchors for positional sound: the fire, and the clock in the corner. */
-  fireplace: THREE.Object3D;
-  clockSpot: THREE.Object3D;
-  anchors: Record<StationId, StationAnchor>;
-  /** Lights that follow the season, so the room changes across the term. */
-  daylight: THREE.DirectionalLight;
-  windowLights: THREE.Group;
+/** The four doors out of the Oval, on the ellipse, with the room each leads to. */
+const OVAL_DOORS: { to: RoomId; label: string; t: number }[] = [
+  { to: "cabinet", label: "The Cabinet Room", t: -0.15 * Math.PI },
+  { to: "study", label: "The Private Study", t: Math.PI + 0.15 * Math.PI },
+  { to: "residence", label: "Upstairs to the Residence", t: 0.26 * Math.PI },
+  { to: "capitol", label: "The motorcade to the Capitol", t: 0.74 * Math.PI },
+];
+
+function buildRoomDoors(root: THREE.Group): Door[] {
+  const doors: Door[] = [];
+  for (const spec of OVAL_DOORS) {
+    const x = ROOM.rx * Math.cos(spec.t);
+    const z = ROOM.rz * Math.sin(spec.t);
+    // Face the door along the inward normal of the ellipse.
+    const nx = Math.cos(spec.t) / ROOM.rx;
+    const nz = Math.sin(spec.t) / ROOM.rz;
+    const len = Math.hypot(nx, nz);
+    const inward = new THREE.Vector3(-nx / len, 0, -nz / len);
+
+    const leaf = new THREE.Group();
+    leaf.position.set(x, 0, z);
+    leaf.lookAt(x + inward.x, 0, z + inward.z);
+    root.add(leaf);
+    place(leaf, new THREE.BoxGeometry(1.24, 2.5, 0.1), standard(PALETTE.trim, 0.75), 0, 1.25, 0.02);
+    place(leaf, new THREE.BoxGeometry(1.04, 2.35, 0.06), standard(PALETTE.mahogany, 0.6), 0, 1.175, 0.08);
+    for (const dy of [0.72, 1.62]) {
+      place(leaf, new THREE.BoxGeometry(0.78, 0.66, 0.02), standard(0x4a2f1c, 0.7), 0, dy, 0.12);
+    }
+    place(
+      leaf,
+      new THREE.SphereGeometry(0.045, 12, 10),
+      new THREE.MeshStandardMaterial({ color: PALETTE.brass, roughness: 0.3, metalness: 0.85 }),
+      0.38,
+      1.02,
+      0.13,
+    );
+
+    doors.push({
+      to: spec.to,
+      label: spec.label,
+      position: new THREE.Vector3(x + inward.x * 1.05, 0, z + inward.z * 1.05),
+      facing: new THREE.Vector3(x, 1.5, z),
+    });
+  }
+  return doors;
 }
 
-export function buildOffice(lowPower = false): OfficeBuild {
+export function buildOffice(lowPower = false): RoomBuild {
   const group = new THREE.Group();
   const windowLights = new THREE.Group();
   group.add(windowLights);
@@ -426,6 +376,7 @@ export function buildOffice(lowPower = false): OfficeBuild {
   buildFlags(group);
   const fireplace = buildFireplace(group);
   const anchors = buildStationFurniture(group);
+  const doors = buildRoomDoors(group);
 
   const daylight = new THREE.DirectionalLight(0xfff4e0, 1.5);
   daylight.position.set(-2.5, 7.5, -9);
@@ -457,7 +408,21 @@ export function buildOffice(lowPower = false): OfficeBuild {
   clockSpot.position.set(-3.95, 1.1, -2.8);
   group.add(clockSpot);
 
-  return { group, anchors, daylight, windowLights, fireplace, clockSpot };
+  return {
+    id: "oval",
+    group,
+    anchors,
+    doors,
+    spawn: new THREE.Vector3(0, 0, 1.6),
+    spawnLook: new THREE.Vector3(0, 1.0, -2.75),
+    colliders: [{ minX: -1.25, maxX: 1.25, minZ: -3.5, maxZ: -2.1 }],
+    cast: [],
+    clamp: (p) => clampToRoom(p),
+    daylight,
+    windowLights,
+    fireplace,
+    clockSpot,
+  };
 }
 
 /** How much space the player takes up, for pushing out of furniture. */

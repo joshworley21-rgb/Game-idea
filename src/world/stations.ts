@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { STATION_INFO } from "../game/actions.ts";
 import type { StationId } from "../game/types.ts";
-import type { StationAnchor } from "./office.ts";
+import type { StationAnchor } from "./roomkit.ts";
 
 const REACH = 1.9;
 
@@ -53,9 +53,29 @@ export class Stations {
   private touch: boolean;
   nearest: StationId | null = null;
 
-  constructor(scene: THREE.Scene, anchors: Record<StationId, StationAnchor>, touch = false) {
+  private scene: THREE.Scene;
+  private group = new THREE.Group();
+
+  constructor(scene: THREE.Scene, anchors: StationAnchor[], touch = false) {
     this.touch = touch;
-    for (const anchor of Object.values(anchors)) {
+    this.scene = scene;
+    this.scene.add(this.group);
+    this.rebuild(anchors);
+  }
+
+  /** Replaces every marker, for when the president walks into another room. */
+  rebuild(anchors: StationAnchor[]): void {
+    for (const v of this.visuals) {
+      v.ring.geometry.dispose();
+      v.ring.material.dispose();
+      (v.sprite.material.map as THREE.Texture | null)?.dispose();
+      v.sprite.material.dispose();
+      v.hit.geometry.dispose();
+    }
+    this.group.clear();
+    this.visuals = [];
+    this.nearest = null;
+    for (const anchor of anchors) {
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.42, 0.52, 40),
         new THREE.MeshBasicMaterial({
@@ -68,7 +88,7 @@ export class Stations {
       );
       ring.rotation.x = -Math.PI / 2;
       ring.position.copy(anchor.position).setY(0.02);
-      scene.add(ring);
+      this.group.add(ring);
 
       const info = STATION_INFO[anchor.id];
       const sprite = new THREE.Sprite(
@@ -82,7 +102,7 @@ export class Stations {
       sprite.scale.set(1.5, 0.47, 1);
       sprite.userData.baseScale = [1.5, 0.47];
       sprite.renderOrder = 10;
-      scene.add(sprite);
+      this.group.add(sprite);
 
       // Fully transparent rather than `visible: false`, which the raycaster skips.
       const hit = new THREE.Mesh(
@@ -91,7 +111,7 @@ export class Stations {
       );
       hit.position.copy(anchor.position).setY(1.2);
       hit.userData.stationId = anchor.id;
-      scene.add(hit);
+      this.group.add(hit);
 
       this.visuals.push({ anchor, ring, sprite, hit, badge: 0, active: false });
     }

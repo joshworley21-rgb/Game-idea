@@ -315,6 +315,7 @@ export interface OfficeAction {
 
 export type StationId =
   | "desk"
+  | "floor"
   | "budget"
   | "phone"
   | "press"

@@ -1,0 +1,1121 @@
+import * as THREE from "three";
+
+/**
+ * People, built in code.
+ *
+ * There is no CC0 source of good human models with faces, so the cast is
+ * generated: a sculpted head with a painted face, a jointed body under a suit,
+ * and per-person variation derived from the name, so a given secretary looks
+ * the same every time you walk into the Cabinet Room.
+ *
+ * The body is a real hierarchy — hips → spine → chest → neck → head, and
+ * chest → shoulder → upper arm → forearm → hand — so posing and animating are
+ * just rotations rather than rebuilt geometry.
+ */
+
+export type Pose = "stand" | "sit" | "sit-forward" | "lean";
+
+export interface CharacterSpec {
+  /** Drives every random choice, so the same name is always the same face. */
+  seed: string;
+  /** Rough age, which changes the face, the hair and the posture. */
+  age?: number;
+  /** What they are wearing. */
+  dress?: "suit" | "smart" | "casual" | "robe";
+  /** Overrides the colour the seed would have picked. */
+  suitColor?: number;
+  pose?: Pose;
+}
+
+// ---------------------------------------------------------------- variation
+
+/** A small deterministic PRNG so a name always produces the same person. */
+function seeded(text: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h = (h + 0x6d2b79f5) | 0;
+    let t = Math.imul(h ^ (h >>> 15), h | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Skin tones across a real range, in linear-ish sRGB hex. */
+const SKIN = [
+  0xf2d3bc, 0xe8bfa0, 0xdba97f, 0xc68e63, 0xa9714a, 0x8a5a3b, 0x6b4530, 0x4d3122,
+];
+const HAIR = [0x1b1512, 0x2e2019, 0x4a3223, 0x6b4a2c, 0x8a6a3f, 0xa9884f, 0x9a9a96, 0xd8d4cb];
+const EYES = [0x4a3b2a, 0x3d2b1c, 0x5b4b2f, 0x3a5a4a, 0x37506b, 0x6b7a8a];
+const SUITS = [0x1e2430, 0x232a38, 0x2c2c33, 0x1a2a3a, 0x33302c, 0x3a2f2c, 0x27333a];
+const ACCENTS = [0x8c2f39, 0x2b4f7a, 0x7a6a2b, 0x3f6b52, 0x6b3f6b, 0x9a5a2b, 0x2f4f4f];
+
+interface Look {
+  skin: number;
+  hair: number;
+  eye: number;
+  suit: number;
+  accent: number;
+  height: number;
+  build: number;
+  hairStyle: "short" | "crop" | "bob" | "long" | "tied" | "bald" | "receding";
+  facialHair: "none" | "stubble" | "beard" | "moustache";
+  glasses: boolean;
+  browWeight: number;
+  noseLength: number;
+  jawWidth: number;
+  age: number;
+}
+
+function pickLook(spec: CharacterSpec): Look {
+  const rnd = seeded(spec.seed);
+  const age = spec.age ?? 30 + Math.floor(rnd() * 35);
+  const grey = Math.max(0, Math.min(1, (age - 44) / 30));
+  const hairBase = HAIR[Math.floor(rnd() * 6)];
+  const styles: Look["hairStyle"][] = ["short", "crop", "bob", "long", "tied", "receding"];
+  let hairStyle = styles[Math.floor(rnd() * styles.length)];
+  if (age > 55 && rnd() < 0.3) hairStyle = rnd() < 0.5 ? "bald" : "receding";
+
+  return {
+    skin: SKIN[Math.floor(rnd() * SKIN.length)],
+    // Hair greys with age rather than being randomly grey.
+    hair: new THREE.Color(hairBase).lerp(new THREE.Color(0xb9b5ad), grey * (0.35 + rnd() * 0.5)).getHex(),
+    eye: EYES[Math.floor(rnd() * EYES.length)],
+    suit: spec.suitColor ?? SUITS[Math.floor(rnd() * SUITS.length)],
+    accent: ACCENTS[Math.floor(rnd() * ACCENTS.length)],
+    height: 1.62 + rnd() * 0.24,
+    build: 0.86 + rnd() * 0.34,
+    hairStyle,
+    facialHair:
+      rnd() < 0.24 ? (["stubble", "beard", "moustache"] as const)[Math.floor(rnd() * 3)] : "none",
+    glasses: rnd() < 0.3,
+    browWeight: 0.7 + rnd() * 0.7,
+    noseLength: 0.85 + rnd() * 0.4,
+    jawWidth: 0.86 + rnd() * 0.3,
+    age,
+  };
+}
+
+// ------------------------------------------------------- head: one geometry
+//
+// The painted face and the eyes, ears and hair all have to land on the same
+// features, so both are driven from one set of anatomical landmarks expressed
+// as directions on the head sphere. `deform` turns a direction into the point
+// on the sculpted skull; `uvOf` turns the same direction into the texture
+// coordinate three.js will map there. Neither can drift away from the other.
+
+/** Polar angle from the crown, and azimuth where the face is at 90 degrees. */
+interface Landmark {
+  theta: number;
+  phi: number;
+}
+
+const FACE = {
+  browL: { theta: 72, phi: 71.3 },
+  browR: { theta: 72, phi: 108.7 },
+  eyeL: { theta: 82, phi: 71.3 },
+  eyeR: { theta: 82, phi: 108.7 },
+  noseBridge: { theta: 84, phi: 90 },
+  noseTip: { theta: 97, phi: 90 },
+  mouth: { theta: 109, phi: 90 },
+  chin: { theta: 124, phi: 90 },
+  earL: { theta: 84, phi: 8 },
+  earR: { theta: 84, phi: 172 },
+  cheekL: { theta: 94, phi: 55 },
+  cheekR: { theta: 94, phi: 125 },
+} as const satisfies Record<string, Landmark>;
+
+/** The unit-sphere point a landmark sits on, matching three.js sphere winding. */
+function dirOf(m: Landmark): THREE.Vector3 {
+  const t = (m.theta * Math.PI) / 180;
+  const p = (m.phi * Math.PI) / 180;
+  return new THREE.Vector3(-Math.cos(p) * Math.sin(t), Math.cos(t), Math.sin(p) * Math.sin(t));
+}
+
+/** The texture coordinate three.js assigns to that same point. */
+function uvOf(m: Landmark): { u: number; v: number } {
+  return { u: m.phi / 360, v: 1 - m.theta / 180 };
+}
+
+/**
+ * The sculpt. Pushes a point on the unit sphere out to where it belongs on a
+ * skull: brow, cheekbones, a jaw that tapers to a chin, eye sockets, a nose.
+ * Called for every vertex, and again for each landmark so the eyes and ears
+ * are attached to the surface rather than hovering near it.
+ */
+function deform(p: THREE.Vector3, look: Look): THREE.Vector3 {
+  const v = p.clone();
+  v.x *= 0.8;
+  v.y *= 0.99;
+  v.z *= 0.88;
+
+  const front = Math.max(0, v.z);
+
+  // Jaw: taper below the cheekbones, but stop short of a point.
+  if (v.y < 0.0) {
+    const t = Math.min(1, -v.y / 0.9);
+    v.x *= 1 - t * t * (0.3 / look.jawWidth);
+    v.z *= 1 - t * t * 0.14;
+  }
+  // Chin.
+  const chin = Math.exp(-(((v.y + 0.66) / 0.24) ** 2)) * Math.exp(-((v.x / 0.26) ** 2)) * front;
+  v.z += chin * 0.1;
+
+  // Brow ridge.
+  const brow = Math.exp(-(((v.y - 0.31) / 0.1) ** 2)) * Math.exp(-((v.x / 0.42) ** 2)) * front;
+  v.z += brow * 0.06 * look.browWeight;
+
+  // Cheekbones.
+  const cheek =
+    Math.exp(-(((v.y + 0.03) / 0.17) ** 2)) * Math.exp(-(((Math.abs(v.x) - 0.38) / 0.16) ** 2)) * front;
+  v.z += cheek * 0.05;
+
+  // Eye sockets, either side of the bridge.
+  for (const side of [-1, 1]) {
+    const socket =
+      Math.exp(-(((v.x - side * 0.255) / 0.13) ** 2)) * Math.exp(-(((v.y - 0.14) / 0.1) ** 2)) * front;
+    v.z -= socket * 0.06;
+  }
+
+  // Nose: a bridge into a tip, with wings either side.
+  const centre = Math.exp(-((v.x / 0.09) ** 2));
+  const bridge = centre * Math.exp(-(((v.y - 0.1) / 0.24) ** 2)) * front;
+  const tip = centre * Math.exp(-(((v.y + 0.115) / 0.08) ** 2)) * front;
+  v.z += bridge * 0.045 + tip * 0.115 * look.noseLength;
+  const wings =
+    Math.exp(-(((Math.abs(v.x) - 0.1) / 0.05) ** 2)) * Math.exp(-(((v.y + 0.14) / 0.055) ** 2)) * front;
+  v.z += wings * 0.055;
+
+  // Lips roll forward slightly so the painted mouth is not on a flat plane.
+  const mouth = Math.exp(-(((v.y + 0.33) / 0.08) ** 2)) * Math.exp(-((v.x / 0.2) ** 2)) * front;
+  v.z += mouth * 0.035;
+
+  // A longer skull at the back, flatter temples, and a taper into the neck.
+  if (v.z < 0) v.z *= 1.05;
+  v.x *= 1 - Math.exp(-(((v.y - 0.6) / 0.32) ** 2)) * 0.06;
+  if (v.y < -0.72) v.x *= 1 - (-v.y - 0.72) * 1.4;
+
+  return v;
+}
+
+function sculptHead(look: Look): THREE.BufferGeometry {
+  const geo = new THREE.SphereGeometry(1, 56, 40);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const d = deform(v, look);
+    pos.setXYZ(i, d.x, d.y, d.z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// -------------------------------------------------------------- face canvas
+
+/**
+ * The face is painted onto the head's sphere UVs at the landmark coordinates,
+ * so the brows sit on the brow ridge and the mouth on the lips. Geometry alone
+ * gives you a skull; this is what makes it read as a person.
+ */
+function faceTexture(look: Look): THREE.CanvasTexture {
+  const size = 1024;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const skin = new THREE.Color(look.skin);
+
+  ctx.fillStyle = `#${skin.getHexString()}`;
+  ctx.fillRect(0, 0, size, size);
+
+  /** Landmark to canvas pixels. */
+  const at = (m: Landmark, dPhi = 0, dTheta = 0): [number, number] => {
+    const uv = uvOf({ theta: m.theta + dTheta, phi: m.phi + dPhi });
+    return [uv.u * size, (1 - uv.v) * size];
+  };
+  /** Degrees of azimuth or polar angle, as a pixel distance. */
+  const px = (deg: number) => (deg / 360) * size;
+  const rgba = (c: THREE.Color, a: number) =>
+    `rgba(${(c.r * 255) | 0},${(c.g * 255) | 0},${(c.b * 255) | 0},${a})`;
+
+  const shade = skin.clone().multiplyScalar(0.68);
+  const warm = skin.clone().lerp(new THREE.Color(0xb4655a), 0.22);
+  const hair = new THREE.Color(look.hair);
+
+  // Cheek warmth.
+  for (const m of [FACE.cheekL, FACE.cheekR]) {
+    const [x, y] = at(m);
+    const g = ctx.createRadialGradient(x, y, 2, x, y, px(13));
+    g.addColorStop(0, rgba(warm, 0.2));
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+
+  // Eye sockets: a soft shadow so the eyeballs sit in something.
+  for (const m of [FACE.eyeL, FACE.eyeR]) {
+    const [x, y] = at(m);
+    const g = ctx.createRadialGradient(x, y, 1, x, y, px(13));
+    g.addColorStop(0, rgba(shade, 0.9));
+    g.addColorStop(0.55, rgba(shade, 0.45));
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+
+  // Eyebrows, arched over each socket.
+  ctx.lineCap = "round";
+  ctx.strokeStyle = `#${hair.clone().multiplyScalar(0.8).getHexString()}`;
+  ctx.lineWidth = px(2.6) * look.browWeight;
+  for (const m of [FACE.browL, FACE.browR]) {
+    const inner = m.phi < 90 ? 7 : -7;
+    const outer = m.phi < 90 ? -8 : 8;
+    const [x0, y0] = at(m, inner, 1.5);
+    const [xm, ym] = at(m, 0, -2.2);
+    const [x1, y1] = at(m, outer, 0.5);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(xm, ym, x1, y1);
+    ctx.stroke();
+  }
+
+  // The upper lid crease.
+  ctx.strokeStyle = rgba(shade, 0.6);
+  ctx.lineWidth = px(1);
+  for (const m of [FACE.eyeL, FACE.eyeR]) {
+    const [x0, y0] = at(m, -6.5, -3.6);
+    const [xm, ym] = at(m, 0, -5.4);
+    const [x1, y1] = at(m, 6.5, -3.6);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(xm, ym, x1, y1);
+    ctx.stroke();
+  }
+
+  // Nostrils and the shadow under the nose.
+  ctx.fillStyle = rgba(shade.clone().multiplyScalar(0.8), 0.8);
+  for (const d of [-3.4, 3.4]) {
+    const [x, y] = at(FACE.noseTip, d, 2.2);
+    ctx.beginPath();
+    ctx.ellipse(x, y, px(1.5), px(1), 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Lips.
+  const lip = skin.clone().lerp(new THREE.Color(0x9c4a45), look.facialHair === "none" ? 0.5 : 0.4);
+  ctx.fillStyle = `#${lip.getHexString()}`;
+  const [lx, ly] = at(FACE.mouth, -10.5, 0);
+  const [rx, ry] = at(FACE.mouth, 10.5, 0);
+  const [tx, ty] = at(FACE.mouth, 0, -4.2);
+  const [bx, by] = at(FACE.mouth, 0, 4.8);
+  ctx.beginPath();
+  ctx.moveTo(lx, ly);
+  ctx.quadraticCurveTo(tx, ty, rx, ry);
+  ctx.quadraticCurveTo(bx, by, lx, ly);
+  ctx.fill();
+  // The line where the lips meet.
+  ctx.strokeStyle = rgba(shade.clone().multiplyScalar(0.7), 0.85);
+  ctx.lineWidth = px(0.9);
+  ctx.beginPath();
+  ctx.moveTo(lx, ly);
+  ctx.quadraticCurveTo(at(FACE.mouth, 0, 0.4)[0], at(FACE.mouth, 0, 0.4)[1], rx, ry);
+  ctx.stroke();
+
+  // Facial hair over the jaw.
+  if (look.facialHair !== "none") {
+    const dark = hair.clone().multiplyScalar(0.75);
+    ctx.fillStyle = rgba(dark, look.facialHair === "stubble" ? 0.3 : 0.88);
+    if (look.facialHair === "moustache") {
+      const [x, y] = at(FACE.mouth, 0, -4.4);
+      ctx.beginPath();
+      ctx.ellipse(x, y, px(9), px(2.6), 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const [x, y] = at(FACE.mouth, 0, 6);
+      ctx.beginPath();
+      ctx.ellipse(x, y, px(17), px(15), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.ellipse(lx + (rx - lx) / 2, ly, px(7.5), px(2.6), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+
+  // Age reads as a couple of folds rather than a wrinkle map.
+  if (look.age > 50) {
+    ctx.strokeStyle = rgba(shade, 0.35);
+    ctx.lineWidth = px(0.8);
+    for (const m of [FACE.eyeL, FACE.eyeR]) {
+      const out = m.phi < 90 ? -9 : 9;
+      const [x0, y0] = at(m, out, -1);
+      const [x1, y1] = at(m, out * 1.35, -2.4);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+    // Nasolabial folds, from the nose down past the mouth.
+    for (const side of [-1, 1]) {
+      const [x0, y0] = at(FACE.noseTip, side * 4.5, 1.5);
+      const [x1, y1] = at(FACE.mouth, side * 10, -1);
+      const [x2, y2] = at(FACE.mouth, side * 10.5, 3);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(x1, y1, x2, y2);
+      ctx.stroke();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// -------------------------------------------------------------------- hair
+
+/**
+ * Hair is a shell that hugs the skull down to a hairline, built from the same
+ * deform function so it never floats. The hairline is higher at the front than
+ * at the sides, and higher again at the temples if they are receding.
+ */
+function buildHair(look: Look): THREE.Object3D | null {
+  if (look.hairStyle === "bald") return null;
+  const mat = new THREE.MeshStandardMaterial({
+    color: look.hair,
+    roughness: 0.85,
+    metalness: 0.02,
+    side: THREE.DoubleSide,
+  });
+  const group = new THREE.Group();
+
+  const receding = look.hairStyle === "receding";
+  const long = look.hairStyle === "long" || look.hairStyle === "bob";
+  /**
+   * How far down the skull hair reaches, in polar degrees, by azimuth. The
+   * forehead limit never moves — length grows at the sides and the back, so
+   * long hair never ends up hanging over the eyes.
+   */
+  const hairline = (phi: number): number => {
+    const s = Math.sin((phi * Math.PI) / 180);
+    const front = Math.max(0, s); // 1 at the face
+    const back = Math.max(0, -s);
+    const side = 1 - front - back;
+    const frontLimit = receding ? 48 : 60; // brows sit at 72, so this clears them
+    const sideLimit = long ? 122 : 90;
+    const backLimit = long ? 138 : 102;
+    return frontLimit * front + sideLimit * side + backLimit * back;
+  };
+
+  const rings = 14;
+  const cols = 48;
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const v = new THREE.Vector3();
+  for (let ring = 0; ring <= rings; ring++) {
+    for (let col = 0; col <= cols; col++) {
+      const phi = (col / cols) * 360;
+      const theta = (ring / rings) * hairline(phi);
+      v.set(
+        -Math.cos((phi * Math.PI) / 180) * Math.sin((theta * Math.PI) / 180),
+        Math.cos((theta * Math.PI) / 180),
+        Math.sin((phi * Math.PI) / 180) * Math.sin((theta * Math.PI) / 180),
+      );
+      const d = deform(v, look);
+      // Proud of the scalp, with real thickness over the crown and a slight
+      // sweep back, so it reads as hair rather than a painted skull.
+      const t = 1 - ring / rings;
+      const lift = 1.03 + 0.075 * t * t + 0.03 * t;
+      const sweep = long ? 0 : Math.max(0, Math.sin((phi * Math.PI) / 180)) * 0.02 * (1 - ring / rings);
+      positions.push(d.x * lift, d.y * lift + 0.02 * (1 - ring / rings), d.z * lift - sweep);
+    }
+  }
+  for (let ring = 0; ring < rings; ring++) {
+    for (let col = 0; col < cols; col++) {
+      const a = ring * (cols + 1) + col;
+      const b = a + cols + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const shell = new THREE.Mesh(geo, mat);
+  shell.castShadow = true;
+  group.add(shell);
+
+  if (look.hairStyle === "tied") {
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 14), mat);
+    bun.position.set(0, 0.16, -0.92);
+    bun.castShadow = true;
+    group.add(bun);
+  }
+  return group;
+}
+
+// ---------------------------------------------------------------- the body
+
+function limb(
+  parent: THREE.Object3D,
+  length: number,
+  topR: number,
+  botR: number,
+  mat: THREE.Material,
+): THREE.Group {
+  const joint = new THREE.Group();
+  const geo = new THREE.CylinderGeometry(topR, botR, length, 14, 1, false);
+  // Origin at the top so a rotation swings the limb from its joint.
+  geo.translate(0, -length / 2, 0);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  joint.add(mesh);
+  parent.add(joint);
+  return joint;
+}
+
+/** A built person, with the handles an animator needs. */
+export interface Character {
+  group: THREE.Group;
+  head: THREE.Group;
+  neck: THREE.Group;
+  chest: THREE.Group;
+  hips: THREE.Group;
+  arms: { left: THREE.Group; right: THREE.Group; leftFore: THREE.Group; rightFore: THREE.Group };
+  legs: { left: THREE.Group; right: THREE.Group; leftShin: THREE.Group; rightShin: THREE.Group };
+  eyelids: THREE.Mesh[];
+  look: Look;
+  /** Metres from the floor to the top of the head, in the current pose. */
+  height: number;
+}
+
+export function buildCharacter(spec: CharacterSpec): Character {
+  const look = pickLook(spec);
+  const rnd = seeded(`${spec.seed}:pose`);
+  const group = new THREE.Group();
+
+  const scale = look.height / 1.75;
+  const build = look.build;
+  const skinMat = new THREE.MeshStandardMaterial({ color: look.skin, roughness: 0.66, metalness: 0.01 });
+  const dress = spec.dress ?? "suit";
+  const suitMat = new THREE.MeshStandardMaterial({
+    color: look.suit,
+    roughness: dress === "robe" ? 0.92 : 0.78,
+    metalness: 0.01,
+  });
+  const shirtMat = new THREE.MeshStandardMaterial({
+    color: dress === "casual" ? look.accent : 0xf2efe6,
+    roughness: 0.8,
+  });
+  const accentMat = new THREE.MeshStandardMaterial({ color: look.accent, roughness: 0.6 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x241d18, roughness: 0.45, metalness: 0.08 });
+
+  // --- The skeleton, in metres for a 1.75m person.
+  //   hip joint 0.92 · shoulder 1.44 · chin 1.52 · eyes 1.63 · crown 1.75
+  //   knee 0.50 · ankle 0.07
+  // Everything below is expressed against those landmarks, so the proportions
+  // hold whatever height the seed picked.
+  const hips = new THREE.Group();
+  group.add(hips);
+
+  const spine = new THREE.Group();
+  spine.position.y = 0.14;
+  hips.add(spine);
+
+  const chest = new THREE.Group();
+  chest.position.y = 0.16; // 1.22 standing
+  spine.add(chest);
+
+  // One lathed torso from hip to shoulder, so there is no seam at the waist.
+  const rows: [number, number][] = [
+    [-0.33, 0.163],
+    [-0.24, 0.152],
+    [-0.14, 0.146],
+    [-0.04, 0.152],
+    [0.06, 0.163],
+    [0.14, 0.169],
+    [0.195, 0.163],
+    [0.235, 0.13],
+    [0.268, 0.068],
+  ];
+  const torsoGeo = new THREE.LatheGeometry(
+    rows.map(([y, r]) => new THREE.Vector2(r * build, y)),
+    28,
+  );
+  torsoGeo.scale(1, 1, 0.72);
+  const torso = new THREE.Mesh(torsoGeo, dress === "casual" ? shirtMat : suitMat);
+  torso.castShadow = true;
+  torso.receiveShadow = true;
+  chest.add(torso);
+
+  // Hips and seat, so a seated figure has something to sit on.
+  const seat = new THREE.Mesh(
+    new THREE.SphereGeometry(0.168 * build, 20, 14, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.58),
+    suitMat,
+  );
+  seat.scale.set(1, 0.72, 0.78);
+  seat.position.y = 0.02;
+  seat.castShadow = true;
+  hips.add(seat);
+
+  // The shirt and the tie or blouse showing in the jacket's opening.
+  if (dress === "suit" || dress === "smart") {
+    const vee = new THREE.Mesh(new THREE.ConeGeometry(0.038 * build, 0.13, 3), shirtMat);
+    vee.rotation.set(Math.PI, 0, 0);
+    vee.position.set(0, 0.175, 0.112 * build);
+    vee.scale.set(1, 1, 0.35);
+    chest.add(vee);
+
+    if (dress === "suit" && rnd() < 0.72) {
+      const tie = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.1, 0.009), accentMat);
+      tie.position.set(0, 0.152, 0.122 * build);
+      tie.rotation.x = -0.06;
+      chest.add(tie);
+      const knot = new THREE.Mesh(new THREE.BoxGeometry(0.029, 0.03, 0.014), accentMat);
+      knot.position.set(0, 0.212, 0.114 * build);
+      chest.add(knot);
+    } else {
+      const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 8, 20, Math.PI * 1.3), accentMat);
+      scarf.position.set(0, 0.2, 0.055 * build);
+      scarf.rotation.set(Math.PI / 2.2, 0, Math.PI * 0.85);
+      chest.add(scarf);
+    }
+    // Lapels, angled off the collar.
+    for (const side of [-1, 1]) {
+      const lapel = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.15, 0.011), suitMat);
+      lapel.position.set(side * 0.042 * build, 0.168, 0.116 * build);
+      lapel.rotation.z = side * 0.22;
+      chest.add(lapel);
+    }
+  }
+
+  // --- Neck and head.
+  const neck = new THREE.Group();
+  neck.position.y = 0.25; // 1.47
+  chest.add(neck);
+  const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.052, 0.09, 14), skinMat);
+  neckMesh.position.y = 0.015;
+  neckMesh.castShadow = true;
+  neck.add(neckMesh);
+
+  const head = new THREE.Group();
+  head.position.y = 0.05; // chin, 1.52
+  neck.add(head);
+
+  const headRadius = 0.113;
+  const headMat = new THREE.MeshStandardMaterial({
+    map: faceTexture(look),
+    roughness: 0.62,
+    metalness: 0.01,
+  });
+  const skull = new THREE.Mesh(sculptHead(look), headMat);
+  skull.scale.setScalar(headRadius);
+  skull.position.y = headRadius * 1.0; // eye line lands near 1.63
+  skull.castShadow = true;
+  skull.receiveShadow = true;
+  head.add(skull);
+
+  // Everything on the face is placed by landmark, on the sculpted surface, so
+  // the eyes sit in the sockets the sculpt actually made.
+  const onSkull = (m: Landmark, out = 0): THREE.Vector3 =>
+    deform(dirOf(m), look).multiplyScalar(headRadius).add(new THREE.Vector3(0, skull.position.y, 0))
+      .addScaledVector(deform(dirOf(m), look).normalize(), out * headRadius);
+
+  for (const m of [FACE.earL, FACE.earR] as Landmark[]) {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(headRadius * 0.2, 12, 10), skinMat);
+    ear.scale.set(0.3, 1, 0.6);
+    const p = onSkull(m, -0.02);
+    ear.position.copy(p);
+    ear.castShadow = true;
+    head.add(ear);
+  }
+
+  // Eyes: a white ball, an iris and a pupil, so they catch the light.
+  const scleraMat = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.22 });
+  const irisMat = new THREE.MeshStandardMaterial({ color: look.eye, roughness: 0.18, metalness: 0.05 });
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0a0908 });
+  const eyelids: THREE.Mesh[] = [];
+  const eyeR = headRadius * 0.115;
+  for (const m of [FACE.eyeL, FACE.eyeR] as Landmark[]) {
+    const eye = new THREE.Group();
+    // Set back into the socket so only the front of the ball shows.
+    eye.position.copy(onSkull(m, -0.075));
+    eye.lookAt(new THREE.Vector3(eye.position.x * 2.2, eye.position.y, eye.position.z * 3));
+    head.add(eye);
+
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 16, 12), scleraMat);
+    eye.add(ball);
+    const iris = new THREE.Mesh(new THREE.CircleGeometry(eyeR * 0.5, 18), irisMat);
+    iris.position.z = eyeR * 0.9;
+    eye.add(iris);
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(eyeR * 0.22, 12), pupilMat);
+    pupil.position.z = eyeR * 0.96;
+    eye.add(pupil);
+
+    // Lids top and bottom, so the eye is not a staring ball. The upper one
+    // scales down over the eye to blink.
+    const lower = new THREE.Mesh(new THREE.SphereGeometry(eyeR * 1.06, 14, 10), skinMat);
+    lower.scale.y = 0.42;
+    lower.position.y = -eyeR * 0.72;
+    eye.add(lower);
+
+    const lid = new THREE.Mesh(new THREE.SphereGeometry(eyeR * 1.08, 14, 10), skinMat);
+    lid.scale.y = 0.5;
+    lid.position.y = eyeR * 0.68;
+    eye.add(lid);
+    eyelids.push(lid);
+  }
+
+  const hair = buildHair(look);
+  if (hair) {
+    hair.scale.setScalar(headRadius);
+    hair.position.y = skull.position.y;
+    head.add(hair);
+  }
+
+  if (look.glasses) {
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2622, roughness: 0.35, metalness: 0.5 });
+    for (const m of [FACE.eyeL, FACE.eyeR] as Landmark[]) {
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(headRadius * 0.17, headRadius * 0.014, 8, 20),
+        frameMat,
+      );
+      rim.position.copy(onSkull(m, 0.03));
+      rim.lookAt(new THREE.Vector3(rim.position.x * 2.2, rim.position.y, rim.position.z * 3));
+      head.add(rim);
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(headRadius * 0.018, headRadius * 0.018, headRadius * 0.62),
+        frameMat,
+      );
+      const a = onSkull(m, 0.02);
+      arm.position.set(a.x * 1.5, a.y, a.z * 0.55);
+      head.add(arm);
+    }
+    const nose = onSkull(FACE.noseBridge, 0.04);
+    const bridge = new THREE.Mesh(
+      new THREE.BoxGeometry(headRadius * 0.17, headRadius * 0.012, headRadius * 0.012),
+      frameMat,
+    );
+    bridge.position.copy(nose);
+    head.add(bridge);
+  }
+
+  // --- Arms. Shoulder 1.44, elbow 1.10, wrist 0.85.
+  const sleeve = dress === "casual" ? shirtMat : suitMat;
+  const makeArm = (side: number) => {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(side * 0.163 * build, 0.185, 0);
+    chest.add(shoulder);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.043 * build, 14, 12), sleeve);
+    cap.scale.set(1, 0.8, 0.92);
+    cap.castShadow = true;
+    shoulder.add(cap);
+
+    const upper = limb(shoulder, 0.31, 0.046 * build, 0.037 * build, sleeve);
+    const fore = limb(upper, 0.25, 0.037 * build, 0.03 * build, sleeve);
+    fore.position.y = -0.31;
+
+    // A thin shirt cuff at the sleeve's edge, then a hand that overlaps it, so
+    // the wrist is a join rather than a gap.
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.031, 0.014, 12), shirtMat);
+    cuff.position.y = -0.246;
+    fore.add(cuff);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 12), skinMat);
+    hand.scale.set(0.78, 1.5, 0.48);
+    hand.position.y = -0.288;
+    hand.castShadow = true;
+    fore.add(hand);
+    return { shoulder, fore };
+  };
+  const rightArm = makeArm(1);
+  const leftArm = makeArm(-1);
+
+  // --- Legs. Hip 0.92, knee 0.50, ankle 0.07.
+  const makeLeg = (side: number) => {
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.078 * build, -0.02, 0);
+    hips.add(hip);
+    const thigh = limb(hip, 0.4, 0.075 * build, 0.058 * build, suitMat);
+    const shin = limb(thigh, 0.43, 0.062 * build, 0.046 * build, suitMat);
+    shin.position.y = -0.4;
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.05, 0.23), shoeMat);
+    shoe.position.set(0, -0.452, 0.052);
+    shoe.castShadow = true;
+    shin.add(shoe);
+    return { hip, shin };
+  };
+  const rightLeg = makeLeg(1);
+  const leftLeg = makeLeg(-1);
+
+  group.scale.setScalar(scale);
+
+  const character: Character = {
+    group,
+    head,
+    neck,
+    chest,
+    hips,
+    arms: {
+      left: leftArm.shoulder,
+      right: rightArm.shoulder,
+      leftFore: leftArm.fore,
+      rightFore: rightArm.fore,
+    },
+    legs: { left: leftLeg.hip, right: rightLeg.hip, leftShin: leftLeg.shin, rightShin: rightLeg.shin },
+    eyelids,
+    look,
+    height: look.height,
+  };
+
+  applyPose(character, spec.pose ?? "stand", rnd);
+  return character;
+}
+
+// ------------------------------------------------------------------- poses
+
+/** Sets the joint rotations for a pose, with a little per-person variation. */
+export function applyPose(c: Character, pose: Pose, rnd: () => number = Math.random): void {
+  const jitter = (k: number) => (rnd() - 0.5) * k;
+  const { arms, legs, hips, chest, neck } = c;
+
+  if (pose === "sit" || pose === "sit-forward") {
+    // Seated on a 0.46m chair: the hips drop and the legs fold forward.
+    hips.position.y = 0.5;
+    legs.left.rotation.x = -Math.PI / 2 + jitter(0.1);
+    legs.right.rotation.x = -Math.PI / 2 + jitter(0.1);
+    legs.leftShin.rotation.x = Math.PI / 2.1 + jitter(0.12);
+    legs.rightShin.rotation.x = Math.PI / 2.1 + jitter(0.12);
+    legs.left.rotation.z = 0.1;
+    legs.right.rotation.z = -0.1;
+
+    const forward = pose === "sit-forward" ? 0.26 : 0.05;
+    chest.rotation.x = forward;
+    neck.rotation.x = -forward * 0.6;
+
+    // Forearms come up onto the table in front of them.
+    arms.left.rotation.x = -0.42 - forward + jitter(0.09);
+    arms.right.rotation.x = -0.42 - forward + jitter(0.09);
+    arms.left.rotation.z = 0.2;
+    arms.right.rotation.z = -0.2;
+    arms.leftFore.rotation.x = -1.05 + jitter(0.14);
+    arms.rightFore.rotation.x = -1.05 + jitter(0.14);
+    return;
+  }
+
+  if (pose === "lean") {
+    hips.position.y = 0.92;
+    chest.rotation.z = 0.06;
+    hips.rotation.z = -0.05;
+    legs.left.rotation.x = 0.05;
+    legs.right.rotation.x = -0.08;
+    legs.right.rotation.z = -0.14;
+    arms.left.rotation.x = -0.22;
+    arms.left.rotation.z = 0.14;
+    arms.leftFore.rotation.x = -1.5;
+    arms.right.rotation.z = -0.1;
+    arms.rightFore.rotation.x = -0.28;
+    return;
+  }
+
+  // Standing: arms hang with a slight outward set, weight a touch to one side.
+  hips.position.y = 0.92;
+  arms.left.rotation.z = 0.11 + jitter(0.05);
+  arms.right.rotation.z = -0.11 + jitter(0.05);
+  arms.left.rotation.x = 0.05 + jitter(0.12);
+  arms.right.rotation.x = 0.05 + jitter(0.12);
+  arms.leftFore.rotation.x = -0.2 + jitter(0.15);
+  arms.rightFore.rotation.x = -0.2 + jitter(0.15);
+  legs.left.rotation.x = jitter(0.06);
+  legs.right.rotation.x = jitter(0.06);
+}
+
+// --------------------------------------------------------------- animation
+
+/**
+ * Keeps a cast alive: breathing, blinking, small weight shifts, and heads that
+ * turn toward whoever has just walked in.
+ */
+export class CharacterAnimator {
+  private cast: { c: Character; phase: number; nextBlink: number; blink: number; baseY: number }[] = [];
+  private clock = 0;
+
+  add(character: Character): void {
+    this.cast.push({
+      c: character,
+      phase: Math.random() * Math.PI * 2,
+      nextBlink: 1 + Math.random() * 5,
+      blink: 0,
+      baseY: character.chest.position.y,
+    });
+  }
+
+  clear(): void {
+    this.cast.length = 0;
+  }
+
+  update(dt: number, lookAt: THREE.Vector3 | null): void {
+    this.clock += dt;
+    const world = new THREE.Vector3();
+
+    for (const entry of this.cast) {
+      const { c } = entry;
+      const t = this.clock + entry.phase;
+
+      // Breathing, in the chest rather than the whole body.
+      c.chest.position.y = entry.baseY + Math.sin(t * 1.15) * 0.006;
+      c.chest.scale.setScalar(1 + Math.sin(t * 1.15) * 0.008);
+
+      // A slow weight shift, so nobody stands perfectly still.
+      c.hips.rotation.y = Math.sin(t * 0.31) * 0.035;
+      c.chest.rotation.y = Math.sin(t * 0.23 + 1.1) * 0.045;
+
+      // Blinking.
+      entry.nextBlink -= dt;
+      if (entry.nextBlink <= 0) {
+        entry.blink = 0.14;
+        entry.nextBlink = 1.8 + Math.random() * 5.5;
+      }
+      if (entry.blink > 0) {
+        entry.blink -= dt;
+        const shut = Math.sin(Math.max(0, entry.blink / 0.14) * Math.PI);
+        for (const lid of c.eyelids) lid.scale.y = 0.02 + shut * 1.05;
+      } else {
+        for (const lid of c.eyelids) lid.scale.y = 0.02;
+      }
+
+      // Heads turn toward the player, within a polite range.
+      if (lookAt) {
+        c.head.getWorldPosition(world);
+        const to = lookAt.clone().sub(world);
+        const yaw = Math.atan2(to.x, to.z);
+        // Convert into the head's local frame via the character's own rotation.
+        let local = yaw - c.group.rotation.y - c.hips.rotation.y - c.chest.rotation.y;
+        while (local > Math.PI) local -= Math.PI * 2;
+        while (local < -Math.PI) local += Math.PI * 2;
+        const clamped = Math.max(-0.85, Math.min(0.85, local));
+        const attention = Math.abs(local) < 1.5 ? 1 : 0;
+        c.neck.rotation.y += (clamped * attention - c.neck.rotation.y) * Math.min(1, dt * 2.4);
+        const pitch = Math.max(-0.25, Math.min(0.3, Math.atan2(lookAt.y - world.y, to.length())));
+        c.neck.rotation.z += (0 - c.neck.rotation.z) * Math.min(1, dt * 2);
+        c.head.rotation.x += (-pitch * attention * 0.6 - c.head.rotation.x) * Math.min(1, dt * 2);
+      }
+    }
+  }
+}
+
+
+// ------------------------------------------------------------------- crowds
+
+/**
+ * A chamber holds a hundred members and a briefing room holds forty
+ * reporters. Building each of them as a full character would cost hundreds of
+ * draw calls, so anonymous people are drawn as instanced meshes: one body, one
+ * head and one head of hair per group, with a matrix each.
+ *
+ * They are seated, they vary in size and colour, and from the well of the
+ * House that is the whole job.
+ */
+export interface CrowdMember {
+  position: THREE.Vector3;
+  rotationY: number;
+  /** Groups the member into one instanced draw, e.g. by faction. */
+  group: number;
+  seed: number;
+}
+
+/** The colours each crowd group is drawn in. */
+export interface CrowdStyle {
+  suit: number;
+  accent?: number;
+}
+
+function seatedBodyGeometry(): THREE.BufferGeometry {
+  // A seated torso with thighs, as one static mesh. The pose never changes, so
+  // it does not need joints.
+  const parts: THREE.BufferGeometry[] = [];
+
+  const rows: [number, number][] = [
+    [0.0, 0.17],
+    [0.12, 0.16],
+    [0.24, 0.168],
+    [0.34, 0.178],
+    [0.42, 0.172],
+    [0.48, 0.138],
+    [0.52, 0.07],
+  ];
+  const torso = new THREE.LatheGeometry(
+    rows.map(([y, r]) => new THREE.Vector2(r, y)),
+    16,
+  );
+  torso.scale(1, 1, 0.74);
+  torso.translate(0, 0.5, 0);
+  parts.push(torso);
+
+  // Thighs forward, shins down.
+  for (const side of [-1, 1]) {
+    const thigh = new THREE.CylinderGeometry(0.075, 0.06, 0.4, 8);
+    thigh.rotateX(Math.PI / 2);
+    thigh.translate(side * 0.085, 0.48, 0.2);
+    parts.push(thigh);
+    const shin = new THREE.CylinderGeometry(0.06, 0.045, 0.42, 8);
+    shin.translate(side * 0.085, 0.26, 0.39);
+    parts.push(shin);
+  }
+  // Arms tucked against the body, forearms resting forward on the desk, so a
+  // packed bench reads as people rather than a row of aeroplanes.
+  for (const side of [-1, 1]) {
+    const upper = new THREE.CylinderGeometry(0.044, 0.036, 0.3, 8);
+    upper.rotateX(0.42);
+    upper.rotateZ(side * -0.08);
+    upper.translate(side * 0.152, 0.82, 0.03);
+    parts.push(upper);
+    const fore = new THREE.CylinderGeometry(0.035, 0.029, 0.26, 8);
+    fore.rotateX(Math.PI / 2.1);
+    fore.translate(side * 0.14, 0.71, 0.22);
+    parts.push(fore);
+  }
+  // Shoulders, sitting on the torso rather than beyond it.
+  for (const side of [-1, 1]) {
+    const cap = new THREE.SphereGeometry(0.045, 10, 8);
+    cap.scale(1, 0.82, 1);
+    cap.translate(side * 0.152, 0.955, 0);
+    parts.push(cap);
+  }
+
+  return mergeGeometries(parts);
+}
+
+/** Concatenates geometries that share an attribute layout. */
+function mergeGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  for (const g of list) {
+    const geo = g.index ? g.toNonIndexed() : g;
+    const p = geo.attributes.position.array;
+    geo.computeVertexNormals();
+    const n = geo.attributes.normal.array;
+    for (let i = 0; i < p.length; i++) positions.push(p[i]);
+    for (let i = 0; i < n.length; i++) normals.push(n[i]);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  out.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  return out;
+}
+
+/**
+ * One shared face for the crowd. Instanced meshes cannot each have their own
+ * texture, so everybody in a chamber gets the same features — which reads fine
+ * from the well of the House and costs one texture instead of a hundred.
+ * Per-instance colour still varies the skin underneath it.
+ */
+let crowdFace: THREE.CanvasTexture | null = null;
+function crowdFaceTexture(): THREE.CanvasTexture {
+  if (crowdFace) return crowdFace;
+  const look = pickLook({ seed: "crowd-face" });
+  // Neutral skin, so the per-instance colour is what tints it.
+  const tex = faceTexture({ ...look, skin: 0xffffff, hair: 0x6b5a48, age: 40 });
+  crowdFace = tex;
+  return tex;
+}
+
+/** A simplified head and hair for someone you will never speak to. */
+function crowdHeadGeometry(): THREE.BufferGeometry {
+  const look = pickLook({ seed: "crowd" });
+  const geo = new THREE.SphereGeometry(1, 22, 16);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const d = deform(v, look);
+    pos.setXYZ(i, d.x, d.y, d.z);
+  }
+  geo.computeVertexNormals();
+  geo.scale(0.113, 0.113, 0.113);
+  geo.translate(0, 1.2, 0);
+  return geo;
+}
+
+function crowdHairGeometry(): THREE.BufferGeometry {
+  const sphere = new THREE.SphereGeometry(1.04, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52);
+  const look = pickLook({ seed: "crowd" });
+  const pos = sphere.attributes.position as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const d = deform(v.clone().normalize(), look).multiplyScalar(1.06);
+    pos.setXYZ(i, d.x, d.y, d.z);
+  }
+  sphere.computeVertexNormals();
+  sphere.scale(0.113, 0.113, 0.113);
+  sphere.translate(0, 1.2, 0);
+  return sphere;
+}
+
+/**
+ * Draws a seated crowd as instanced meshes: three draw calls per group,
+ * however many people are in it.
+ */
+export function buildCrowd(members: CrowdMember[], styles: CrowdStyle[]): THREE.Group {
+  const root = new THREE.Group();
+  const bodyGeo = seatedBodyGeometry();
+  const headGeo = crowdHeadGeometry();
+  const hairGeo = crowdHairGeometry();
+
+  const byGroup = new Map<number, CrowdMember[]>();
+  for (const m of members) {
+    const list = byGroup.get(m.group) ?? [];
+    list.push(m);
+    byGroup.set(m.group, list);
+  }
+
+  const matrix = new THREE.Matrix4();
+  const quat = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  const colour = new THREE.Color();
+
+  for (const [groupIndex, list] of byGroup) {
+    const style = styles[groupIndex % styles.length];
+    const bodyMat = new THREE.MeshStandardMaterial({ color: style.suit, roughness: 0.8 });
+    const headMat = new THREE.MeshStandardMaterial({ map: crowdFaceTexture(), roughness: 0.66 });
+    const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
+
+    const body = new THREE.InstancedMesh(bodyGeo, bodyMat, list.length);
+    const head = new THREE.InstancedMesh(headGeo, headMat, list.length);
+    const hair = new THREE.InstancedMesh(hairGeo, hairMat, list.length);
+    for (const mesh of [body, head, hair]) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      root.add(mesh);
+    }
+
+    list.forEach((m, i) => {
+      const rnd = seeded(`crowd:${m.seed}`);
+      const h = 0.93 + rnd() * 0.14;
+      quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), m.rotationY + (rnd() - 0.5) * 0.35);
+      scale.set(h, h, h);
+      matrix.compose(m.position, quat, scale);
+      body.setMatrixAt(i, matrix);
+      head.setMatrixAt(i, matrix);
+      hair.setMatrixAt(i, matrix);
+
+      // Per-instance colour is what stops a chamber looking like clones.
+      body.setColorAt(i, colour.set(style.suit).offsetHSL(0, 0, (rnd() - 0.5) * 0.09));
+      head.setColorAt(i, colour.set(SKIN[Math.floor(rnd() * SKIN.length)]));
+      hair.setColorAt(i, colour.set(HAIR[Math.floor(rnd() * HAIR.length)]));
+    });
+    for (const mesh of [body, head, hair]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+  return root;
+}

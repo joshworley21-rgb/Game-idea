@@ -18,8 +18,8 @@ type Strategy = "idle" | "workaholic" | "balanced" | "family-first";
  */
 const STATION_WEIGHTS: Record<Strategy, Partial<Record<string, number>>> = {
   idle: {},
-  workaholic: { staff: 3, desk: 2, press: 2, phone: 2 },
-  balanced: { staff: 2, press: 1.5, phone: 1, family: 2, rest: 2 },
+  workaholic: { staff: 3, desk: 2, press: 2, phone: 2, floor: 2 },
+  balanced: { staff: 2, press: 1.5, phone: 1, floor: 1.5, family: 2, rest: 2 },
   "family-first": { family: 4, rest: 3, staff: 1 },
 };
 

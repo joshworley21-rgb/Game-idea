@@ -83,7 +83,7 @@ function prepare(object: THREE.Object3D, placement: PropPlacement): THREE.Object
  * taking the whole room down with it.
  */
 export async function loadProps(
-  scene: THREE.Scene,
+  scene: THREE.Object3D,
   onProgress?: (progress: LoadProgress) => void,
   footprints?: Footprint[],
 ): Promise<number> {

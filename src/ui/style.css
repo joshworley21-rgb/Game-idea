@@ -506,3 +506,9 @@ body {
   font-size: 10.5px; color: var(--ink-faint); margin-top: 5px; line-height: 1.45;
 }
 .family-state.strained { color: var(--warn); }
+
+/* The room you are standing in, under the date. */
+.date-room {
+  font-size: 11px; color: var(--gold); letter-spacing: 0.05em;
+  text-transform: uppercase; margin-top: 5px;
+}

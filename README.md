@@ -16,20 +16,29 @@ npm install
 npm run dev      # http://localhost:5173
 ```
 
-You walk the Oval Office in first person. Each object is a system:
+You walk six rooms in first person, and each one does what that room really
+does. Doors on the floor take you between them; the number keys walk you
+straight to a station, wherever it lives.
 
-| Station | What it does |
-| --- | --- |
-| **The Resolute Desk** | Legislation, executive orders, clemency, vetoes |
-| **The Cabinet Table** | The annual budget: nine agencies and the tax rate |
-| **The West Wing** | Cabinet meetings, whipping votes, fundraisers, reshuffles |
-| **The Secure Line** | Allies, summits, trade deals, the intelligence brief |
-| **The Press Pool** | Addresses, hostile interviews, rallies, campaign swings |
-| **The Residence** | Your family by name: their evenings, and what they are carrying |
-| **The Private Study** | Sleep debt, fitness, the physician, and an hour that is yours |
+| Room | Station | What happens there |
+| --- | --- | --- |
+| **The Oval Office** | The Resolute Desk | Executive orders, clemency, vetoes: what you can do alone |
+| | The Secure Line | Allies, summits, trade deals, the intelligence brief |
+| **The Cabinet Room** | The Cabinet Table | The annual budget: nine agencies and the tax rate |
+| | The West Wing | Cabinet meetings, fundraisers, reshuffles |
+| **The Capitol** | The House Floor | Bringing a bill to a vote, and whipping it, in front of the chamber |
+| **The Briefing Room** | The Press Pool | Addresses, hostile interviews, rallies, campaign swings |
+| **The Residence** | Upstairs | Your family by name: their evenings, and what they are carrying |
+| **The Private Study** | Yourself | Sleep debt, fitness, the physician, and an hour that is yours |
+
+The rooms are not empty. Your six named secretaries are round the Cabinet
+table, your family is upstairs, a press corps fills the briefing room, and the
+House chamber holds a hundred members seated in their five faction blocks. They
+breathe, blink, shift their weight, and turn to look at you when you walk in.
 
 **Controls** — `W A S D` and the mouse to move and look, `E` to use what you are
-standing at, `1`–`7` to jump straight to a station, `Tab` for the dashboard,
+standing at or to walk through the door you are standing in, `1`–`8` to go
+straight to a station in whatever room it lives in, `Tab` for the dashboard,
 `Enter` to end the month, `Esc` to close a panel. Click an object in the room to
 open it, or click empty space to capture the mouse. Everything is reachable from
 the keyboard alone, and on a touch screen from a thumb alone.
@@ -226,6 +235,40 @@ and a clock driven by that would tick in slow motion on a slow device.
 Sound starts on the click that takes the oath, because browsers will not open
 an audio context any other way, and the mute preference persists.
 
+## The people
+
+There is no CC0 source of good human models with faces, so the cast is
+generated in code. Each person is built from a seed taken from their name, so a
+given secretary looks the same every time you walk into the Cabinet Room.
+
+The head is a sphere pushed into a skull — brow ridge, cheekbones, eye sockets,
+a nose, a jaw that tapers to a chin — and the face is painted onto its UVs.
+Both are driven from **one set of anatomical landmarks** expressed as directions
+on that sphere, so the painted brows sit on the brow ridge and the eyeballs sit
+in the sockets the sculpt actually made; neither can drift away from the other.
+The hair is a shell built from the same deform function, cut at a hairline that
+is higher across the forehead than at the sides, so long hair never ends up
+hanging over the eyes.
+
+The body is a real joint hierarchy — hips → spine → chest → neck → head, and
+chest → shoulder → upper arm → forearm → hand — laid out on human proportions
+(hip 0.92m, shoulder 1.44, chin 1.52, eyes 1.63, crown 1.75 for a 1.75m
+person). Posing and animating are rotations rather than rebuilt geometry, which
+is what makes seated, leaning and standing the same code. They breathe, blink
+on their own schedule, shift their weight, and turn their heads toward you
+within a polite range when you walk in.
+
+Everything varies with the seed: height, build, skin, eye colour, hair colour
+and style, facial hair, glasses, brow weight, nose length, jaw width. Hair greys
+with age rather than being randomly grey, and past fifty the face picks up crow's
+feet and nasolabial folds.
+
+**Crowds are instanced.** A hundred members of Congress as full characters would
+cost hundreds of draw calls, so anonymous people are drawn as three instanced
+meshes per group — body, head, hair — with a matrix and a colour each. The
+chamber's 114 members cost 15 draw calls and 8ms to build; one full character
+costs 7ms. Nobody in a crowd is a clone: build, skin and hair vary per instance.
+
 ## The 3D assets
 
 The furniture is real geometry, not boxes: eleven models from
@@ -319,15 +362,16 @@ npm run balance    # play the term headlessly under four strategies
 npm run assets     # rebuild the 3D props from Poly Haven
 ```
 
-`npm run balance` plays six seeds under each of four crude strategies and prints
+`npm run balance` plays six seeds under each of four crude strategies — each
+one expressed as the rooms that president actually walks to — and prints
 where the numbers land. It is the fastest way to see whether a change to the
 model has broken the difficulty curve:
 
 ```
 idle          legacy 43.5  approval 46.4  debt 103.7  health 41.5  marriage 32.2  bills 0    earlyEnd 0/6
-workaholic    legacy 47.0  approval 47.2  debt 102.5  health 13.0  marriage 24.8  bills 6.7  earlyEnd 2/6
-balanced      legacy 59.2  approval 53.2  debt 105.2  health 86.2  marriage 82.2  bills 7.2  earlyEnd 0/6
-family-first  legacy 53.0  approval 49.1  debt 103.3  health 93.7  marriage 80.8  bills 0    earlyEnd 0/6
+workaholic    legacy 48.0  approval 46.6  debt 103.5  health 10.8  marriage 28.0  bills 6.7  earlyEnd 2/6
+balanced      legacy 58.8  approval 50.4  debt 104.3  health 88.2  marriage 87.8  bills 6.7  earlyEnd 0/6
+family-first  legacy 55.0  approval 48.9  debt 103.5  health 93.8  marriage 92.7  bills 0    earlyEnd 0/6
 ```
 
 Governing well beats governing hard, and neither beats doing both — which is the

@@ -19,6 +19,7 @@ const bandLow = (v: number, good: number, bad: number): "ok" | "warn" | "bad" =>
 export class Hud {
   readonly root: HTMLElement;
   private date = el("div", { class: "hud-card", id: "hud-date" });
+  private roomName = "The Oval Office";
   private power = el("div", { class: "hud-card", id: "hud-power" });
   private nation = el("div", { class: "hud-card", id: "hud-nation" });
   private self = el("div", { class: "hud-card", id: "hud-self" });
@@ -111,6 +112,13 @@ export class Hud {
     this.endButton.textContent = label;
   }
 
+  /** Which room the president is standing in, shown under the date. */
+  setRoom(name: string): void {
+    this.roomName = name;
+    const line = this.date.querySelector(".date-room");
+    if (line) line.textContent = name;
+  }
+
   render(s: GameState): void {
     const cal = calendar(s.month);
 
@@ -118,6 +126,7 @@ export class Hud {
     this.date.append(
       el("div", { class: "date-line" }, [cal.label]),
       el("div", { class: "date-sub" }, [`Month ${s.month} of ${TERM_MONTHS}`]),
+      el("div", { class: "date-room" }, [this.roomName]),
       el("div", { class: "term-track" }, [
         el("div", { class: "term-fill", style: `width:${(s.month / TERM_MONTHS) * 100}%` }),
       ]),

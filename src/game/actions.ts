@@ -6,6 +6,7 @@ export const STATION_ORDER: StationId[] = [
   "desk",
   "budget",
   "staff",
+  "floor",
   "phone",
   "press",
   "family",
@@ -15,7 +16,11 @@ export const STATION_ORDER: StationId[] = [
 export const STATION_INFO: Record<StationId, { name: string; blurb: string }> = {
   desk: {
     name: "The Resolute Desk",
-    blurb: "Legislation, executive orders, and the signature that makes them real.",
+    blurb: "Executive orders, clemency, vetoes: the things you can do alone.",
+  },
+  floor: {
+    name: "The House Floor",
+    blurb: "Where a bill becomes a law, or does not, in front of four hundred people.",
   },
   budget: {
     name: "The Cabinet Table",
@@ -110,7 +115,7 @@ export const ACTIONS: OfficeAction[] = [
   },
   {
     id: "whip",
-    station: "staff",
+    station: "floor",
     label: "Work the Hill personally",
     detail: "Calls, favours, and a long afternoon in the Speaker's office.",
     ap: 1,

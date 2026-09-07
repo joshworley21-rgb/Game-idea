@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { clampToRoom, resolveCollisions } from "./office.ts";
+import { resolveCollisions } from "./office.ts";
 
 const EYE_HEIGHT = 1.62;
 const SPEED = 3.1;
@@ -40,6 +40,8 @@ export class PlayerController {
 
   /** Furniture footprints the player cannot walk through. */
   colliders: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
+  /** Pushes the player back inside whichever room they are in. */
+  clamp: (p: THREE.Vector3) => void = () => {};
 
   /** Set false while a UI panel is open. */
   enabled = true;
@@ -159,6 +161,12 @@ export class PlayerController {
   }
 
   /** Turns the camera to face a point. */
+  /** Drops the player at a spot, killing any momentum they had. */
+  teleport(position: THREE.Vector3): void {
+    this.camera.position.set(position.x, EYE_HEIGHT, position.z);
+    this.velocity.set(0, 0, 0);
+  }
+
   lookAt(target: THREE.Vector3): void {
     const dir = target.clone().sub(this.camera.position);
     this.yaw = Math.atan2(-dir.x, -dir.z);
@@ -186,7 +194,7 @@ export class PlayerController {
 
     this.velocity.multiplyScalar(Math.max(0, 1 - DAMPING * dt));
     this.camera.position.addScaledVector(this.velocity, dt);
-    clampToRoom(this.camera.position);
+    this.clamp(this.camera.position);
     resolveCollisions(this.camera.position, this.colliders);
 
     // A little head bob so walking has weight.

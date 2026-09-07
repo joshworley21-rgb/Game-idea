@@ -1,13 +1,18 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { buildOffice } from "./office.ts";
-import type { OfficeBuild } from "./office.ts";
+import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
+import { ROOM_INFO } from "./roomkit.ts";
+import type { CastSlot, Door, RoomBuild, RoomId } from "./roomkit.ts";
+import { CharacterAnimator, buildCharacter, buildCrowd } from "./character.ts";
+import type { CrowdMember } from "./character.ts";
 import { PlayerController } from "./controls.ts";
 import { Stations } from "./stations.ts";
+import { Doors } from "./doors.ts";
 import { Sound } from "../audio/sound.ts";
 import { loadProps } from "./assetLoader.ts";
 import type { Footprint, LoadProgress } from "./assetLoader.ts";
-import type { StationId } from "../game/types.ts";
+import type { GameState, StationId } from "../game/types.ts";
 
 /** Window light and mood shift with the season, so the term visibly passes. */
 const SEASONS = [
@@ -17,19 +22,43 @@ const SEASONS = [
   { color: 0xf3d9a8, intensity: 1.4, ambient: 0xefe2cb }, // autumn
 ];
 
+/** Which room each station lives in, now that they are not all in the Oval. */
+export const STATION_ROOM: Record<StationId, RoomId> = {
+  desk: "oval",
+  phone: "oval",
+  budget: "cabinet",
+  staff: "cabinet",
+  floor: "capitol",
+  press: "press",
+  family: "residence",
+  rest: "study",
+};
+
+/** The five factions, left to right across the chamber. */
+const FACTION_COLOURS = [0x5b7fb4, 0x6a8cbd, 0x87858c, 0xa8836d, 0xb26f68];
+
 export class World {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly player: PlayerController;
   readonly stations: Stations;
-  private office: OfficeBuild;
+  readonly doors: Doors;
+  private rooms = new Map<RoomId, RoomBuild>();
+  private current!: RoomBuild;
+  /** People currently in the room, rebuilt whenever the cast could have changed. */
+  private people = new THREE.Group();
+  private animator = new CharacterAnimator();
+  private castKey = "";
+  private ovalProps: THREE.Group | null = null;
   private clock = new THREE.Clock();
   private hemisphere: THREE.HemisphereLight;
   private raf = 0;
   private raycaster = new THREE.Raycaster();
   private listener = new THREE.AudioListener();
   private lastPosition = new THREE.Vector3();
+  private month = 1;
+  private state: GameState | null = null;
   readonly sound = new Sound();
   /** True on phones and tablets, where the GPU budget is much smaller. */
   readonly lowPower: boolean;
@@ -37,6 +66,8 @@ export class World {
   onNearestChange: (station: StationId | null) => void = () => {};
   /** A tap or click that landed on a station. */
   onStationTap: (station: StationId) => void = () => {};
+  /** The player has walked through a door into another room. */
+  onRoomChange: (room: RoomId, name: string) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement) {
     this.lowPower = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
@@ -52,11 +83,10 @@ export class World {
     this.renderer.toneMappingExposure = 1.0;
 
     this.scene.background = new THREE.Color(0x0b0d12);
-    this.scene.fog = new THREE.Fog(0x1a1712, 14, 30);
+    this.scene.fog = new THREE.Fog(0x1a1712, 18, 46);
 
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 100);
-    this.office = buildOffice(this.lowPower);
-    this.scene.add(this.office.group);
+    this.scene.add(this.people);
 
     this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.42);
     this.scene.add(this.hemisphere);
@@ -72,29 +102,188 @@ export class World {
     this.camera.add(this.listener);
     this.player = new PlayerController(this.camera, this.renderer.domElement);
     this.lastPosition.copy(this.camera.position);
-    this.stations = new Stations(this.scene, this.office.anchors, this.lowPower);
+    this.stations = new Stations(this.scene, [], this.lowPower);
+    this.doors = new Doors(this.scene);
     this.player.onTap = ({ x, y }) => {
       const station = this.pickStation(x, y);
       if (station) this.onStationTap(station);
       else this.player.lock();
     };
 
+    this.enterRoom("oval");
     this.resize();
-    // A tall screen otherwise opens on a wall of ceiling; frame the desk.
-    if (window.innerHeight > window.innerWidth) {
-      this.player.lookAt(new THREE.Vector3(0, 1.0, -2.75));
-    }
     window.addEventListener("resize", this.resize);
   }
+
+  // ------------------------------------------------------------------ rooms
+
+  get room(): RoomId {
+    return this.current.id;
+  }
+
+  get roomName(): string {
+    return ROOM_INFO[this.current.id].name;
+  }
+
+  /** Builds a room the first time the president walks into it. */
+  private roomOf(id: RoomId): RoomBuild {
+    let room = this.rooms.get(id);
+    if (!room) {
+      room =
+        id === "oval"
+          ? buildOffice(this.lowPower)
+          : id === "cabinet"
+            ? buildCabinetRoom(this.lowPower)
+            : id === "capitol"
+              ? buildCapitol(this.lowPower)
+              : id === "press"
+                ? buildPressRoom(this.lowPower)
+                : id === "residence"
+                  ? buildResidence(this.lowPower)
+                  : buildStudy(this.lowPower);
+      room.group.visible = false;
+      this.scene.add(room.group);
+      this.rooms.set(id, room);
+    }
+    return room;
+  }
+
+  /**
+   * Moves the president into a room: swaps the geometry, puts them at the door
+   * they came through, and rebuilds the markers and the people inside.
+   */
+  enterRoom(id: RoomId, arrivingFrom?: RoomId): void {
+    const room = this.roomOf(id);
+    if (this.current) this.current.group.visible = false;
+    this.current = room;
+    room.group.visible = true;
+    if (this.ovalProps) this.ovalProps.visible = id === "oval";
+
+    // Arrive at the door you would have come through, if there is one.
+    const back = arrivingFrom ? room.doors.find((d) => d.to === arrivingFrom) : undefined;
+    const spawn = back ? back.position.clone() : room.spawn.clone();
+    const look = back ? room.spawnLook.clone() : room.spawnLook.clone();
+    // Step away from the door rather than standing in it.
+    if (back) {
+      const inward = spawn.clone().sub(back.facing).setY(0).normalize().multiplyScalar(1.1);
+      spawn.add(inward);
+    }
+    this.player.teleport(spawn);
+    this.player.lookAt(look);
+
+    this.player.colliders = room.colliders;
+    this.player.clamp = room.clamp;
+    this.stations.rebuild(room.anchors);
+    this.doors.rebuild(room.doors);
+    this.castKey = "";
+    this.syncPeople(this.state);
+    this.setMonth(this.month);
+    if (room.fireplace) this.sound.attachRoom(this.listener, room.fireplace, room.clockSpot ?? room.fireplace);
+    this.onRoomChange(id, ROOM_INFO[id].name);
+  }
+
+  /** The room a station lives in, for the number-key shortcuts. */
+  goToStation(station: StationId): void {
+    const target = STATION_ROOM[station];
+    if (target !== this.current.id) this.enterRoom(target);
+    this.focus(station);
+  }
+
+  // ------------------------------------------------------------------ people
+
+  /**
+   * Fills the current room with whoever belongs in it. Rebuilt whenever the
+   * cast could have changed — a secretary resigns, a child's mood moves — and
+   * skipped when nothing has.
+   */
+  syncPeople(state: GameState | null): void {
+    this.state = state;
+    const key = this.castFingerprint(state);
+    if (key === this.castKey) return;
+    this.castKey = key;
+
+    this.people.clear();
+    this.animator.clear();
+    if (!this.current.cast.length) return;
+
+    // Anonymous crowds are instanced; named people are built properly.
+    const crowd: CrowdMember[] = [];
+    for (const slot of this.current.cast) {
+      if (slot.role === "member" || slot.role === "press") {
+        crowd.push({
+          position: slot.position,
+          rotationY: slot.rotationY,
+          group: slot.role === "member" ? slot.index : 0,
+          seed: Math.round(slot.position.x * 977 + slot.position.z * 131 + slot.position.y * 17),
+        });
+        continue;
+      }
+      const person = this.namedFor(slot, state);
+      if (!person) continue;
+      const character = buildCharacter({
+        seed: person.seed,
+        age: person.age,
+        dress: person.dress,
+        pose: slot.pose,
+      });
+      character.group.position.copy(slot.position);
+      character.group.rotation.y = slot.rotationY;
+      this.people.add(character.group);
+      this.animator.add(character);
+    }
+
+    if (crowd.length) {
+      const styles =
+        this.current.id === "capitol"
+          ? FACTION_COLOURS.map((suit) => ({ suit }))
+          : [{ suit: 0x6d7382 }, { suit: 0x7a7263 }, { suit: 0x716577 }];
+      this.people.add(buildCrowd(crowd, styles));
+    }
+  }
+
+  /** Who a slot refers to in the current game state. */
+  private namedFor(
+    slot: CastSlot,
+    state: GameState | null,
+  ): { seed: string; age?: number; dress?: "suit" | "smart" | "casual" } | null {
+    if (slot.role === "cabinet") {
+      const person = state?.cabinet?.[slot.index];
+      return person ? { seed: person.name, dress: "suit" } : { seed: `secretary-${slot.index}`, dress: "suit" };
+    }
+    if (slot.role === "family") {
+      const person = state?.family?.[slot.index];
+      if (!person) return null;
+      return {
+        seed: person.name,
+        age: person.age,
+        dress: person.kind === "spouse" ? "smart" : "casual",
+      };
+    }
+    return { seed: `aide-${slot.index}`, dress: "suit" };
+  }
+
+  /** Changes worth rebuilding the cast for. */
+  private castFingerprint(state: GameState | null): string {
+    if (!state) return `${this.current.id}:empty`;
+    const cabinet = state.cabinet?.map((c) => c.name).join(",") ?? "";
+    const family = state.family?.map((f) => f.name).join(",") ?? "";
+    return `${this.current.id}|${cabinet}|${family}`;
+  }
+
+  // ------------------------------------------------------------------ setup
 
   /** Fetches the furniture models, adds them, and makes them solid. */
   async loadAssets(onProgress?: (progress: LoadProgress) => void): Promise<number> {
     const footprints: Footprint[] = [];
-    const count = await loadProps(this.scene, onProgress, footprints);
-    // The Resolute desk is built in code rather than loaded, so it needs its
-    // footprint added by hand.
-    footprints.push({ minX: -1.25, maxX: 1.25, minZ: -3.5, maxZ: -2.1 });
-    this.player.colliders = footprints;
+    const props = new THREE.Group();
+    this.scene.add(props);
+    this.ovalProps = props;
+    const count = await loadProps(props, onProgress, footprints);
+    // The props are the Oval's furniture, so they travel with that room.
+    const oval = this.roomOf("oval");
+    oval.colliders = [...oval.colliders, ...footprints];
+    if (this.current.id === "oval") this.player.colliders = oval.colliders;
+    props.visible = this.current.id === "oval";
     return count;
   }
 
@@ -104,16 +293,23 @@ export class World {
    */
   startAudio(): void {
     this.sound.start(this.listener);
-    this.sound.attachRoom(this.listener, this.office.fireplace, this.office.clockSpot);
+    const room = this.current;
+    if (room.fireplace) {
+      this.sound.attachRoom(this.listener, room.fireplace, room.clockSpot ?? room.fireplace);
+    }
   }
 
   /** Repaints the light for the month, 1-48. */
   setMonth(month: number): void {
+    this.month = month;
     const season = SEASONS[Math.floor(((month - 1) % 12) / 3) % 4];
-    this.office.daylight.color.setHex(season.color);
-    this.office.daylight.intensity = season.intensity;
+    const room = this.current;
+    if (room.daylight) {
+      room.daylight.color.setHex(season.color);
+      room.daylight.intensity = season.intensity * (room.id === "study" ? 0.6 : 1);
+    }
     this.hemisphere.color.setHex(season.ambient);
-    for (const light of this.office.windowLights.children) {
+    for (const light of room.windowLights?.children ?? []) {
       if (light instanceof THREE.PointLight) {
         light.color.setHex(season.color);
         light.intensity = 2.5 + season.intensity * 1.6;
@@ -135,6 +331,20 @@ export class World {
   focus(station: StationId): void {
     const target = this.stations.focusOf(station);
     if (target) this.player.lookAt(target);
+  }
+
+  /** The door the player is standing at, if any. */
+  get nearestDoor(): Door | null {
+    return this.doors.nearest;
+  }
+
+  /** Walks through the door the player is standing at. */
+  useDoor(): boolean {
+    const door = this.doors.nearest;
+    if (!door) return false;
+    const from = this.current.id;
+    this.enterRoom(door.to, from);
+    return true;
   }
 
   private resize = (): void => {
@@ -162,6 +372,8 @@ export class World {
       const before = this.stations.nearest;
       const nearest = this.stations.update(dt, this.camera.position);
       if (nearest !== before) this.onNearestChange(nearest);
+      this.doors.update(dt, this.camera.position);
+      this.animator.update(dt, this.camera.position);
       this.renderer.render(this.scene, this.camera);
     };
     loop();

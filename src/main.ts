@@ -20,7 +20,7 @@ import {
 } from "./ui/panels.ts";
 import { el } from "./ui/dom.ts";
 import { MoveStick, isTouchDevice } from "./ui/touch.ts";
-import { World } from "./world/scene.ts";
+import { STATION_ROOM, World } from "./world/scene.ts";
 
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 
@@ -91,6 +91,9 @@ class Game {
         this.world.player.lock();
       }
     };
+
+    this.world.onRoomChange = (_room, name) => this.hud.setRoom(name);
+    this.hud.setRoom(this.world.roomName);
 
     this.world.onNearestChange = (station) => {
       this.nearest = station;
@@ -164,15 +167,19 @@ class Game {
       return;
     }
     if (this.host.isOpen || this.ended) return;
-    const digit = /^Digit([1-7])$/.exec(e.code);
+    const digit = /^Digit([1-8])$/.exec(e.code);
     if (digit) {
       e.preventDefault();
-      this.openStation(STATION_ORDER[Number(digit[1]) - 1]);
+      const station = STATION_ORDER[Number(digit[1]) - 1];
+      // A number key now walks you to the room the station is actually in.
+      if (station) this.goToStation(station);
       return;
     }
-    if (e.code === "KeyE" && this.nearest) {
+    if (e.code === "KeyE") {
       e.preventDefault();
-      this.openStation(this.nearest);
+      // A door under your feet takes priority: you are standing in it.
+      if (this.world.nearestDoor) this.walkThrough();
+      else if (this.nearest) this.openStation(this.nearest);
     }
     if (e.code === "Enter") {
       e.preventDefault();
@@ -180,8 +187,23 @@ class Game {
     }
   };
 
+  /** Walks into the room a station lives in, then opens it. */
+  private goToStation(station: StationId): void {
+    const moved = this.world.room !== STATION_ROOM[station];
+    this.world.goToStation(station);
+    if (moved) this.world.sound.paper();
+    this.openStation(station);
+  }
+
+  /** Uses the door the president is standing at. */
+  private walkThrough(): void {
+    if (!this.world.useDoor()) return;
+    this.world.sound.paper();
+    this.hud.setRoom(this.world.roomName);
+    this.hud.setPrompt(null);
+  }
+
   private openStation(station: StationId): void {
-    this.world.focus(station);
     this.open(() =>
       stationPanel(
         this.engine,
@@ -219,6 +241,7 @@ class Game {
   private onState(s: GameState): void {
     this.hud.render(s);
     this.world.setMonth(s.month);
+    this.world.syncPeople(s);
     this.world.stations.setBadge("desk", s.pendingCrises.length);
     this.world.stations.setBadge("budget", this.engine.budgetPending() ? 1 : 0);
 
