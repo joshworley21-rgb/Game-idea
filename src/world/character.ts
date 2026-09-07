@@ -17,7 +17,7 @@ import { suitingMat, weaveMat } from "./materials.ts";
 export type Pose = "stand" | "sit" | "sit-forward" | "lean";
 
 /** How far the upper lid is rotated back when the eye is open. */
-const UPPER_LID_OPEN = -0.3;
+const UPPER_LID_OPEN = -0.22;
 
 export interface CharacterSpec {
   /** Drives every random choice, so the same name is always the same face. */
@@ -617,9 +617,14 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
       );
       const d = deform(v, look);
       const t = 1 - ring / rings; // 1 at the crown, 0 at the hairline
-      // Thickness over the crown, thinning to nothing at the edge, minus the
-      // parting, plus lumps.
-      const thick = 0.028 + 0.085 * t * t + 0.028 * t + lump(phi, t) - partDip(phi) * 0.055 * t;
+      // Thickness over the crown, minus the parting, plus lumps. The base
+      // term alone never reached zero, so every hairline had a lip standing
+      // proud of the scalp — `edgeFade` forces the last stretch down to a
+      // true zero so the shell actually thins to nothing at its edge instead
+      // of ending in a visible step.
+      const edgeFade = Math.min(1, t / 0.12);
+      const thick =
+        (0.028 + 0.085 * t * t + 0.028 * t + lump(phi, t) - partDip(phi) * 0.055 * t) * edgeFade;
       const lift = 1.022 + Math.max(0, thick);
       const sweep = long ? 0 : Math.max(0, Math.sin((phi * Math.PI) / 180)) * 0.022 * t;
       positions.push(d.x * lift, d.y * lift + 0.018 * t, d.z * lift - sweep);
@@ -831,13 +836,15 @@ export function buildCharacter(spec: CharacterSpec): Character {
   chest.add(neck);
   // A neck that flares into the shoulders and narrows under the jaw, rather
   // than a tube with two hard joins.
+  // Thicker than the original taper: a neck this narrow read as a post the
+  // head was skewered on rather than the muscle that actually holds it up.
   const neckGeo = new THREE.LatheGeometry(
     [
-      [-0.07, 0.085],
-      [-0.03, 0.062],
-      [0.02, 0.05],
-      [0.06, 0.047],
-      [0.1, 0.052],
+      [-0.07, 0.093],
+      [-0.03, 0.07],
+      [0.02, 0.058],
+      [0.06, 0.056],
+      [0.1, 0.057],
     ].map(([y, r]) => new THREE.Vector2(r, y)),
     18,
   );
