@@ -6,6 +6,8 @@ import { createCabinet, crisisCompetence, replaceSecretary, tickCabinet } from "
 import { applyMidtermSwing } from "./congress.ts";
 import { attend, createFamily, memberById, mostNeglected } from "./family.ts";
 import { CRISES, applyConsequence, crisisPressure, eligibleCrises } from "./crises.ts";
+import { CONVERSATIONS } from "./conversations.ts";
+import type { CampaignDeltas } from "./campaign.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
 import {
   buildEnding,
@@ -30,11 +32,16 @@ import type {
   Bill,
   BudgetKey,
   Choice,
+  Conversation,
+  ConversationBeat,
+  ConversationOption,
   Crisis,
   Effects,
+  BlocKey,
   Ending,
   GameState,
   OfficeAction,
+  StationId,
 } from "./types.ts";
 
 export interface Outcome {
@@ -77,6 +84,27 @@ export class Engine extends Emitter<EngineEvents> {
     );
     pushNews(this.state, generateNews(this.state, this.rng));
     this.emit("state", this.state);
+  }
+
+  /**
+   * Folds the campaign's accumulated deltas into the freshly-sworn-in state,
+   * so the numbers the presidency opens with carry the reason for them. Call
+   * this once, right after `newGame`.
+   */
+  applyCampaignResult(deltas: CampaignDeltas, summary: string): void {
+    const s = this.state;
+    const clamp = (v: number) => Math.max(0, Math.min(100, v));
+    if (deltas.approval) s.politics.approval = clamp(s.politics.approval + deltas.approval);
+    if (deltas.capital) s.politics.capital = clamp(s.politics.capital + deltas.capital);
+    if (deltas.party) s.politics.party = clamp(s.politics.party + deltas.party);
+    if (deltas.media) s.politics.media = clamp(s.politics.media + deltas.media);
+    for (const [k, v] of Object.entries(deltas.blocs ?? {})) {
+      const key = k as BlocKey;
+      s.blocs[key] = clamp((s.blocs[key] ?? 50) + (v as number));
+    }
+    this.log("system", summary);
+    pushNews(s, [{ month: s.month, headline: summary, source: "Election Night Wire", tone: "neutral" }]);
+    this.emit("state", s);
   }
 
   /** Restores a saved game. Bills are rehydrated from the catalog by id. */
@@ -171,6 +199,130 @@ export class Engine extends Emitter<EngineEvents> {
     const merged = { ...action.effects };
     merged["politics.capital"] = (merged["politics.capital"] ?? 0) - action.capitalCost;
     return merged;
+  }
+
+  // ----------------------------------------------------------- conversations
+
+  /** Conversations open at a station right now — cooldown and availability, not cost. */
+  conversationsFor(station: StationId): Conversation[] {
+    return CONVERSATIONS.filter((c) => c.station === station && (!c.available || c.available(this.state)));
+  }
+
+  conversationCooldownLeft(conversation: Conversation): number {
+    return actionCooldownLeft(this.state, conversation);
+  }
+
+  /** The conversation in progress, if a meeting is currently underway. */
+  private activeConversation: {
+    conversation: Conversation;
+    beat: ConversationBeat;
+    path: string[];
+    totalShown: Effects;
+  } | null = null;
+
+  /** Options open to you at a beat, given how the conversation has gone so far. */
+  optionsFor(beat: ConversationBeat, path: readonly string[]): ConversationOption[] {
+    return beat.options.filter((o) => !o.requires || o.requires(path as string[]));
+  }
+
+  conversationOptionAffordable(option: ConversationOption): boolean {
+    return (option.capitalCost ?? 0) <= this.state.politics.capital;
+  }
+
+  /** Starts a meeting, spending its entry cost, and returns its opening beat. */
+  startConversation(id: string): { conversation: Conversation; beat: ConversationBeat } | null {
+    const s = this.state;
+    if (s.phase !== "playing") return null;
+    const conv = CONVERSATIONS.find((c) => c.id === id);
+    if (!conv) return null;
+    if (s.ap < conv.ap) return null;
+    if ((conv.capitalCost ?? 0) > s.politics.capital) return null;
+    if (this.conversationCooldownLeft(conv) > 0) return null;
+    if (conv.available && !conv.available(s)) return null;
+
+    s.ap -= conv.ap;
+    if (conv.capitalCost) applyEffects(s, { "politics.capital": -conv.capitalCost });
+    s.actionHistory[conv.id] = s.month;
+    const beat = conv.beats[conv.startBeat];
+    this.activeConversation = { conversation: conv, beat, path: [], totalShown: {} };
+    this.emit("state", s);
+    return { conversation: conv, beat };
+  }
+
+  /**
+   * Takes one line in the meeting under way. Returns the next beat, or a
+   * closing result once there is nowhere further for the conversation to go.
+   */
+  chooseConversationOption(
+    optionId: string,
+  ): { beat: ConversationBeat | null; path: string[]; failed: boolean; text: string; totalEffects: Effects } | null {
+    const s = this.state;
+    const active = this.activeConversation;
+    if (!active) return null;
+    const option = this.optionsFor(active.beat, active.path).find((o) => o.id === optionId);
+    if (!option || !this.conversationOptionAffordable(option)) return null;
+
+    if (option.capitalCost) applyEffects(s, { "politics.capital": -option.capitalCost });
+    const failed = option.risk !== undefined && this.rng.chance(option.risk);
+    const effects = failed && option.onFail ? option.onFail : option.effects;
+    applyEffects(s, effects);
+    // An hour given to one person lands on that person; an evening with all
+    // of them lands on all of them, the same as any other family action.
+    if (option.target && option.attention) {
+      const people = option.target === "all" ? s.family : [memberById(s, option.target)];
+      for (const member of people) if (member) attend(member, option.attention);
+    }
+    const before = s.threads.map((t) => t.id);
+    applyConsequence(s, failed && option.failConsequence ? option.failConsequence : option.consequence);
+    for (const t of s.threads) {
+      if (!before.includes(t.id)) this.log("crisis", `${t.label} begins.`);
+    }
+    if (option.modifier) {
+      s.modifiers.push({
+        id: option.modifier.id ?? `${active.conversation.id}-${option.id}`,
+        label: option.modifier.label,
+        months: option.modifier.months,
+        perMonth: option.modifier.perMonth,
+      });
+    }
+
+    const shown = { ...effects };
+    if (option.capitalCost) shown["politics.capital"] = (shown["politics.capital"] ?? 0) - option.capitalCost;
+    for (const [path, delta] of Object.entries(shown)) {
+      if (typeof delta !== "number") continue;
+      const key = path as keyof Effects;
+      active.totalShown[key] = (active.totalShown[key] ?? 0) + delta;
+    }
+    active.path.push(option.id);
+
+    const nextBeat = option.next ? active.conversation.beats[option.next] : undefined;
+    if (nextBeat) {
+      active.beat = nextBeat;
+      this.emit("state", s);
+      return { beat: nextBeat, path: [...active.path], failed, text: "", totalEffects: active.totalShown };
+    }
+
+    // The meeting is over: one result for the whole exchange, the way a
+    // crisis resolves as one thing rather than a running commentary.
+    this.log(
+      active.conversation.station === "family" || active.conversation.station === "rest" ? "personal" : "policy",
+      active.conversation.label,
+    );
+    const text = failed && option.failText ? option.failText : option.resultText;
+    const totalEffects = active.totalShown;
+    this.activeConversation = null;
+    this.outcome({
+      title: active.conversation.label,
+      text,
+      effects: describeEffects(totalEffects),
+      tone: failed ? "bad" : "neutral",
+    });
+    return { beat: null, path: [...active.path], failed, text, totalEffects };
+  }
+
+  /** Abandons a meeting early. Whatever was already said still happened. */
+  endConversation(): void {
+    this.activeConversation = null;
   }
 
   // ------------------------------------------------------------ legislation

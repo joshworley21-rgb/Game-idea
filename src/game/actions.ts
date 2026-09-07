@@ -103,16 +103,7 @@ export const ACTIONS: OfficeAction[] = [
   },
 
   // --- The West Wing ---
-  {
-    id: "cabinet",
-    station: "staff",
-    label: "Run a cabinet meeting",
-    detail: "Two hours of alignment. Unglamorous, and it is where capital comes from.",
-    ap: 1,
-    cooldown: 2,
-    effects: { "politics.capital": 9, "politics.party": 2, "personal.stress": 3 },
-    resultText: "Everyone leaves with the same understanding of the same plan. It will last about a month.",
-  },
+  // "Run a cabinet meeting" is now a conversation — see conversations.ts.
   {
     id: "whip",
     station: "floor",
@@ -166,16 +157,7 @@ export const ACTIONS: OfficeAction[] = [
   },
 
   // --- The Secure Line ---
-  {
-    id: "call-ally",
-    station: "phone",
-    label: "Call an ally",
-    detail: "Forty minutes with a head of government who needs reassuring.",
-    ap: 1,
-    cooldown: 2,
-    effects: { "nation.standing": 4, "personal.stress": 2 },
-    resultText: "They go into their own parliament the next morning and say the alliance is solid.",
-  },
+  // "Call an ally" is now a conversation — see conversations.ts.
   {
     id: "summit",
     station: "phone",
@@ -240,21 +222,7 @@ export const ACTIONS: OfficeAction[] = [
     },
     resultText: "Forty-one million watch. The bump is real, and it has a half-life of about five weeks.",
   },
-  {
-    id: "interview",
-    station: "press",
-    label: "Sit for a hostile interview",
-    detail: "An hour with someone who has done the reading and does not like you.",
-    ap: 1,
-    cooldown: 4,
-    effects: {
-      "politics.media": 8,
-      "politics.approval": 1,
-      "personal.stress": 7,
-      "personal.integrity": 2,
-    },
-    resultText: "You take four hard questions well and one badly. The press corps recalibrates upward.",
-  },
+  // "Sit for a hostile interview" is now a conversation — see conversations.ts.
   {
     id: "rally",
     station: "press",
@@ -295,20 +263,7 @@ export const ACTIONS: OfficeAction[] = [
   // --- The Residence ---
   // The shared evenings. The named ones are generated per-person from the
   // family you actually have; see `residenceActions` below.
-  {
-    id: "family-dinner",
-    station: "family",
-    label: "Family dinner, no staff",
-    detail: "Upstairs, phones in a basket, the schedule cleared for two hours.",
-    ap: 1,
-    cooldown: 2,
-    // An evening with all of them counts for everyone, if less than an
-    // evening with one of them counts for that one.
-    target: "all",
-    attention: 5,
-    effects: { "personal.stress": -7 },
-    resultText: "Two hours upstairs. Nobody mentions the polls once, which took visible effort from everyone.",
-  },
+  // "Family dinner, no staff" is now a conversation — see conversations.ts.
   {
     id: "camp-david",
     station: "family",
@@ -501,7 +456,8 @@ export function actionsFor(state: GameState, station: StationId): OfficeAction[]
   });
 }
 
-export function actionCooldownLeft(state: GameState, action: OfficeAction): number {
+/** Works for anything with an id and an optional cooldown — actions and conversations alike. */
+export function actionCooldownLeft(state: GameState, action: { id: string; cooldown?: number }): number {
   if (!action.cooldown) return 0;
   const last = state.actionHistory[action.id];
   if (last === undefined) return 0;

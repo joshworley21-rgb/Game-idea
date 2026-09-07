@@ -294,6 +294,51 @@ export interface Crisis {
   gated?: boolean;
 }
 
+/**
+ * One line in a conversation: what you can say, and what it costs and buys.
+ * Reuses everything a crisis `Choice` already has — capital cost, risk, a
+ * consequence that can open or feed a situation — plus where saying it
+ * leads next.
+ */
+export interface ConversationOption extends Choice {
+  /** The beat this leads to. Absent means this is how the conversation ends. */
+  next?: string;
+  /** Offered only when the path of option ids taken so far satisfies this. */
+  requires?: (path: string[]) => boolean;
+  /** The family member this line is for, same meaning as on `OfficeAction`. */
+  target?: string;
+  attention?: number;
+}
+
+export interface ConversationBeat {
+  id: string;
+  /** Who is talking, or what's happening — shown above the prompt. */
+  speaker: string;
+  /** What they say or ask. */
+  prompt: string;
+  options: ConversationOption[];
+}
+
+/**
+ * A meeting, played beat by beat rather than resolved in one click. What you
+ * say at the first beat can change which options exist at the second, and
+ * the whole exchange is judged as one thing when it ends.
+ */
+export interface Conversation {
+  id: string;
+  station: StationId;
+  label: string;
+  detail: string;
+  ap: number;
+  capitalCost?: number;
+  cooldown?: number;
+  available?: (s: GameState) => boolean;
+  /** Sets the scene before the first beat. */
+  intro: string;
+  startBeat: string;
+  beats: Record<string, ConversationBeat>;
+}
+
 export interface OfficeAction {
   id: string;
   station: StationId;

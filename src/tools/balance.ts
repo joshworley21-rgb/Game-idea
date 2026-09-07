@@ -23,9 +23,11 @@ const STATION_WEIGHTS: Record<Strategy, Partial<Record<string, number>>> = {
   "family-first": { family: 4, rest: 3, staff: 1 },
 };
 
-function pickAction(s: GameState, strat: Strategy, rng: Rng): string | null {
+type Pick = { kind: "action" | "conversation"; id: string };
+
+function pickAction(s: GameState, strat: Strategy, rng: Rng, engine: Engine): Pick | null {
   const weights = STATION_WEIGHTS[strat];
-  const usable = STATION_ORDER.flatMap((station) =>
+  const usableActions = STATION_ORDER.flatMap((station) =>
     actionsFor(s, station)
       .filter(
         (a) =>
@@ -34,10 +36,44 @@ function pickAction(s: GameState, strat: Strategy, rng: Rng): string | null {
           (a.capitalCost ?? 0) <= s.politics.capital &&
           actionCooldownLeft(s, a) === 0,
       )
-      .map((a) => ({ action: a, weight: weights[station] ?? 0 })),
+      .map((a) => ({ kind: "action" as const, id: a.id, weight: weights[station] ?? 0 })),
   );
+  // Meetings count the same as any other action for strategy purposes; the
+  // harness plays through them picking a random affordable line each beat,
+  // since it has no view on "good" conversation, only "governs or doesn't."
+  const usableConversations = STATION_ORDER.flatMap((station) =>
+    engine
+      .conversationsFor(station)
+      .filter(
+        (c) =>
+          (weights[station] ?? 0) > 0 &&
+          c.ap <= s.ap &&
+          (c.capitalCost ?? 0) <= s.politics.capital &&
+          engine.conversationCooldownLeft(c) === 0,
+      )
+      .map((c) => ({ kind: "conversation" as const, id: c.id, weight: weights[station] ?? 0 })),
+  );
+  const usable = [...usableActions, ...usableConversations];
   if (usable.length === 0) return null;
-  return rng.weighted(usable, (u) => u.weight)?.action.id ?? null;
+  return rng.weighted(usable, (u) => u.weight);
+}
+
+/** Plays a whole meeting to its end, choosing a random affordable line at each beat. */
+function playConversation(engine: Engine, conversationId: string, rng: Rng): void {
+  const started = engine.startConversation(conversationId);
+  if (!started) return;
+  let beat = started.beat;
+  let path: string[] = [];
+  let guard = 10;
+  while (guard-- > 0) {
+    const options = engine.optionsFor(beat, path).filter((o) => engine.conversationOptionAffordable(o));
+    if (!options.length) return;
+    const option = rng.pick(options);
+    const result = engine.chooseConversationOption(option.id);
+    if (!result || !result.beat) return;
+    beat = result.beat;
+    path = result.path;
+  }
 }
 
 function run(strat: Strategy, seed: number) {
@@ -75,9 +111,10 @@ function run(strat: Strategy, seed: number) {
     }
     let guard = 12;
     while (s.ap > 0 && guard-- > 0) {
-      const id = pickAction(s, strat, rng);
-      if (!id) break;
-      engine.performAction(id);
+      const pick = pickAction(s, strat, rng, engine);
+      if (!pick) break;
+      if (pick.kind === "action") engine.performAction(pick.id);
+      else playConversation(engine, pick.id, rng);
     }
     engine.endMonth();
   }

@@ -44,6 +44,33 @@ the HUD. Everything is reachable from a thumb alone.
 
 Progress saves to the device after every action.
 
+## Before the oath
+
+Every run opens with a short campaign — three real decisions (the primary,
+debate night, an October surprise) played out beat by beat, ending on
+election night. It exists so the numbers the presidency opens with have a
+reason behind them: the same seed, played two different ways in the
+campaign, hands you a different coalition and a different bank of capital on
+day one, on top of the randomness the seed already gives the country itself.
+What you say in the primary can open or close what you're offered at the
+debate — the campaign is the same small engine as the meetings below, just
+running before there is a `GameState` for it to touch, so its choices land
+as one bag of deltas applied on top of the freshly-sworn-in country rather
+than modifying a nation that doesn't exist yet.
+
+**Meetings are not menus.** The four events that are actually a
+conversation with someone — the cabinet meeting, a hostile interview, a call
+with an ally, family dinner — are played beat by beat instead of resolved in
+one click. What you say at the first beat can open or close what you're
+offered at the second: push back on a hostile interviewer and her follow-up
+question is different from the one she'd have asked if you hadn't, and only
+one of the two answers on offer next is actually available to you now.
+Effects apply as you go, but the meeting is judged as one outcome at the
+end, the same way a crisis resolves as one thing rather than a running
+commentary. Everything else — signing an order, holding a rally, working the
+Hill — stays a single considered action, because those genuinely are one
+motion, not a back-and-forth.
+
 ## How the simulation works
 
 Each month ticks a connected model rather than a table of random events.

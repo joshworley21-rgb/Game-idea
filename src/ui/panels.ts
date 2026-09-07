@@ -15,7 +15,7 @@ import {
   legislatedSpending,
   totalDiscretionary,
 } from "../game/state.ts";
-import type { Bill, BudgetKey, Crisis, Ending, GameState, StationId } from "../game/types.ts";
+import type { Bill, BudgetKey, ConversationBeat, Crisis, Effects, Ending, GameState, StationId } from "../game/types.ts";
 import type { Engine, Outcome } from "../game/engine.ts";
 import { clear, el, meter, money, one, sparkline } from "./dom.ts";
 
@@ -168,6 +168,7 @@ export function stationPanel(
   host: PanelHost,
   onOpenBills: () => void,
   onOpenBudget: () => void,
+  onOpenConversation: (id: string) => void,
 ): HTMLElement {
   const s = engine.state;
   const info = STATION_INFO[station];
@@ -224,6 +225,50 @@ export function stationPanel(
             : "Nothing on the chart your physician wants to talk about yet.",
       ]),
     );
+  }
+
+  const conversations = engine.conversationsFor(station);
+  if (conversations.length) {
+    body.append(el("div", { class: "section-title" }, ["Meetings"]));
+    const grid = el("div", { class: "option-grid" });
+    for (const conv of conversations) {
+      const cooldown = engine.conversationCooldownLeft(conv);
+      const shortAp = s.ap < conv.ap;
+      const shortCapital = (conv.capitalCost ?? 0) > s.politics.capital;
+      const disabled = cooldown > 0 || shortAp || shortCapital;
+      const cost = [
+        `${conv.ap} action${conv.ap > 1 ? "s" : ""}`,
+        conv.capitalCost ? `${conv.capitalCost} capital` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      grid.append(
+        el(
+          "button",
+          {
+            class: "option",
+            disabled,
+            onclick: () => onOpenConversation(conv.id),
+          },
+          [
+            el("div", { class: "option-top" }, [
+              el("span", { class: "option-label" }, [conv.label]),
+              el("span", { class: "option-cost" }, [cost]),
+            ]),
+            el("div", { class: "option-detail" }, [conv.detail]),
+            el("div", { class: "chips" }, [el("span", { class: "chip neutral" }, ["a conversation, not a click"])]),
+            cooldown > 0
+              ? el("div", { class: "reason" }, [`Not again for ${cooldown} month${cooldown > 1 ? "s" : ""}.`])
+              : shortAp
+                ? el("div", { class: "reason" }, ["Not enough action points left this month."])
+                : shortCapital
+                  ? el("div", { class: "reason" }, ["Not enough political capital."])
+                  : null,
+          ],
+        ),
+      );
+    }
+    body.append(grid);
   }
 
   const actions = actionsFor(s, station);
@@ -287,6 +332,104 @@ export function stationPanel(
   return panel("Station", info.name, info.blurb, body, undefined, {
     onClose: () => host.close(),
   });
+}
+
+// --------------------------------------------------------------- meetings
+
+/**
+ * A meeting played beat by beat: each option applies its effects immediately
+ * and either opens the next beat or ends the exchange, at which point the
+ * whole thing is judged as one outcome — the same way a crisis resolves as
+ * one thing rather than a scoreboard.
+ */
+export function conversationPanel(engine: Engine, conversationId: string, host: PanelHost): HTMLElement {
+  const started = engine.startConversation(conversationId);
+  const body = el("div", {});
+  const close = () => {
+    engine.endConversation();
+    host.close();
+  };
+  const container = panel(
+    started ? STATION_INFO[started.conversation.station].name : "Meeting",
+    started ? started.conversation.label : "Not available",
+    started ? started.conversation.intro : "",
+    body,
+    undefined,
+    { onClose: close },
+  );
+
+  if (!started) {
+    body.append(el("div", { class: "option-detail" }, ["This meeting isn't available right now."]));
+    return container;
+  }
+
+  const renderBeat = (beat: ConversationBeat, path: string[]) => {
+    clear(body);
+    body.append(
+      el("div", { class: "crisis-origin" }, [beat.speaker]),
+      el("div", { class: "crisis-brief" }, [beat.prompt]),
+    );
+    const grid = el("div", { class: "option-grid" });
+    for (const option of engine.optionsFor(beat, path)) {
+      const affordable = engine.conversationOptionAffordable(option);
+      grid.append(
+        el(
+          "button",
+          {
+            class: "option",
+            disabled: !affordable,
+            onclick: () => {
+              const result = engine.chooseConversationOption(option.id);
+              if (!result) return;
+              if (result.beat) renderBeat(result.beat, result.path);
+              else renderClose(result.text, result.totalEffects);
+            },
+          },
+          [
+            el("div", { class: "option-top" }, [
+              el("span", { class: "option-label" }, [option.label]),
+              option.capitalCost
+                ? el("span", { class: "option-cost" }, [`${option.capitalCost} capital`])
+                : null,
+            ]),
+            el("div", { class: "option-detail" }, [option.detail]),
+            chips([
+              ...(option.target && option.attention
+                ? [
+                    {
+                      text: `${option.target === "all" ? "Everyone" : (memberById(engine.state, option.target)?.name ?? "Them")} ${option.attention > 0 ? "+" : ""}${option.attention}`,
+                      good: option.attention > 0,
+                    },
+                  ]
+                : []),
+              ...describeEffects(option.effects),
+            ]),
+            option.risk
+              ? el("div", { class: "risk-note" }, [
+                  `Roughly a ${Math.round(option.risk * 100)}% chance this goes wrong.`,
+                ])
+              : null,
+            !affordable ? el("div", { class: "reason" }, ["Not enough political capital for this."]) : null,
+          ],
+        ),
+      );
+    }
+    body.append(grid);
+  };
+
+  const renderClose = (text: string, totalEffects: Effects) => {
+    clear(body);
+    body.append(
+      el("div", { class: "crisis-brief" }, [text]),
+      chips(describeEffects(totalEffects)),
+      el("div", { style: "margin-top:14px" }, [
+        el("button", { class: "btn primary", onclick: () => host.close() }, ["Done"]),
+      ]),
+    );
+  };
+
+  renderBeat(started.beat, []);
+  return container;
 }
 
 // -------------------------------------------------------------- legislation

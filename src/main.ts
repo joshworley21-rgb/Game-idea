@@ -4,6 +4,8 @@ import type { Outcome } from "./game/engine.ts";
 import { clearSave, hasSave, loadGame, saveGame } from "./game/save.ts";
 import { STATION_ORDER } from "./game/actions.ts";
 import { calendar } from "./game/state.ts";
+import { CAMPAIGN_INTRO, CAMPAIGN_START, campaignBeats, mergeCampaignDeltas } from "./game/campaign.ts";
+import type { CampaignDeltas } from "./game/campaign.ts";
 import type { Crisis, Ending, GameState, Party, StationId } from "./game/types.ts";
 import type { MonthReport } from "./game/sim.ts";
 import { Hud } from "./ui/hud.ts";
@@ -11,6 +13,7 @@ import {
   PanelHost,
   billsPanel,
   budgetPanel,
+  conversationPanel,
   crisisPanel,
   dashboardPanel,
   endingPanel,
@@ -18,7 +21,7 @@ import {
   reportPanel,
   stationPanel,
 } from "./ui/panels.ts";
-import { el } from "./ui/dom.ts";
+import { clear, el } from "./ui/dom.ts";
 import { MoveStick, isTouchDevice } from "./ui/touch.ts";
 import { STATION_ROOM, World } from "./world/scene.ts";
 
@@ -218,6 +221,7 @@ class Game {
         this.host,
         () => this.open(() => billsPanel(this.engine, this.host)),
         () => this.open(() => budgetPanel(this.engine, this.host)),
+        (id) => this.open(() => conversationPanel(this.engine, id, this.host)),
       ),
     );
   }
@@ -326,7 +330,10 @@ function titleScreen(): void {
     blue.classList.remove("selected");
   });
 
-  const start = (state?: GameState) => {
+  const overlay = el("div", { class: "overlay" });
+  document.body.append(overlay);
+
+  const start = (state?: GameState, campaign?: { deltas: CampaignDeltas; summary: string }) => {
     overlay.remove();
     const engine = state
       ? (() => {
@@ -334,43 +341,136 @@ function titleScreen(): void {
           e.loadFrom(state);
           return e;
         })()
-      : new Engine({ name: nameInput.value, party });
+      : new Engine({ name: nameInput.value.trim() || "President Reyes", party });
+    if (!state && campaign) engine.applyCampaignResult(campaign.deltas, campaign.summary);
     new Game(engine);
   };
 
   const saved = hasSave() ? loadGame() : null;
 
-  const overlay = el("div", { class: "overlay" }, [
-    el("div", { class: "title-card" }, [
-      el("div", { class: "title-mark" }, ["A single-player presidency"]),
-      el("div", { class: "title-name" }, ["OVAL"]),
-      el("div", { class: "title-tag" }, [
-        "Four years. Forty-eight months. A budget nobody can balance, a Congress that owes you nothing, and a family upstairs who would like to see you occasionally.",
-      ]),
-      el("div", { class: "field" }, [el("label", {}, ["Your name"]), nameInput]),
-      el("div", { class: "field" }, [
-        el("label", {}, ["Your party"]),
-        el("div", { class: "party-picker" }, [blue, red]),
-      ]),
-      el("div", { class: "title-actions" }, [
-        el("button", { class: "btn primary", onclick: () => start() }, ["Take the oath"]),
-        saved
-          ? el("button", { class: "btn", onclick: () => start(saved) }, [
-              `Continue — ${calendar(saved.month).label}`,
-            ])
-          : null,
-      ]),
-      el("div", { class: "help-list" }, [
-        el("div", {}, [el("b", {}, ["Move"]), " — the stick to walk, drag anywhere else to look."]),
-        el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're standing at, or walk through the door under your feet."]),
-        el("div", {}, [el("b", {}, ["Full stats"]), " and ", el("b", {}, ["End the month"]), " are the buttons in the bar below."]),
-        el("div", {}, [
-          "You get two or three actions a month, and rather more than three things that need doing.",
+  const showPicker = () => {
+    clear(overlay);
+    overlay.append(
+      el("div", { class: "title-card" }, [
+        el("div", { class: "title-mark" }, ["A single-player presidency"]),
+        el("div", { class: "title-name" }, ["OVAL"]),
+        el("div", { class: "title-tag" }, [
+          "Four years. Forty-eight months. A budget nobody can balance, a Congress that owes you nothing, and a family upstairs who would like to see you occasionally.",
+        ]),
+        el("div", { class: "field" }, [el("label", {}, ["Your name"]), nameInput]),
+        el("div", { class: "field" }, [
+          el("label", {}, ["Your party"]),
+          el("div", { class: "party-picker" }, [blue, red]),
+        ]),
+        el("div", { class: "title-actions" }, [
+          el(
+            "button",
+            {
+              class: "btn primary",
+              onclick: () => campaignScreen(overlay, party, (deltas, summary) => start(undefined, { deltas, summary })),
+            },
+            ["Run for it"],
+          ),
+          saved
+            ? el("button", { class: "btn", onclick: () => start(saved) }, [
+                `Continue — ${calendar(saved.month).label}`,
+              ])
+            : null,
+        ]),
+        el("div", { class: "help-list" }, [
+          el("div", {}, [el("b", {}, ["Move"]), " — the stick to walk, drag anywhere else to look."]),
+          el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're standing at, or walk through the door under your feet."]),
+          el("div", {}, [el("b", {}, ["Full stats"]), " and ", el("b", {}, ["End the month"]), " are the buttons in the bar below."]),
+          el("div", {}, [
+            "You get two or three actions a month, and rather more than three things that need doing.",
+          ]),
         ]),
       ]),
+    );
+  };
+
+  showPicker();
+}
+
+/**
+ * The six weeks before the oath, played out beat by beat in the same overlay
+ * the picker used. `onDone` fires once with the campaign's accumulated
+ * deltas and a one-line summary once election night resolves.
+ */
+function campaignScreen(
+  overlay: HTMLElement,
+  party: Party,
+  onDone: (deltas: CampaignDeltas, summary: string) => void,
+): void {
+  const beats = campaignBeats(party);
+  const taken: CampaignDeltas[] = [];
+  const path: string[] = [];
+
+  const renderBeat = (beatId: string) => {
+    const beat = beats[beatId];
+    clear(overlay);
+    overlay.append(
+      el("div", { class: "title-card" }, [
+        el("div", { class: "title-mark" }, [beat.speaker]),
+        el("div", { class: "title-tag" }, [beat.prompt]),
+        el(
+          "div",
+          { class: "option-grid", style: "text-align:left;margin-top:20px" },
+          beat.options
+            .filter((o) => !o.requires || o.requires(path))
+            .map((option) =>
+              el(
+                "button",
+                {
+                  class: "option",
+                  onclick: () => {
+                    taken.push(option.deltas);
+                    path.push(option.id);
+                    if (option.next) renderBeat(option.next);
+                    else renderResult(option.resultText);
+                  },
+                },
+                [
+                  el("div", { class: "option-top" }, [el("span", { class: "option-label" }, [option.label])]),
+                  el("div", { class: "option-detail" }, [option.detail]),
+                ],
+              ),
+            ),
+        ),
+      ]),
+    );
+  };
+
+  const renderResult = (lastText: string) => {
+    const total = mergeCampaignDeltas(taken);
+    const margin = 4 + (total.approval ?? 0) * 0.6 + (total.party ?? 0) * 0.25;
+    const summary =
+      margin >= 0
+        ? `Won a close one — up by roughly ${Math.round(margin)} points on the night.`
+        : `Pulled it out anyway, down to the wire and short in the polls all October.`;
+    clear(overlay);
+    overlay.append(
+      el("div", { class: "title-card" }, [
+        el("div", { class: "title-mark" }, ["Election night"]),
+        el("div", { class: "title-tag" }, [lastText]),
+        el("div", { class: "title-tag", style: "margin-top:10px" }, [summary]),
+        el("div", { class: "title-actions" }, [
+          el("button", { class: "btn primary", onclick: () => onDone(total, summary) }, ["Take the oath"]),
+        ]),
+      ]),
+    );
+  };
+
+  clear(overlay);
+  overlay.append(
+    el("div", { class: "title-card" }, [
+      el("div", { class: "title-mark" }, ["Before the oath"]),
+      el("div", { class: "title-tag" }, [CAMPAIGN_INTRO]),
+      el("div", { class: "title-actions" }, [
+        el("button", { class: "btn primary", onclick: () => renderBeat(CAMPAIGN_START) }, ["Begin"]),
+      ]),
     ]),
-  ]);
-  document.body.append(overlay);
+  );
 }
 
 titleScreen();
