@@ -539,9 +539,64 @@ function faceTexture(look: Look, seed: string): THREE.CanvasTexture {
 // -------------------------------------------------------------------- hair
 
 /**
+ * One shared alpha mask, reused by every head regardless of hair colour:
+ * a handful of tapered strands over a transparent background. The taper is
+ * geometric (each strand narrows to a point), so an alpha-tested cutout
+ * still reads as individual wisps rather than a card with a hard cut edge.
+ * Colour comes from each card's own vertex colours, so one texture serves
+ * every hairstyle in the cast.
+ */
+let hairCardTex: THREE.CanvasTexture | null = null;
+function hairCardAlpha(): THREE.CanvasTexture {
+  if (hairCardTex) return hairCardTex;
+  const w = 48;
+  const h = 96;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  const rnd = seeded("hair-card-alpha");
+  const strands = 6;
+  for (let s = 0; s < strands; s++) {
+    let x = w * (0.15 + (s / (strands - 1)) * 0.7) + (rnd() - 0.5) * 6;
+    const curve = (rnd() - 0.5) * 14;
+    const startWidth = 6 + rnd() * 4;
+    const alpha = 0.6 + rnd() * 0.35;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    const segments = 12;
+    let py = h;
+    let pw = startWidth;
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const y = h - t * h;
+      const nx = x + curve * t * t;
+      const nw = startWidth * (1 - t) ** 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x - pw / 2, py);
+      ctx.lineTo(x + pw / 2, py);
+      ctx.lineTo(nx + nw / 2, y);
+      ctx.lineTo(nx - nw / 2, y);
+      ctx.closePath();
+      ctx.fill();
+      x = nx;
+      py = y;
+      pw = nw;
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  hairCardTex = tex;
+  return tex;
+}
+
+/**
  * Hair is a shell that hugs the skull down to a hairline, built from the same
  * deform function so it never floats. The hairline is higher at the front than
- * at the sides, and higher again at the temples if they are receding.
+ * at the sides, and higher again at the temples if they are receding. A layer
+ * of alpha-tested strand cards sits on top of the shell: the shell alone reads
+ * as a helmet no matter how well its edge is faded, because a silhouette that
+ * ends in a mesh edge is still a hard geometric line. The cards give that
+ * silhouette individual, wispy strands instead.
  */
 function buildHair(look: Look, seed: string): THREE.Object3D | null {
   if (look.hairStyle === "bald") return null;
@@ -622,9 +677,11 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
       // proud of the scalp — `edgeFade` forces the last stretch down to a
       // true zero so the shell actually thins to nothing at its edge instead
       // of ending in a visible step.
+      // Flatter than the shell used to be: the card layer above now carries
+      // most of the volume, so the base no longer needs to be a full dome.
       const edgeFade = Math.min(1, t / 0.12);
       const thick =
-        (0.028 + 0.085 * t * t + 0.028 * t + lump(phi, t) - partDip(phi) * 0.055 * t) * edgeFade;
+        (0.028 + 0.055 * t * t + 0.028 * t + lump(phi, t) - partDip(phi) * 0.055 * t) * edgeFade;
       const lift = 1.022 + Math.max(0, thick);
       const sweep = long ? 0 : Math.max(0, Math.sin((phi * Math.PI) / 180)) * 0.022 * t;
       positions.push(d.x * lift, d.y * lift + 0.018 * t, d.z * lift - sweep);
@@ -649,6 +706,87 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
   shell.castShadow = true;
   shell.receiveShadow = true;
   group.add(shell);
+
+  // --- Card fringe: individual wisps breaking up the shell's silhouette,
+  // thick around the hairline where the shell's edge would otherwise show,
+  // and scattered thinly over the crown so the dome is not a smooth cap.
+  {
+    const cardPositions: number[] = [];
+    const cardColours: number[] = [];
+    const cardUvs: number[] = [];
+    const cardIndices: number[] = [];
+    const outward = new THREE.Vector3();
+    const side = new THREE.Vector3();
+    const down = new THREE.Vector3(0, -1, 0);
+
+    const addCard = (phi: number, theta: number, len: number, width: number, droop: number) => {
+      v.set(
+        -Math.cos((phi * Math.PI) / 180) * Math.sin((theta * Math.PI) / 180),
+        Math.cos((theta * Math.PI) / 180),
+        Math.sin((phi * Math.PI) / 180) * Math.sin((theta * Math.PI) / 180),
+      );
+      const rootPoint = deform(v, look);
+      outward.copy(rootPoint).normalize();
+      side.set(-outward.z, 0, outward.x);
+      if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+      side.normalize();
+      const tipPoint = rootPoint
+        .clone()
+        .addScaledVector(outward, len)
+        .addScaledVector(down, droop * len);
+      const base0 = rootPoint.clone().addScaledVector(outward, 0.008);
+      const idx = cardPositions.length / 3;
+      const verts = [
+        base0.clone().addScaledVector(side, width / 2),
+        base0.clone().addScaledVector(side, -width / 2),
+        tipPoint.clone().addScaledVector(side, width * 0.12),
+        tipPoint.clone().addScaledVector(side, -width * 0.12),
+      ];
+      for (const p of verts) cardPositions.push(p.x, p.y, p.z);
+      cardUvs.push(0, 0, 1, 0, 0, 1, 1, 1);
+      for (let i = 0; i < 2; i++) cardColours.push(root.r, root.g, root.b);
+      for (let i = 0; i < 2; i++) cardColours.push(tipC.r, tipC.g, tipC.b);
+      cardIndices.push(idx, idx + 1, idx + 2, idx + 1, idx + 3, idx + 2);
+      // The back face too, so a card is not invisible from the wrong side.
+      cardIndices.push(idx + 2, idx + 1, idx, idx + 2, idx + 3, idx + 1);
+    };
+
+    // A ring of wisps right at the hairline, where the shell's edge is.
+    const fringeCount = 40;
+    for (let i = 0; i < fringeCount; i++) {
+      if (rnd() < 0.18) continue; // gaps, so it is not a picket fence
+      const phi = (i / fringeCount) * 360 + (rnd() - 0.5) * 6;
+      const theta = hairline(phi) * (0.9 + rnd() * 0.14);
+      const len = (long ? 0.1 : 0.065) * (0.7 + rnd() * 0.6);
+      addCard(phi, theta, len, 0.055 + rnd() * 0.02, 0.35 + rnd() * 0.35);
+    }
+    // A thin scatter over the crown, so the dome breaks up under a light.
+    const crownCount = 18;
+    for (let i = 0; i < crownCount; i++) {
+      const phi = rnd() * 360;
+      const theta = hairline(phi) * (0.2 + rnd() * 0.55);
+      const len = (long ? 0.07 : 0.05) * (0.6 + rnd() * 0.7);
+      addCard(phi, theta, len, 0.05 + rnd() * 0.02, 0.15 + rnd() * 0.25);
+    }
+
+    const cardGeo = new THREE.BufferGeometry();
+    cardGeo.setAttribute("position", new THREE.Float32BufferAttribute(cardPositions, 3));
+    cardGeo.setAttribute("color", new THREE.Float32BufferAttribute(cardColours, 3));
+    cardGeo.setAttribute("uv", new THREE.Float32BufferAttribute(cardUvs, 2));
+    cardGeo.setIndex(cardIndices);
+    cardGeo.computeVertexNormals();
+    const cardMat = new THREE.MeshStandardMaterial({
+      map: hairCardAlpha(),
+      alphaTest: 0.4,
+      vertexColors: true,
+      roughness: 0.65,
+      metalness: 0.03,
+      side: THREE.DoubleSide,
+    });
+    const cards = new THREE.Mesh(cardGeo, cardMat);
+    cards.castShadow = true;
+    group.add(cards);
+  }
 
   const lockMat = new THREE.MeshStandardMaterial({ color: base, roughness: 0.72 });
 
@@ -724,6 +862,12 @@ export function buildCharacter(spec: CharacterSpec): Character {
     metalness: 0.01,
     clearcoat: 0.18,
     clearcoatRoughness: 0.4,
+    // A warm sheen at grazing angles is the cheapest stand-in for real
+    // subsurface scattering: it is why an ear or the edge of a cheek glows
+    // faintly red-gold against the light instead of just going dark.
+    sheen: 0.35,
+    sheenRoughness: 0.6,
+    sheenColor: new THREE.Color(look.skin).lerp(new THREE.Color(0xff6a3c), 0.55),
   });
   const dress = spec.dress ?? "suit";
   // Wool suiting and woven shirt cloth, not flat colour: the same procedural
@@ -858,10 +1002,19 @@ export function buildCharacter(spec: CharacterSpec): Character {
   neck.add(head);
 
   const headRadius = 0.113;
-  const headMat = new THREE.MeshStandardMaterial({
+  // Physical, matching `skinMat` below, so the join at the jaw and ears is a
+  // seam in the sculpt rather than a seam in how the material responds to
+  // light — a painted face with a plastic clearcoat next to a warm neck
+  // reads as two different materials even when the colours line up.
+  const headMat = new THREE.MeshPhysicalMaterial({
     map: faceTexture(look, spec.seed),
     roughness: 0.62,
     metalness: 0.01,
+    clearcoat: 0.18,
+    clearcoatRoughness: 0.4,
+    sheen: 0.35,
+    sheenRoughness: 0.6,
+    sheenColor: new THREE.Color(look.skin).lerp(new THREE.Color(0xff6a3c), 0.55),
   });
   const skull = new THREE.Mesh(sculptHead(look), headMat);
   skull.scale.setScalar(headRadius);
