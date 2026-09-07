@@ -1,4 +1,5 @@
 import { actionCooldownLeft, actionsFor, STATION_INFO } from "../game/actions.ts";
+import { billAdvice, budgetAdvice, crisisAdvice } from "../game/advice.ts";
 import { describeEffects } from "../game/effects.ts";
 import { BLOCS } from "../game/blocs.ts";
 import { PASS_THRESHOLD } from "../game/bills.ts";
@@ -37,6 +38,22 @@ function chips(effects: { text: string; good: boolean }[]): HTMLElement {
     { class: "chips" },
     effects.map((e) => el("span", { class: `chip ${e.good ? "" : "bad"}` }, [e.text])),
   );
+}
+
+const ADVICE_TONE: Record<string, "support" | "oppose" | ""> = {
+  support: "support",
+  "lean-support": "support",
+  torn: "",
+  "lean-oppose": "oppose",
+  oppose: "oppose",
+};
+
+function cabinetNote(advice: { secretary: { title: string } | null; stance: string; line: string }): HTMLElement {
+  const tone = ADVICE_TONE[advice.stance] ?? "";
+  return el("div", { class: `cabinet-note ${tone}` }, [
+    el("span", { class: "cabinet-role" }, [advice.secretary ? advice.secretary.title : "The Cabinet"]),
+    el("span", { class: "cabinet-line" }, [advice.line]),
+  ]);
 }
 
 /** Owns the single modal slot and the toast stack. */
@@ -557,6 +574,7 @@ function billCard(engine: Engine, bill: Bill, host: PanelHost): HTMLElement {
       { class: "chips" },
       tags.map((t) => el("span", { class: "chip neutral" }, [t])),
     ),
+    cabinetNote(billAdvice(s, bill)),
     chips(describeEffects(bill.onPass)),
     el("div", { class: "budget-row", style: "margin-top:10px" }, [
       el("span", { class: "budget-name" }, ["Capital committed"]),
@@ -584,6 +602,7 @@ export function budgetPanel(engine: Engine, host: PanelHost): HTMLElement {
 
   const ledger = el("div", { class: "ledger" });
   const rows = el("div", {});
+  const cabinetSlot = el("div", {});
 
   const refresh = () => {
     clear(ledger);
@@ -612,6 +631,8 @@ export function budgetPanel(engine: Engine, host: PanelHost): HTMLElement {
         `That is ${one((deficit / s.nation.gdp) * 100)}% of GDP. Debt stands at ${Math.round(s.nation.debtToGdp)}% and moves with the gap.`,
       ]),
     );
+    clear(cabinetSlot);
+    cabinetSlot.append(cabinetNote(budgetAdvice(s, (deficit / s.nation.gdp) * 100)));
   };
 
   for (const key of BUDGET_KEYS) {
@@ -693,6 +714,7 @@ export function budgetPanel(engine: Engine, host: PanelHost): HTMLElement {
     ]),
     el("div", { class: "section-title" }, ["The books"]),
     ledger,
+    cabinetSlot,
   ]);
 
   const signButton = el("button", {
@@ -730,6 +752,7 @@ export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HT
   // If a running situation produced this, say so: the player should be able to
   // trace trouble back to the decision that caused it.
   const from = engine.state.threads.filter((t) => t.feeds?.includes(crisis.id));
+  const advice = crisisAdvice(engine.state, crisis);
   const body = el("div", {}, [
     from.length
       ? el("div", { class: "crisis-origin" }, [`This follows from: ${from.map((t) => t.label).join(", ")}`])
@@ -737,11 +760,13 @@ export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HT
     el("div", { class: "crisis-brief" }, [
       typeof crisis.brief === "function" ? crisis.brief(engine.state) : crisis.brief,
     ]),
+    cabinetNote(advice),
   ]);
   const grid = el("div", { class: "option-grid" });
 
   for (const choice of crisis.choices) {
     const affordable = engine.affordable(crisis, choice);
+    const favored = choice.id === advice.favoredChoiceId;
     grid.append(
       el(
         "button",
@@ -759,6 +784,7 @@ export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HT
               ? el("span", { class: "option-cost" }, [`${choice.capitalCost} capital`])
               : null,
           ]),
+          favored ? el("div", { class: "cabinet-pick" }, ["The cabinet reads this as the safer play."]) : null,
           el("div", { class: "option-detail" }, [choice.detail]),
           chips(describeEffects(choice.effects)),
           choice.risk

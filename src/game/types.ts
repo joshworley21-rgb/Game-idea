@@ -176,6 +176,9 @@ export interface LogEntry {
 
 export type BillStatus = "available" | "passed" | "failed" | "locked";
 
+/** A cabinet department's lane, for matching bills and crises to the secretary who owns them. */
+export type CabinetDomain = "politics" | "economy" | "foreign" | "security" | "justice" | "health";
+
 export interface Bill {
   id: string;
   title: string;
@@ -187,6 +190,8 @@ export interface Bill {
   capitalCost: number;
   /** How divisive it is, 0-40. Higher means a harder vote. */
   partisanship: number;
+  /** Which department's lane this falls in, for cabinet advice. */
+  domain?: CabinetDomain;
   /** Applied once when the bill passes. */
   onPass: Effects;
   /** Ongoing monthly effect while the law is on the books. */

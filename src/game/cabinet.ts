@@ -88,7 +88,7 @@ export function domainCompetence(s: GameState, domain: string): number {
 }
 
 /** Which department owns a crisis, by the domains it touches. */
-const TAG_DOMAIN: Partial<Record<CrisisTag, string>> = {
+export const TAG_DOMAIN: Partial<Record<CrisisTag, string>> = {
   economy: "economy",
   labour: "economy",
   foreign: "foreign",
