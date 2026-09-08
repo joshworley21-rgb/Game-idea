@@ -6,8 +6,8 @@ import { pickLook } from "../world/character.ts";
 import { buildPortraitSvg, slug } from "../ui/portrait.ts";
 
 /**
- * Pre-renders one portrait per name in the cabinet pool, so every one of
- * the 100 possible secretaries has their own file instead of sharing a
+ * Pre-renders one portrait per name in `NAME_POOL` — the hundred people in
+ * `roster.ts` — so every one of them has their own file instead of sharing a
  * generic per-office placeholder. Same `buildPortraitSvg` the live fallback
  * in `portrait.ts` calls at runtime for anyone outside the pool — this just
  * runs it once per name, ahead of time, and rasterises the result, so it

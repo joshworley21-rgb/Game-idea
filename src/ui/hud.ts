@@ -36,6 +36,7 @@ export class Hud {
   constructor(
     onEndMonth: () => void,
     onDashboard: () => void,
+    onRoster: () => void,
     onStation: (station: StationId) => void,
     onToggleMute: () => boolean,
   ) {
@@ -57,6 +58,9 @@ export class Hud {
       this.endButton,
       el("button", { class: "btn ghost small", onclick: onDashboard }, [
         touch ? "Full stats" : "Dashboard (Tab)",
+      ]),
+      el("button", { class: "btn ghost small", onclick: onRoster }, [
+        touch ? "The cast" : "The cast (R)",
       ]),
       this.muteButton,
     );

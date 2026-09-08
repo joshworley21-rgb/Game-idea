@@ -10,7 +10,7 @@ import type { GameState } from "../game/types.ts";
  *
  * Three tiers, most specific first. Real painted art always wins if it
  * exists: `public/portraits/cast/<name-slug>.{png,jpg,webp}` for one of the
- * 100 people in the cabinet pool (`src/game/cabinet.ts`) by name, or
+ * 100 people in the roster (`src/game/roster.ts`) by name, or
  * `public/portraits/<role>.{png,jpg,webp}` for a handful of fixed unnamed
  * roles (the hostile correspondent, the allied prime minister). Below that,
  * every one of the 100 pool names already has a *generated* portrait — see
@@ -40,6 +40,19 @@ const ROLE_BY_FIXED_SPEAKER: Record<string, string> = {
   "The Prime Minister": "prime-minister",
 };
 
+/**
+ * These two fixed roles are, by name, specific people in the roster
+ * (`roster.ts`) — Vivian Lee is exactly the kind of reporter "the
+ * correspondent" is, and Alistair Ward literally holds the title "Prime
+ * Minister". Seeding their look and cast-art lookup off the real name
+ * instead of the generic label means their portrait is the same person
+ * this administration would actually be dealing with.
+ */
+const PERSON_BY_FIXED_SPEAKER: Record<string, string> = {
+  "The correspondent": "Vivian Lee",
+  "The Prime Minister": "Prime Minister Alistair Ward",
+};
+
 export interface Speaker {
   /** Drives the generated portrait, and is who they are for `pickLook`. */
   seed: string;
@@ -55,7 +68,7 @@ export function speakerInfo(state: GameState, speaker: string): Speaker | null {
     if (person) return { seed: person.name, role: office };
   }
   const role = ROLE_BY_FIXED_SPEAKER[speaker];
-  if (role) return { seed: speaker, role };
+  if (role) return { seed: PERSON_BY_FIXED_SPEAKER[speaker] ?? speaker, role };
   return null;
 }
 

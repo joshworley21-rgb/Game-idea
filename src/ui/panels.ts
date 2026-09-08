@@ -7,6 +7,8 @@ import { BLOCS } from "../game/blocs.ts";
 import { PASS_THRESHOLD } from "../game/bills.ts";
 import { FACTION_BY_KEY } from "../game/congress.ts";
 import { memberById, stateOf } from "../game/family.ts";
+import { ROSTER_CATEGORIES, rosterByCategory, rosterByName } from "../game/roster.ts";
+import type { RosterPerson } from "../game/roster.ts";
 import { electionMargin, gradeFor, scoreLegacy } from "../game/endings.ts";
 import type { MonthReport } from "../game/sim.ts";
 import {
@@ -408,10 +410,16 @@ export function conversationPanel(engine: Engine, conversationId: string, host: 
   const renderBeat = (beat: ConversationBeat, path: string[]) => {
     clear(body);
     const speaker = speakerInfo(engine.state, beat.speaker);
+    const roster = speaker ? rosterByName(speaker.seed) : undefined;
     body.append(
       el("div", { class: "convo-head" }, [
         speaker ? portraitImg(speaker) : null,
-        el("div", { class: "crisis-origin" }, [beat.speaker]),
+        el("div", {}, [
+          el("div", { class: "crisis-origin" }, [beat.speaker]),
+          roster
+            ? el("div", { class: "cabinet-meta", title: roster.quirks }, [`${roster.name} — ${roster.role}`])
+            : null,
+        ]),
       ]),
       el("div", { class: "crisis-brief" }, [beat.prompt]),
     );
@@ -933,6 +941,7 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
     ...(s.cabinet ?? []).map((person) => {
       const def = FACTION_BY_KEY.get(person.faction);
       const loyalTone = person.loyalty >= 55 ? "ok" : person.loyalty >= 35 ? "warn" : "bad";
+      const roster = rosterByName(person.name);
       return el("div", { class: "cabinet-row" }, [
         el("div", { class: "bloc-head" }, [
           el("span", {}, [person.name]),
@@ -941,6 +950,7 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
         el("div", { class: "cabinet-meta" }, [
           `${def?.short ?? "unaligned"} · ${person.months} months in post`,
         ]),
+        roster ? el("div", { class: "cabinet-meta", title: roster.quirks }, [roster.agenda]) : null,
         el("div", { class: "cabinet-bars" }, [
           el("span", { class: "k" }, ["Competence"]),
           el("div", { class: "meter-track whip-meter" }, [
@@ -1076,6 +1086,55 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
     "Situation Room",
     "The State of Play",
     `${s.presidentName} · ${s.counters.billsPassed ?? 0} laws passed, ${s.counters.crisesHandled ?? 0} crises handled.`,
+    body,
+    undefined,
+    { onClose: () => host.close() },
+  );
+}
+
+// ----------------------------------------------------------------- dossier
+
+/** One standee, as a card: the portrait, who they are, and what they want. */
+function rosterCard(person: RosterPerson): HTMLElement {
+  const img = portraitImg({ seed: person.name, role: "cast" });
+  img.classList.add("roster-portrait");
+  img.classList.remove("convo-portrait");
+  return el("div", { class: "roster-card" }, [
+    img,
+    el("div", {}, [
+      el("div", { class: "roster-name" }, [person.name]),
+      el("div", { class: "roster-role" }, [person.role]),
+      el("div", { class: "roster-agenda" }, [person.agenda]),
+      el("div", { class: "roster-cutout" }, [`"${person.quirks}" — ${person.cutout}`]),
+    ]),
+  ]);
+}
+
+/**
+ * The whole cast, life-size cardboard cutouts and all: everyone this
+ * administration deals with, not just the six behind cabinet doors. Six of
+ * these hundred already sit at the cabinet table (`cabinet.ts`), and two
+ * more are the correspondent and the allied prime minister you already
+ * meet in conversations (`portrait.ts`) — this is where the other
+ * ninety-two get to be more than a name in a data file.
+ */
+export function rosterPanel(host: PanelHost): HTMLElement {
+  const body = el("div", {});
+  for (const category of ROSTER_CATEGORIES) {
+    const people = rosterByCategory(category);
+    body.append(
+      el("div", { class: "section-title" }, [`${category} (${people.length})`]),
+      el(
+        "div",
+        { class: "roster-grid" },
+        people.map((p) => rosterCard(p)),
+      ),
+    );
+  }
+  return panel(
+    "The West Wing",
+    "The Standees",
+    "Everyone this administration actually deals with, cut from cardboard and propped against the wall — cabinet, the Hill, the money, the press, the world, and the people back home.",
     body,
     undefined,
     { onClose: () => host.close() },

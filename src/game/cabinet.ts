@@ -1,5 +1,6 @@
 import { Rng } from "../core/rng.ts";
 import { FACTIONS } from "./congress.ts";
+import { ROSTER } from "./roster.ts";
 import type { CrisisTag, FactionKey, GameState, Secretary } from "./types.ts";
 
 /**
@@ -20,54 +21,47 @@ export const OFFICES = [
   { key: "health", title: "Health Secretary", domain: "health" },
 ] as const;
 
-const FIRST = [
-  "Margaret", "Daniel", "Ruth", "Marcus", "Eleanor", "Priya", "Thomas", "Grace",
-  "Andre", "Helen", "Victor", "Naomi", "Charles", "Rosa", "Edward", "Fiona",
-  "Malcolm", "Diane", "Samuel", "Yusuf", "Claire", "Nathan", "Imani", "Walter",
-];
-const LAST = [
-  "Halloran", "Nakamura", "Beaumont", "Osei", "Lindqvist", "Marchetti", "Whitfield",
-  "Okonkwo", "Petrov", "Calderon", "Ashworth", "Dubois", "Ferreira", "Kowalski",
-  "Sandoval", "Brennan", "Vasquez", "Ellery", "Rasmussen", "Tanaka",
-];
+/**
+ * The pool every secretary's name is drawn from — the same hundred people
+ * `roster.ts` describes, in their fixed listed order. Two numbers decide
+ * how repeats feel: within one game, six offices plus a handful of
+ * resignations draw maybe 10-15 names, so a pool this size never collides —
+ * but it's also big enough that two playthroughs don't draw nearly the same
+ * roster. For two games each drawing k names from a pool of size N, the
+ * expected number of names they share is roughly k²/N. At k≈15, N=100 puts
+ * that at just over 2 — a familiar face turning up again now and then, not
+ * a rerun of your last administration.
+ */
+export const NAME_POOL: string[] = ROSTER.map((p) => p.name);
 
 /**
- * A fixed cast rather than the full 480-name combinatorial space (24
- * first names × 20 last names). Two numbers decide how repeats feel:
- * within one game, six offices plus a handful of resignations draw maybe
- * 10-15 names, so any pool comfortably above that never collides — but the
- * pool also needs to be big enough that two playthroughs don't draw nearly
- * the same roster. For two games each drawing k names from a pool of size
- * N, the expected number of names they share is roughly k²/N. At k≈15,
- * N=100 puts that at just over 2 — a familiar face turning up again now
- * and then, not a rerun of your last administration. Smaller pools would
- * make that recurrence heavy fast: N=40 would put it past 5.
- *
- * Fixed seed, not `rng`: the pool itself has to be the same roster every
- * time the game runs, only the draw from it should vary.
+ * The roster already names a real Chief of Staff and five real Cabinet
+ * secretaries — the same six offices this game has. A new administration
+ * starts with exactly them, not a random draw; only a later reshuffle or
+ * resignation reaches into the rest of the pool.
  */
-const CAST_POOL_SIZE = 100;
-export const NAME_POOL: string[] = (() => {
-  const pairs: string[] = [];
-  for (const first of FIRST) for (const last of LAST) pairs.push(`${first} ${last}`);
-  const shuffle = new Rng(0xc0ffee);
-  for (let i = pairs.length - 1; i > 0; i--) {
-    const j = shuffle.int(0, i);
-    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
-  }
-  return pairs.slice(0, CAST_POOL_SIZE);
-})();
+const OFFICE_ROSTER_MATCH: Partial<Record<(typeof OFFICES)[number]["key"], string>> = {
+  chief: "Arthur Vance",
+  treasury: "Clara Lin",
+  state: "Nadia Al-Mansoor",
+  defense: "Gen. Marcus Hall",
+  justice: "Tariq Morales",
+  health: "Regina Phelps",
+};
 
 function makeSecretary(
   rng: Rng,
   office: (typeof OFFICES)[number],
   taken: Set<string> = new Set(),
+  forcedName?: string,
 ): Secretary {
   const faction = rng.pick(FACTIONS).key;
   // Two secretaries with the same name would read as a bug, so keep drawing.
-  let name = rng.pick(NAME_POOL);
-  for (let tries = 0; taken.has(name) && tries < 60; tries++) {
-    name = rng.pick(NAME_POOL);
+  let name = forcedName ?? rng.pick(NAME_POOL);
+  if (!forcedName) {
+    for (let tries = 0; taken.has(name) && tries < 60; tries++) {
+      name = rng.pick(NAME_POOL);
+    }
   }
   taken.add(name);
   return {
@@ -83,7 +77,7 @@ function makeSecretary(
 
 export function createCabinet(rng: Rng): Secretary[] {
   const taken = new Set<string>();
-  return OFFICES.map((office) => makeSecretary(rng, office, taken));
+  return OFFICES.map((office) => makeSecretary(rng, office, taken, OFFICE_ROSTER_MATCH[office.key]));
 }
 
 /** Replaces one office with a fresh appointment. */

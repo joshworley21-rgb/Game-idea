@@ -19,6 +19,7 @@ import {
   endingPanel,
   reelectionPanel,
   reportPanel,
+  rosterPanel,
   stationPanel,
 } from "./ui/panels.ts";
 import { clear, el } from "./ui/dom.ts";
@@ -46,6 +47,7 @@ class Game {
     this.hud = new Hud(
       () => this.endMonth(),
       () => this.open(() => dashboardPanel(this.engine, this.host)),
+      () => this.open(() => rosterPanel(this.host)),
       (station) => {
         if (!this.host.isOpen && !this.ended) this.visitStation(station);
       },
@@ -151,6 +153,12 @@ class Game {
       e.preventDefault();
       if (this.host.isOpen) this.host.close();
       else this.open(() => dashboardPanel(this.engine, this.host));
+      return;
+    }
+    if (e.code === "KeyR" && !this.ended) {
+      e.preventDefault();
+      if (this.host.isOpen) this.host.close();
+      else this.open(() => rosterPanel(this.host));
       return;
     }
     if (this.host.isOpen || this.ended) return;

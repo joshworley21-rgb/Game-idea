@@ -267,6 +267,23 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 }
 .convo-head .crisis-origin { margin: 0; }
 
+/* --------------------------------------------------------------- dossier */
+
+.roster-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+@media (max-width: 760px) { .roster-grid { grid-template-columns: 1fr; } }
+.roster-card {
+  display: flex; gap: 12px; border: 1px solid rgba(255,255,255,0.1);
+  background: var(--panel-soft); border-radius: 12px; padding: 12px 14px;
+}
+.roster-portrait {
+  width: 46px; height: 50px; border-radius: 7px; object-fit: cover;
+  border: 1px solid rgba(220,185,110,0.3); flex-shrink: 0; background: #171a22;
+}
+.roster-name { font-size: 14px; font-weight: 600; }
+.roster-role { font-size: 11px; color: var(--ink-faint); margin-top: 1px; }
+.roster-agenda { font-size: 12.5px; color: var(--ink-dim); margin-top: 6px; line-height: 1.4; }
+.roster-cutout { font-size: 11px; color: var(--ink-faint); margin-top: 6px; font-style: italic; line-height: 1.4; }
+
 /* -------------------------------------------------------------- crisis */
 
 .crisis-brief {
