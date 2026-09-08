@@ -141,6 +141,18 @@ export interface Secretary {
   months: number;
 }
 
+/** How things stand with one of the world leaders in `diplomacy.ts`. */
+export interface DiplomaticRelation {
+  /** The roster person's id, as a string key. */
+  id: string;
+  /** How warm this relationship is, 0-100. */
+  standing: number;
+  /** Months since you last spoke with them. */
+  since: number;
+  /** Agreements currently in force: "trade", "defense", "backchannel". */
+  agreements: string[];
+}
+
 export type EffectPath =
   | `nation.${Exclude<keyof Nation, "sectors">}`
   | `nation.sectors.${SectorKey}`
@@ -310,9 +322,14 @@ export interface ConversationOption extends Choice {
   next?: string;
   /** Offered only when the path of option ids taken so far satisfies this. */
   requires?: (path: string[]) => boolean;
-  /** The family member this line is for, same meaning as on `OfficeAction`. */
+  /**
+   * Who this line is for: a family member id, `"all"` of them, or
+   * `leader:<rosterId>` for one of the world leaders in `diplomacy.ts`.
+   */
   target?: string;
   attention?: number;
+  /** Marks a diplomatic agreement active for a world leader, alongside the effects. */
+  agreement?: { leaderId: string; kind: string };
 }
 
 export interface ConversationBeat {
@@ -435,6 +452,8 @@ export interface GameState {
   cabinet: Secretary[];
   /** The people upstairs. Filled in by the engine on a new term. */
   family: FamilyMember[];
+  /** How things stand with each world leader, keyed by roster person id. */
+  diplomacy: Record<string, DiplomaticRelation>;
   /** Crisis ids unlocked by earlier decisions. */
   unlocked: string[];
   /** crisisId -> month it last fired. */

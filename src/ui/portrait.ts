@@ -1,5 +1,6 @@
 import { pickLook } from "../world/character.ts";
 import type { Look } from "../world/character.ts";
+import { rosterByName } from "../game/roster.ts";
 import type { GameState } from "../game/types.ts";
 
 /**
@@ -11,9 +12,9 @@ import type { GameState } from "../game/types.ts";
  * Three tiers, most specific first. Real painted art always wins if it
  * exists: `public/portraits/cast/<name-slug>.{png,jpg,webp}` for one of the
  * 100 people in the roster (`src/game/roster.ts`) by name, or
- * `public/portraits/<role>.{png,jpg,webp}` for a handful of fixed unnamed
- * roles (the hostile correspondent, the allied prime minister). Below that,
- * every one of the 100 pool names already has a *generated* portrait — see
+ * `public/portraits/<role>.{png,jpg,webp}` for the one fixed unnamed role
+ * (the hostile correspondent). Below that, every one of the 100 pool names
+ * already has a *generated* portrait — see
  * `scripts/render-cast-portraits.mjs`, which calls `buildPortraitSvg` below
  * once per pool name and rasterises it to `public/portraits/cast/`. That
  * generated art is a shape built from this person's actual traits (face
@@ -37,20 +38,17 @@ const OFFICE_BY_SPEAKER: Record<string, string> = {
 /** Recurring but unnamed roles: the same face every time, by label alone. */
 const ROLE_BY_FIXED_SPEAKER: Record<string, string> = {
   "The correspondent": "correspondent",
-  "The Prime Minister": "prime-minister",
 };
 
 /**
- * These two fixed roles are, by name, specific people in the roster
- * (`roster.ts`) — Vivian Lee is exactly the kind of reporter "the
- * correspondent" is, and Alistair Ward literally holds the title "Prime
- * Minister". Seeding their look and cast-art lookup off the real name
- * instead of the generic label means their portrait is the same person
- * this administration would actually be dealing with.
+ * "The correspondent" is, by name, a specific person in the roster
+ * (`roster.ts`) — Vivian Lee is exactly the kind of reporter that fixed role
+ * describes. Seeding her look and cast-art lookup off the real name instead
+ * of the generic label means her portrait is the same person this
+ * administration would actually be dealing with.
  */
 const PERSON_BY_FIXED_SPEAKER: Record<string, string> = {
   "The correspondent": "Vivian Lee",
-  "The Prime Minister": "Prime Minister Alistair Ward",
 };
 
 export interface Speaker {
@@ -69,6 +67,9 @@ export function speakerInfo(state: GameState, speaker: string): Speaker | null {
   }
   const role = ROLE_BY_FIXED_SPEAKER[speaker];
   if (role) return { seed: PERSON_BY_FIXED_SPEAKER[speaker] ?? speaker, role };
+  // A beat can also just name a real roster person directly as its speaker
+  // (world leaders, on the Secure Line) — their cast art is keyed by name.
+  if (rosterByName(speaker)) return { seed: speaker, role: "cast" };
   return null;
 }
 

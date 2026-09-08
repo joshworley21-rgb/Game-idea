@@ -175,6 +175,7 @@ export function createInitialState(opts: NewGameOptions): GameState {
     // Filled in by the engine, which owns the run's random source.
     cabinet: [],
     family: [],
+    diplomacy: {},
     unlocked: [],
     crisisHistory: {},
     history: [],

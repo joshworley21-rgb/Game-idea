@@ -3,6 +3,7 @@ import { addPath, applyEffects } from "./effects.ts";
 import { BLOCS, coalitionApproval, driftBlocs } from "./blocs.ts";
 import { cabinetFactionSupport, cabinetStrength, domainCompetence } from "./cabinet.ts";
 import { driftFamily, familyStrain } from "./family.ts";
+import { driftDiplomacy } from "./diplomacy.ts";
 import { driftFactions, friendlySeats } from "./congress.ts";
 import {
   BUDGET_KEYS,
@@ -278,6 +279,9 @@ export function simulateMonth(
   // The people upstairs have their own month. Bonds erode with absence, and
   // marriage and family become a readout of how those five people are doing.
   driftFamily(s, rng, notes);
+
+  // The world outside the fence keeps moving whether or not you called.
+  driftDiplomacy(s);
 
   // Name the constituency that shifted hardest, so movement is legible.
   let biggest: { name: string; delta: number } | null = null;

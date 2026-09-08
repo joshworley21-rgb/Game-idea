@@ -20,7 +20,17 @@ import {
   legislatedSpending,
   totalDiscretionary,
 } from "../game/state.ts";
-import type { Bill, BudgetKey, ConversationBeat, Crisis, Effects, Ending, GameState, StationId } from "../game/types.ts";
+import type {
+  Bill,
+  BudgetKey,
+  ConversationBeat,
+  Crisis,
+  DiplomaticRelation,
+  Effects,
+  Ending,
+  GameState,
+  StationId,
+} from "../game/types.ts";
 import type { Engine, Outcome } from "../game/engine.ts";
 import { clear, el, meter, money, one, sparkline } from "./dom.ts";
 
@@ -411,14 +421,14 @@ export function conversationPanel(engine: Engine, conversationId: string, host: 
     clear(body);
     const speaker = speakerInfo(engine.state, beat.speaker);
     const roster = speaker ? rosterByName(speaker.seed) : undefined;
+    const byline =
+      roster && roster.name !== beat.speaker ? `${roster.name} — ${roster.role}` : roster?.role;
     body.append(
       el("div", { class: "convo-head" }, [
         speaker ? portraitImg(speaker) : null,
         el("div", {}, [
           el("div", { class: "crisis-origin" }, [beat.speaker]),
-          roster
-            ? el("div", { class: "cabinet-meta", title: roster.quirks }, [`${roster.name} — ${roster.role}`])
-            : null,
+          byline ? el("div", { class: "cabinet-meta", title: roster!.quirks }, [byline]) : null,
         ]),
       ]),
       el("div", { class: "crisis-brief" }, [beat.prompt]),
@@ -1094,8 +1104,14 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
 
 // ----------------------------------------------------------------- dossier
 
+const AGREEMENT_LABELS: Record<string, string> = {
+  trade: "Trade agreement",
+  defense: "Defense arrangement",
+  backchannel: "Open back-channel",
+};
+
 /** One standee, as a card: the portrait, who they are, and what they want. */
-function rosterCard(person: RosterPerson): HTMLElement {
+function rosterCard(person: RosterPerson, relation?: DiplomaticRelation): HTMLElement {
   const img = portraitImg({ seed: person.name, role: "cast" });
   img.classList.add("roster-portrait");
   img.classList.remove("convo-portrait");
@@ -1105,6 +1121,24 @@ function rosterCard(person: RosterPerson): HTMLElement {
       el("div", { class: "roster-name" }, [person.name]),
       el("div", { class: "roster-role" }, [person.role]),
       el("div", { class: "roster-agenda" }, [person.agenda]),
+      relation
+        ? el("div", { class: "roster-standing" }, [
+            el("span", {}, ["Standing"]),
+            el("div", { class: "meter-track" }, [
+              el("div", {
+                class: `meter-fill ${relation.standing >= 55 ? "ok" : relation.standing >= 32 ? "warn" : "bad"}`,
+                style: `width:${relation.standing}%`,
+              }),
+            ]),
+          ])
+        : null,
+      relation?.agreements.length
+        ? el(
+            "div",
+            { class: "chips" },
+            relation.agreements.map((a) => el("span", { class: "chip neutral" }, [AGREEMENT_LABELS[a] ?? a])),
+          )
+        : null,
       el("div", { class: "roster-cutout" }, [`"${person.quirks}" — ${person.cutout}`]),
     ]),
   ]);
@@ -1113,12 +1147,14 @@ function rosterCard(person: RosterPerson): HTMLElement {
 /**
  * The whole cast, life-size cardboard cutouts and all: everyone this
  * administration deals with, not just the six behind cabinet doors. Six of
- * these hundred already sit at the cabinet table (`cabinet.ts`), and two
- * more are the correspondent and the allied prime minister you already
- * meet in conversations (`portrait.ts`) — this is where the other
- * ninety-two get to be more than a name in a data file.
+ * these hundred already sit at the cabinet table (`cabinet.ts`), one more
+ * is the correspondent you meet in conversations (`portrait.ts`), and the
+ * ten world leaders each carry a live relationship you can see here and
+ * build on the Secure Line (`diplomacy.ts`) — this is where the rest of
+ * the roster gets to be more than a name in a data file, too.
  */
-export function rosterPanel(host: PanelHost): HTMLElement {
+export function rosterPanel(engine: Engine, host: PanelHost): HTMLElement {
+  const s = engine.state;
   const body = el("div", {});
   for (const category of ROSTER_CATEGORIES) {
     const people = rosterByCategory(category);
@@ -1127,7 +1163,7 @@ export function rosterPanel(host: PanelHost): HTMLElement {
       el(
         "div",
         { class: "roster-grid" },
-        people.map((p) => rosterCard(p)),
+        people.map((p) => rosterCard(p, category === "Foreign Leader" ? s.diplomacy?.[String(p.id)] : undefined)),
       ),
     );
   }

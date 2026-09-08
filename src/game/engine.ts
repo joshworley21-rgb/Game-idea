@@ -6,7 +6,8 @@ import { createCabinet, crisisCompetence, replaceSecretary, tickCabinet } from "
 import { applyMidtermSwing } from "./congress.ts";
 import { attend, createFamily, memberById, mostNeglected } from "./family.ts";
 import { CRISES, applyConsequence, crisisPressure, eligibleCrises } from "./crises.ts";
-import { CONVERSATIONS } from "./conversations.ts";
+import { allConversations } from "./conversations.ts";
+import { adjustStanding, createDiplomacy, recordAgreement, relationFor } from "./diplomacy.ts";
 import type { CampaignDeltas } from "./campaign.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
 import {
@@ -76,6 +77,7 @@ export class Engine extends Emitter<EngineEvents> {
     this.state.bills = billCatalog();
     this.state.cabinet = createCabinet(this.rng);
     this.state.family = createFamily(this.rng, this.state.personal.age);
+    this.state.diplomacy = createDiplomacy(this.rng);
     this.log("system", `You are sworn in as President of the United States.`);
     this.log(
       "system",
@@ -117,6 +119,9 @@ export class Engine extends Emitter<EngineEvents> {
     this.rng = new Rng(state.seed ^ (state.month * 2654435761));
     if (!state.cabinet?.length) state.cabinet = createCabinet(this.rng);
     if (!state.family?.length) state.family = createFamily(this.rng, state.personal.age);
+    if (!state.diplomacy || Object.keys(state.diplomacy).length === 0) {
+      state.diplomacy = createDiplomacy(this.rng);
+    }
     // A save written before the body had parts would otherwise arithmetic to NaN.
     state.personal.sleepDebt ??= 22;
     state.personal.fitness ??= 62;
@@ -211,7 +216,9 @@ export class Engine extends Emitter<EngineEvents> {
 
   /** Conversations open at a station right now — cooldown and availability, not cost. */
   conversationsFor(station: StationId): Conversation[] {
-    return CONVERSATIONS.filter((c) => c.station === station && (!c.available || c.available(this.state)));
+    return allConversations(this.state).filter(
+      (c) => c.station === station && (!c.available || c.available(this.state)),
+    );
   }
 
   conversationCooldownLeft(conversation: Conversation): number {
@@ -239,7 +246,7 @@ export class Engine extends Emitter<EngineEvents> {
   startConversation(id: string): { conversation: Conversation; beat: ConversationBeat } | null {
     const s = this.state;
     if (s.phase !== "playing") return null;
-    const conv = CONVERSATIONS.find((c) => c.id === id);
+    const conv = allConversations(s).find((c) => c.id === id);
     if (!conv) return null;
     if (s.ap < conv.ap) return null;
     if ((conv.capitalCost ?? 0) > s.politics.capital) return null;
@@ -273,10 +280,23 @@ export class Engine extends Emitter<EngineEvents> {
     const effects = failed && option.onFail ? option.onFail : option.effects;
     applyEffects(s, effects);
     // An hour given to one person lands on that person; an evening with all
-    // of them lands on all of them, the same as any other family action.
+    // of them lands on all of them, the same as any other family action. A
+    // world leader isn't family, but the same "this line was for them
+    // specifically" idea applies to a relationship abroad.
     if (option.target && option.attention) {
-      const people = option.target === "all" ? s.family : [memberById(s, option.target)];
-      for (const member of people) if (member) attend(member, option.attention);
+      if (option.target === "all") {
+        for (const member of s.family) attend(member, option.attention);
+      } else if (option.target.startsWith("leader:")) {
+        const rel = relationFor(s, option.target.slice("leader:".length));
+        if (rel) adjustStanding(rel, option.attention);
+      } else {
+        const member = memberById(s, option.target);
+        if (member) attend(member, option.attention);
+      }
+    }
+    if (!failed && option.agreement) {
+      const rel = relationFor(s, option.agreement.leaderId);
+      if (rel) recordAgreement(rel, option.agreement.kind);
     }
     const before = s.threads.map((t) => t.id);
     applyConsequence(s, failed && option.failConsequence ? option.failConsequence : option.consequence);

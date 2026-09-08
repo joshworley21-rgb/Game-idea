@@ -47,7 +47,7 @@ class Game {
     this.hud = new Hud(
       () => this.endMonth(),
       () => this.open(() => dashboardPanel(this.engine, this.host)),
-      () => this.open(() => rosterPanel(this.host)),
+      () => this.open(() => rosterPanel(this.engine, this.host)),
       (station) => {
         if (!this.host.isOpen && !this.ended) this.visitStation(station);
       },
@@ -158,7 +158,7 @@ class Game {
     if (e.code === "KeyR" && !this.ended) {
       e.preventDefault();
       if (this.host.isOpen) this.host.close();
-      else this.open(() => rosterPanel(this.host));
+      else this.open(() => rosterPanel(this.engine, this.host));
       return;
     }
     if (this.host.isOpen || this.ended) return;

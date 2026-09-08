@@ -1,4 +1,6 @@
-import type { Conversation } from "./types.ts";
+import { WORLD_LEADERS, relationFor } from "./diplomacy.ts";
+import type { WorldLeader } from "./diplomacy.ts";
+import type { Conversation, ConversationOption, Effects, GameState } from "./types.ts";
 
 /**
  * Meetings, played out rather than resolved in one click. Each one replaces
@@ -210,91 +212,6 @@ export const CONVERSATIONS: Conversation[] = [
     },
   },
 
-  // --------------------------------------------------------- Secure Line
-  {
-    id: "call-ally",
-    station: "phone",
-    label: "Call an ally",
-    detail: "Forty minutes with a head of government who needs reassuring.",
-    ap: 1,
-    cooldown: 2,
-    intro: "Forty minutes, a translator on the line, and a head of government who needs reassuring.",
-    startBeat: "open",
-    beats: {
-      open: {
-        id: "open",
-        speaker: "The Prime Minister",
-        prompt:
-          "They open worried: their own parliament is asking out loud whether the alliance still means what it used to.",
-        options: [
-          {
-            id: "reassure",
-            label: "Reaffirm the commitment plainly",
-            detail: "No hedging. It costs nothing today and is remembered later.",
-            effects: { "nation.standing": 5, "personal.stress": 1 },
-            resultText: "",
-            next: "ask",
-          },
-          {
-            id: "hedge",
-            label: "Reassure them, but hedge on specifics",
-            detail: "Keeps your options open at home.",
-            effects: { "nation.standing": 2, "politics.capital": 2 },
-            resultText: "",
-            next: "ask",
-          },
-          {
-            id: "redirect",
-            label: "Turn it into a trade conversation instead",
-            detail: "Transactional, and they will notice that it is.",
-            effects: { "nation.standing": 1, "nation.growth": 0.05 },
-            resultText: "",
-            next: "ask",
-          },
-        ],
-      },
-      ask: {
-        id: "ask",
-        speaker: "The Prime Minister",
-        prompt:
-          "Satisfied for now, they ask for something concrete before the call ends — a joint statement, or forces for a coming exercise.",
-        options: [
-          {
-            id: "statement",
-            label: "Agree to the joint statement",
-            detail: "Words, mostly. Words that get quoted for years.",
-            requires: (path) => path.includes("reassure") || path.includes("hedge"),
-            effects: { "nation.standing": 4, "politics.capital": -2 },
-            resultText: "The statement is stronger than either side's lawyers wanted. It holds.",
-          },
-          {
-            id: "exercise",
-            label: "Commit forces to the exercise",
-            detail: "Real, visible, and not free.",
-            requires: (path) => path.includes("reassure") || path.includes("hedge"),
-            effects: { "nation.standing": 6, "nation.security": 2, "personal.stress": 3, "politics.capital": -3 },
-            resultText: "It is a small deployment with a large photograph. Both governments get their headline.",
-          },
-          {
-            id: "trade-terms",
-            label: "Give ground on trade terms",
-            detail: "The conversation you steered it toward.",
-            requires: (path) => path.includes("redirect"),
-            effects: { "nation.standing": 3, "nation.growth": -0.05, "politics.party": -2 },
-            resultText: "They get their market access. Someone at home will call it a giveaway by Friday.",
-          },
-          {
-            id: "stall",
-            label: "Say you'll need to take it back to your team",
-            detail: "True, and also a way of saying not yet.",
-            effects: { "nation.standing": -2 },
-            resultText: "They hear the delay for what it is. The call ends warm anyway.",
-          },
-        ],
-      },
-    },
-  },
-
   // ------------------------------------------------------------ Residence
   {
     id: "family-dinner",
@@ -396,4 +313,223 @@ export const CONVERSATIONS: Conversation[] = [
 
 export function conversationById(id: string): Conversation | undefined {
   return CONVERSATIONS.find((c) => c.id === id);
+}
+
+// -------------------------------------------------------- The Secure Line
+
+/** What can actually be offered on a call, and what it takes to get there. */
+interface Offer {
+  kind: string;
+  label: string;
+  detail: string;
+  threshold: number;
+  effects: Effects;
+  resultText: string;
+}
+
+function offersFor(leader: WorldLeader): Offer[] {
+  if (leader.disposition === "adversary") {
+    return [
+      {
+        kind: "backchannel",
+        label: "Open a quiet back-channel",
+        detail: "Not friendship. Just a line that still gets answered when things get worse.",
+        threshold: 28,
+        effects: { "nation.security": 3, "nation.unrest": -1 },
+        resultText: "It isn't trust. It's a number someone will actually pick up at three in the morning.",
+      },
+    ];
+  }
+  const offers: Offer[] = [
+    {
+      kind: "trade",
+      label: "Open trade talks",
+      detail: "Market access each side actually wants, on the table.",
+      threshold: leader.disposition === "rival" ? 58 : 42,
+      effects: {
+        "nation.growth": leader.disposition === "rival" ? 0.1 : 0.16,
+        "nation.standing": 3,
+      },
+      resultText: "The terms are narrower than either delegation wanted going in. It's real, and it's signed.",
+    },
+  ];
+  if (leader.disposition === "ally") {
+    offers.push({
+      kind: "defense",
+      label: "Formalize a defense arrangement",
+      detail: "Joint exercises, shared intelligence, a commitment on paper.",
+      threshold: 55,
+      effects: { "nation.security": 4, "nation.standing": 4 },
+      resultText: "It reads, on both sides, as the alliance actually meaning what it says.",
+    });
+  }
+  return offers;
+}
+
+function lowerFirst(text: string): string {
+  return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+}
+
+/** One option per offer: not ready yet, ready to sign, or already in force. */
+function offerOptions(leader: WorldLeader, standing: number, agreements: string[]): ConversationOption[] {
+  return offersFor(leader).map((offer) => {
+    const active = agreements.includes(offer.kind);
+    const target = `leader:${leader.id}`;
+    if (active) {
+      return {
+        id: `check-${offer.kind}`,
+        label: `Check in on the ${offer.label.toLowerCase()}`,
+        detail: "Making sure it's still holding on their end.",
+        effects: {},
+        target,
+        attention: 2,
+        resultText: `Still standing. Neither of you is in a hurry to test it.`,
+      };
+    }
+    if (standing >= offer.threshold) {
+      return {
+        id: `offer-${offer.kind}`,
+        label: offer.label,
+        detail: offer.detail,
+        effects: offer.effects,
+        target,
+        attention: 5,
+        agreement: { leaderId: String(leader.id), kind: offer.kind },
+        resultText: offer.resultText,
+      };
+    }
+    return {
+      id: `press-${offer.kind}`,
+      label: `Lay the groundwork for it`,
+      detail: `Not ready to sign. ${offer.label} is the ask, eventually.`,
+      effects: {},
+      target,
+      attention: 6,
+      resultText: "Nothing signed today. The next call starts from a slightly better place.",
+    };
+  });
+}
+
+/**
+ * One conversation per world leader — a real person, not a fixed label, with
+ * their own relationship, their own agenda, and their own path toward the
+ * kind of agreement their disposition actually allows. Regenerated fresh
+ * from the current relationship each time it's offered, the same way the
+ * residence's evenings are generated from the family you actually have.
+ */
+function buildLeaderConversation(state: GameState, leader: WorldLeader): Conversation {
+  const rel = relationFor(state, String(leader.id));
+  const standing = rel?.standing ?? 50;
+  const agreements = rel?.agreements ?? [];
+  const target = `leader:${leader.id}`;
+  const adversarial = leader.disposition === "adversary" || leader.disposition === "rival";
+
+  const openOptions: ConversationOption[] = adversarial
+    ? [
+        {
+          id: "firm",
+          label: "Hold the line, plainly",
+          detail: "No concessions, no theatrics.",
+          effects: { "nation.security": 1 },
+          target,
+          attention: 3,
+          resultText: "",
+          next: "ask",
+        },
+        {
+          id: "probe",
+          label: "Test whether there's room to talk",
+          detail: "Careful, and it could go nowhere.",
+          effects: {},
+          target,
+          attention: 5,
+          resultText: "",
+          next: "ask",
+        },
+        {
+          id: "warn",
+          label: "Deliver a pointed warning",
+          detail: "Says you're watching. Costs the option of pretending otherwise.",
+          effects: { "nation.standing": -1, "nation.security": 2 },
+          resultText: "",
+          next: "ask",
+        },
+      ]
+    : [
+        {
+          id: "warm",
+          label: "Reaffirm the relationship, plainly",
+          detail: "No hedging. It costs nothing today and is remembered later.",
+          effects: { "nation.standing": 2 },
+          target,
+          attention: 6,
+          resultText: "",
+          next: "ask",
+        },
+        {
+          id: "measured",
+          label: "Keep it warm, but noncommittal",
+          detail: "Friendly, and short on specifics.",
+          effects: { "politics.capital": 2 },
+          target,
+          attention: 2,
+          resultText: "",
+          next: "ask",
+        },
+        {
+          id: "transactional",
+          label: "Steer the call toward business",
+          detail: "Less warmth, more agenda.",
+          effects: { "nation.growth": 0.03 },
+          target,
+          attention: 1,
+          resultText: "",
+          next: "ask",
+        },
+      ];
+
+  return {
+    id: `talk-${leader.id}`,
+    station: "phone",
+    label: `Call ${leader.name}`,
+    detail: `${leader.role} — ${leader.agenda}`,
+    ap: 1,
+    cooldown: 2,
+    intro: `Forty minutes on the secure line with ${leader.name}, ${leader.role}. ${leader.quirks}`,
+    startBeat: "open",
+    beats: {
+      open: {
+        id: "open",
+        speaker: leader.name,
+        prompt: `${leader.name} raises it plainly: ${lowerFirst(leader.agenda)} How do you want to leave this call?`,
+        options: openOptions,
+      },
+      ask: {
+        id: "ask",
+        speaker: leader.name,
+        prompt: adversarial
+          ? "Before the line goes dead, there's the question of whether this call ever happens again."
+          : "Before the call ends, they want something concrete to bring home.",
+        options: [
+          ...offerOptions(leader, standing, agreements),
+          {
+            id: "wind-down",
+            label: "End the call there",
+            detail: "Nothing further today.",
+            effects: {},
+            resultText: "The call ends where it started. Nothing lost, nothing gained.",
+          },
+        ],
+      },
+    },
+  };
+}
+
+export function worldLeaderConversations(state: GameState): Conversation[] {
+  return WORLD_LEADERS.map((leader) => buildLeaderConversation(state, leader));
+}
+
+/** Every conversation on offer right now: the fixed set, plus one per world leader. */
+export function allConversations(state: GameState): Conversation[] {
+  return [...CONVERSATIONS, ...worldLeaderConversations(state)];
 }
