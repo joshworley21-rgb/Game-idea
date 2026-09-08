@@ -31,6 +31,33 @@ const LAST = [
   "Sandoval", "Brennan", "Vasquez", "Ellery", "Rasmussen", "Tanaka",
 ];
 
+/**
+ * A fixed cast rather than the full 480-name combinatorial space (24
+ * first names × 20 last names). Two numbers decide how repeats feel:
+ * within one game, six offices plus a handful of resignations draw maybe
+ * 10-15 names, so any pool comfortably above that never collides — but the
+ * pool also needs to be big enough that two playthroughs don't draw nearly
+ * the same roster. For two games each drawing k names from a pool of size
+ * N, the expected number of names they share is roughly k²/N. At k≈15,
+ * N=100 puts that at just over 2 — a familiar face turning up again now
+ * and then, not a rerun of your last administration. Smaller pools would
+ * make that recurrence heavy fast: N=40 would put it past 5.
+ *
+ * Fixed seed, not `rng`: the pool itself has to be the same roster every
+ * time the game runs, only the draw from it should vary.
+ */
+const CAST_POOL_SIZE = 100;
+const NAME_POOL: string[] = (() => {
+  const pairs: string[] = [];
+  for (const first of FIRST) for (const last of LAST) pairs.push(`${first} ${last}`);
+  const shuffle = new Rng(0xc0ffee);
+  for (let i = pairs.length - 1; i > 0; i--) {
+    const j = shuffle.int(0, i);
+    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  }
+  return pairs.slice(0, CAST_POOL_SIZE);
+})();
+
 function makeSecretary(
   rng: Rng,
   office: (typeof OFFICES)[number],
@@ -38,9 +65,9 @@ function makeSecretary(
 ): Secretary {
   const faction = rng.pick(FACTIONS).key;
   // Two secretaries with the same name would read as a bug, so keep drawing.
-  let name = `${rng.pick(FIRST)} ${rng.pick(LAST)}`;
-  for (let tries = 0; taken.has(name) && tries < 40; tries++) {
-    name = `${rng.pick(FIRST)} ${rng.pick(LAST)}`;
+  let name = rng.pick(NAME_POOL);
+  for (let tries = 0; taken.has(name) && tries < 60; tries++) {
+    name = rng.pick(NAME_POOL);
   }
   taken.add(name);
   return {
