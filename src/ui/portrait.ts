@@ -2,22 +2,25 @@ import { pickLook } from "../world/character.ts";
 import type { GameState } from "../game/types.ts";
 
 /**
- * A flat illustrated portrait for the person currently speaking in a
- * conversation, in the spirit of how narrative-heavy mobile games handle
- * this: a static picture of who you're talking to, alongside the dialogue,
- * rather than asking a real-time 3D face to carry a close-up.
+ * A portrait for the person currently speaking in a conversation, in the
+ * spirit of how narrative-heavy mobile games handle this: a static picture
+ * beside the dialogue, rather than asking a real-time 3D face to carry a
+ * close-up.
  *
- * This draws a simple geometric bust rather than a photorealistic painting —
- * there is no image-generation tool in this environment to produce the kind
- * of AI-illustrated portrait a reference app might use. The shape is honest
- * about that rather than pretending otherwise. It reuses the exact skin,
- * hair and suit colours `pickLook` already derives for this person's 3D
- * model, so the portrait and the walking-around character agree with each
- * other. Swap in real art later by replacing what `speakerPortraitUri`
- * returns for a given seed — everything downstream just wants a `<img src>`.
+ * Real illustrated art goes in `public/portraits/<role>.{png,jpg,webp}` —
+ * see the README there for the exact brief and one prompt per role. `role`
+ * is a job, not a person: cabinet secretaries are re-rolled with a new name
+ * every playthrough, so bespoke art per generated individual isn't practical
+ * (nobody is commissioning infinite portraits), but there are only ever six
+ * cabinet offices plus a couple of recurring unnamed roles — a small, fixed
+ * set worth actually drawing. Until art exists for a role, or for anyone
+ * outside these fixed roles, `portraitUri` draws a flat geometric bust
+ * instead — a shape, not a painting, and deliberately not pretending
+ * otherwise — using the exact skin, hair and suit colours `pickLook`
+ * already derives for that person's 3D model, so it's never a blank space.
  */
 
-/** Which cabinet office, if any, a fixed speaker label refers to. */
+/** Which cabinet office, if any, a fixed speaker label refers to — also the art's filename stem. */
 const OFFICE_BY_SPEAKER: Record<string, string> = {
   "The Chief of Staff": "chief",
   "The Treasury Secretary": "treasury",
@@ -28,17 +31,33 @@ const OFFICE_BY_SPEAKER: Record<string, string> = {
 };
 
 /** Recurring but unnamed roles: the same face every time, by label alone. */
-const FIXED_SPEAKERS = new Set(["The correspondent", "The Prime Minister"]);
+const ROLE_BY_FIXED_SPEAKER: Record<string, string> = {
+  "The correspondent": "correspondent",
+  "The Prime Minister": "prime-minister",
+};
+
+export interface Speaker {
+  /** Drives the placeholder's colours, and is who they are for `pickLook`. */
+  seed: string;
+  /** The art file to look for: `public/portraits/<role>.png` (or .jpg/.webp). */
+  role: string;
+}
 
 /** Who a beat's speaker label actually is, if it resolves to one person. */
-export function speakerSeed(state: GameState, speaker: string): string | null {
+export function speakerInfo(state: GameState, speaker: string): Speaker | null {
   const office = OFFICE_BY_SPEAKER[speaker];
   if (office) {
     const person = state.cabinet?.find((c) => c.office === office);
-    if (person) return person.name;
+    if (person) return { seed: person.name, role: office };
   }
-  if (FIXED_SPEAKERS.has(speaker)) return speaker;
+  const role = ROLE_BY_FIXED_SPEAKER[speaker];
+  if (role) return { seed: speaker, role };
   return null;
+}
+
+/** Where real art for a role would live, in declining format preference. */
+export function portraitCandidates(role: string): string[] {
+  return [`portraits/${role}.png`, `portraits/${role}.jpg`, `portraits/${role}.webp`];
 }
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;

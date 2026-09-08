@@ -1,7 +1,8 @@
 import { actionCooldownLeft, actionsFor, STATION_INFO } from "../game/actions.ts";
 import { billAdvice, budgetAdvice, crisisAdvice } from "../game/advice.ts";
 import { describeEffects } from "../game/effects.ts";
-import { portraitUri, speakerSeed } from "./portrait.ts";
+import { portraitCandidates, portraitUri, speakerInfo } from "./portrait.ts";
+import type { Speaker } from "./portrait.ts";
 import { BLOCS } from "../game/blocs.ts";
 import { PASS_THRESHOLD } from "../game/bills.ts";
 import { FACTION_BY_KEY } from "../game/congress.ts";
@@ -39,6 +40,24 @@ function chips(effects: { text: string; good: boolean }[]): HTMLElement {
     { class: "chips" },
     effects.map((e) => el("span", { class: `chip ${e.good ? "" : "bad"}` }, [e.text])),
   );
+}
+
+/**
+ * Tries real art for this role first (png, then jpg, then webp), and falls
+ * back to the generated placeholder only once every candidate has 404'd —
+ * so the art director's job is just dropping a file at that path.
+ */
+function portraitImg(speaker: Speaker): HTMLImageElement {
+  const candidates = [...portraitCandidates(speaker.role)];
+  const img = el("img", { class: "convo-portrait", alt: speaker.seed }) as HTMLImageElement;
+  const tryNext = () => {
+    const next = candidates.shift();
+    if (next) img.src = next;
+    else img.src = portraitUri(speaker.seed);
+  };
+  img.addEventListener("error", tryNext);
+  tryNext();
+  return img;
 }
 
 const ADVICE_TONE: Record<string, "support" | "oppose" | ""> = {
@@ -388,12 +407,10 @@ export function conversationPanel(engine: Engine, conversationId: string, host: 
 
   const renderBeat = (beat: ConversationBeat, path: string[]) => {
     clear(body);
-    const seed = speakerSeed(engine.state, beat.speaker);
+    const speaker = speakerInfo(engine.state, beat.speaker);
     body.append(
       el("div", { class: "convo-head" }, [
-        seed
-          ? el("img", { class: "convo-portrait", src: portraitUri(seed), alt: beat.speaker })
-          : null,
+        speaker ? portraitImg(speaker) : null,
         el("div", { class: "crisis-origin" }, [beat.speaker]),
       ]),
       el("div", { class: "crisis-brief" }, [beat.prompt]),
