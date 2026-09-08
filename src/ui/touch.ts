@@ -26,6 +26,16 @@ export class MoveStick {
     this.root.classList.add("visible");
   }
 
+  /** Hides the stick while the player is rooted to a scene and cannot walk. */
+  setRooted(rooted: boolean): void {
+    this.root.classList.toggle("rooted", rooted);
+    if (rooted) {
+      this.pointerId = null;
+      this.knob.style.transform = "translate(0px, 0px)";
+      this.onChange(0, 0);
+    }
+  }
+
   private onDown = (e: PointerEvent): void => {
     if (this.pointerId !== null) return;
     e.preventDefault();

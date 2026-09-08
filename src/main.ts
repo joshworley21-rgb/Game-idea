@@ -80,6 +80,13 @@ class Game {
       if (!this.host.isOpen && !this.ended) this.walkThrough();
     };
 
+    // A room that opens on a scene — the cabinet already seated, the House
+    // already in session — roots the player until they choose to step out.
+    this.world.onSceneLock = (lock) => {
+      this.stick.setRooted(lock !== null);
+      this.hud.setSceneLock(lock, () => this.world.leaveScene());
+    };
+
     // Android's back button closes what is open rather than leaving the game.
     this.onBack = () => {
       if (this.ended) return false;

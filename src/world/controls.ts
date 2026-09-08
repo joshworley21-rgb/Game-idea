@@ -46,6 +46,9 @@ export class PlayerController {
   /** Set false while a UI panel is open. */
   enabled = true;
   locked = false;
+  /** Set while the player is rooted to a scene spot — see root(). */
+  private rootPos: THREE.Vector3 | null = null;
+  private rootEyeY = EYE_HEIGHT;
   onLockChange: (locked: boolean) => void = () => {};
   /** Fired for a press that did not turn into a drag. */
   onTap: (event: TapEvent) => void = () => {};
@@ -163,8 +166,30 @@ export class PlayerController {
   /** Turns the camera to face a point. */
   /** Drops the player at a spot, killing any momentum they had. */
   teleport(position: THREE.Vector3): void {
+    this.rootPos = null;
     this.camera.position.set(position.x, EYE_HEIGHT, position.z);
     this.velocity.set(0, 0, 0);
+  }
+
+  get rooted(): boolean {
+    return this.rootPos !== null;
+  }
+
+  /**
+   * Pins the player to a spot — a seat, a podium — so they can still turn to
+   * look around but cannot walk away from it. update() short-circuits the
+   * movement it would otherwise apply.
+   */
+  root(position: THREE.Vector3, eyeHeight = EYE_HEIGHT): void {
+    this.rootPos = position.clone();
+    this.rootEyeY = eyeHeight;
+    this.camera.position.set(position.x, eyeHeight, position.z);
+    this.velocity.set(0, 0, 0);
+  }
+
+  /** Frees the player to walk again, from wherever they were rooted. */
+  unroot(): void {
+    this.rootPos = null;
   }
 
   lookAt(target: THREE.Vector3): void {
@@ -175,6 +200,14 @@ export class PlayerController {
   }
 
   update(dt: number): void {
+    if (this.rootPos) {
+      // Looking around still works — that is handled in onPointerMove,
+      // independent of this update — but position never leaves the spot.
+      this.camera.position.set(this.rootPos.x, this.rootEyeY, this.rootPos.z);
+      this.velocity.set(0, 0, 0);
+      return;
+    }
+
     const keyForward = Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
       Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
     const keyStrafe = Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -

@@ -9,7 +9,7 @@ import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { buildOffice } from "./office.ts";
 import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
-import type { CastSlot, Door, RoomBuild, RoomId } from "./roomkit.ts";
+import type { CastSlot, Door, RoomBuild, RoomId, SceneLock } from "./roomkit.ts";
 import { CharacterAnimator, buildCharacter, buildCrowd } from "./character.ts";
 import type { CrowdMember } from "./character.ts";
 import { PlayerController } from "./controls.ts";
@@ -101,6 +101,8 @@ export class World {
   onDoorTap: () => void = () => {};
   /** The player has walked through a door into another room. */
   onRoomChange: (room: RoomId, name: string) => void = () => {};
+  /** The room just opened on a scene (or, with null, the player left one). */
+  onSceneLock: (lock: SceneLock | null) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement) {
     this.touch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
@@ -275,6 +277,20 @@ export class World {
     this.setMonth(this.month);
     if (room.fireplace) this.sound.attachRoom(this.listener, room.fireplace, room.clockSpot ?? room.fireplace);
     this.onRoomChange(id, ROOM_INFO[id].name);
+
+    // A room that opens on a scene roots you in it rather than leaving you
+    // free to walk in on people already seated.
+    if (room.sceneLock) {
+      this.player.root(room.sceneLock.position, room.sceneLock.eyeHeight);
+      this.player.lookAt(room.sceneLock.look);
+    }
+    this.onSceneLock(room.sceneLock ?? null);
+  }
+
+  /** Steps out of the room's scene lock, so the player can walk again. */
+  leaveScene(): void {
+    this.player.unroot();
+    this.onSceneLock(null);
   }
 
   /** The room a station lives in, for the number-key shortcuts. */

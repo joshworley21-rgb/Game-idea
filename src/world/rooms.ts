@@ -141,6 +141,15 @@ export function buildCabinetRoom(): RoomBuild {
     clamp: rectClamp(W, D),
     daylight,
     windowLights,
+    // Walking in finds the meeting already seated — you take the head of the
+    // table rather than materialising by the door.
+    sceneLock: {
+      position: new THREE.Vector3(0, 0, -1.45),
+      look: new THREE.Vector3(0, 1.05, 1.72),
+      eyeHeight: 1.34,
+      label: "Chairing the cabinet meeting",
+      leaveLabel: "Leave your seat",
+    },
   };
 }
 
@@ -304,6 +313,14 @@ export function buildCapitol(): RoomBuild {
     },
     daylight,
     windowLights,
+    // The well, facing the House — the same vantage the "floor" station
+    // focuses on, so a president who arrives finds Congress already seated.
+    sceneLock: {
+      position: new THREE.Vector3(0, 0, HUB + 2.4),
+      look: new THREE.Vector3(0, 1.7, HUB + 7.5),
+      label: "Addressing the House",
+      leaveLabel: "Step off the floor",
+    },
   };
 }
 
@@ -434,6 +451,14 @@ export function buildPressRoom(): RoomBuild {
     clamp: rectClamp(W, D),
     daylight,
     windowLights,
+    // At the podium, facing the press pool rather than the empty chairs a
+    // walk-in would otherwise start you looking at.
+    sceneLock: {
+      position: new THREE.Vector3(0, 0, -3.6),
+      look: new THREE.Vector3(0, 1.4, 1.2),
+      label: "Taking questions from the press",
+      leaveLabel: "Step away from the podium",
+    },
   };
 }
 

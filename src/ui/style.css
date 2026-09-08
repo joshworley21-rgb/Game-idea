@@ -154,6 +154,20 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
   opacity: 0; transition: opacity 0.18s ease; pointer-events: none; white-space: nowrap;
 }
 #prompt.show { opacity: 1; }
+
+#scene-lock {
+  position: fixed; left: 50%; bottom: 78px; transform: translate(-50%, 8px);
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 10px 9px 18px; border-radius: 999px; border: 1px solid var(--line);
+  background: rgba(28, 32, 42, 0.82); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity 0.22s ease, transform 0.22s ease;
+  z-index: 21; white-space: nowrap;
+}
+#scene-lock.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.scene-lock-label {
+  font-family: var(--serif); font-size: 14px; letter-spacing: 0.02em; color: var(--ink);
+}
+
 kbd {
   font-family: var(--sans); font-size: 11px; font-weight: 700; padding: 2px 6px; margin: 0 3px;
   border-radius: 5px; background: var(--gold); color: #16120a;
@@ -390,6 +404,7 @@ body {
   touch-action: none;
 }
 .stick.visible { display: grid; }
+.stick.rooted { display: none !important; }
 .stick-knob {
   width: 56px; height: 56px; border-radius: 50%;
   background: rgba(226, 193, 110, 0.72);
@@ -453,6 +468,14 @@ body {
   #hud-actions .btn { flex: 1; padding: 10px 8px; font-size: 13px; }
 
   #prompt { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 148px); font-size: 12.5px; }
+  #scene-lock {
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 132px);
+    max-width: calc(100vw - 24px);
+    flex-direction: column; align-items: stretch;
+    border-radius: 14px; padding: 10px 14px; white-space: normal;
+  }
+  .scene-lock-label { font-size: 12.5px; white-space: normal; text-align: center; }
+  #scene-lock .btn { width: 100%; }
 
   /* Panels take the whole screen, with room for the toast lane above them. */
   #panel-root.open { padding: 74px 8px calc(8px + env(safe-area-inset-bottom)); }
