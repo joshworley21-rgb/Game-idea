@@ -74,7 +74,7 @@ interface Look {
   age: number;
 }
 
-function pickLook(spec: CharacterSpec): Look {
+export function pickLook(spec: CharacterSpec): Look {
   const rnd = seeded(spec.seed);
   const age = spec.age ?? 30 + Math.floor(rnd() * 35);
   const grey = Math.max(0, Math.min(1, (age - 44) / 30));

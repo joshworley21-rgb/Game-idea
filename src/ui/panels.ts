@@ -1,6 +1,7 @@
 import { actionCooldownLeft, actionsFor, STATION_INFO } from "../game/actions.ts";
 import { billAdvice, budgetAdvice, crisisAdvice } from "../game/advice.ts";
 import { describeEffects } from "../game/effects.ts";
+import { portraitUri, speakerSeed } from "./portrait.ts";
 import { BLOCS } from "../game/blocs.ts";
 import { PASS_THRESHOLD } from "../game/bills.ts";
 import { FACTION_BY_KEY } from "../game/congress.ts";
@@ -387,8 +388,14 @@ export function conversationPanel(engine: Engine, conversationId: string, host: 
 
   const renderBeat = (beat: ConversationBeat, path: string[]) => {
     clear(body);
+    const seed = speakerSeed(engine.state, beat.speaker);
     body.append(
-      el("div", { class: "crisis-origin" }, [beat.speaker]),
+      el("div", { class: "convo-head" }, [
+        seed
+          ? el("img", { class: "convo-portrait", src: portraitUri(seed), alt: beat.speaker })
+          : null,
+        el("div", { class: "crisis-origin" }, [beat.speaker]),
+      ]),
       el("div", { class: "crisis-brief" }, [beat.prompt]),
     );
     const grid = el("div", { class: "option-grid" });

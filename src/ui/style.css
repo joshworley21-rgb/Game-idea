@@ -256,6 +256,16 @@ input[type="range"] { width: 100%; accent-color: var(--gold); }
 .ledger .stat-line { font-size: 13.5px; }
 .ledger-total { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 4px; padding-top: 9px; font-size: 15px; }
 
+/* ----------------------------------------------------------- conversation */
+
+.convo-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.convo-portrait {
+  width: 52px; height: 57px; border-radius: 8px; object-fit: cover;
+  border: 1px solid rgba(220,185,110,0.3); flex-shrink: 0;
+  background: #171a22;
+}
+.convo-head .crisis-origin { margin: 0; }
+
 /* -------------------------------------------------------------- crisis */
 
 .crisis-brief {
