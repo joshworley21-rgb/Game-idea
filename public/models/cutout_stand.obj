@@ -1,0 +1,75 @@
+# Cardboard Cutout Figure Template for President Simulator
+# Scale: Tabletop / 1.6m game scale, 8mm thick board with triangular stand
+mtllib cutout_stand.mtl
+o CardboardCutout
+
+# Cutout board geometry
+v -0.2500 0.0000 0.0040
+v 0.2500 0.0000 0.0040
+v 0.2500 1.6000 0.0040
+v -0.2500 1.6000 0.0040
+v -0.2500 0.0000 -0.0040
+v 0.2500 0.0000 -0.0040
+v 0.2500 1.6000 -0.0040
+v -0.2500 1.6000 -0.0040
+
+# Triangular base stand
+v -0.2000 0.0000 0.1800
+v 0.2000 0.0000 0.1800
+v 0.0000 0.0000 -0.2200
+v -0.2000 0.0200 0.1800
+v 0.2000 0.0200 0.1800
+v 0.0000 0.0200 -0.2200
+
+# Rear angled support strut
+v -0.0200 0.0000 -0.0040
+v 0.0200 0.0000 -0.0040
+v -0.0200 0.6000 -0.0040
+v 0.0200 0.6000 -0.0040
+v -0.0200 0.0000 -0.2000
+v 0.0200 0.0000 -0.2000
+
+# Texture coordinates (UVs)
+vt 0.0000 0.0000
+vt 1.0000 0.0000
+vt 1.0000 1.0000
+vt 0.0000 1.0000
+vt 0.0000 0.0000
+vt 0.1000 0.0000
+vt 0.1000 1.0000
+vt 0.0000 1.0000
+
+# Normals
+vn 0.0000 0.0000 1.0000
+vn 0.0000 0.0000 -1.0000
+vn 1.0000 0.0000 0.0000
+vn -1.0000 0.0000 0.0000
+vn 0.0000 1.0000 0.0000
+vn 0.0000 -1.0000 0.0000
+
+# Front portrait face
+usemtl CharacterPortrait
+f 1/1/1 2/2/1 3/3/1 4/4/1
+
+# Cardboard backing and corrugated rims
+usemtl CardboardRim
+f 6/1/2 5/2/2 8/3/2 7/4/2
+f 2/5/3 6/6/3 7/7/3 3/8/3
+f 5/5/4 1/6/4 4/7/4 8/8/4
+f 4/5/5 3/6/5 7/7/5 8/8/5
+f 1/5/6 5/6/6 6/7/6 2/8/6
+
+# Base stand geometry
+usemtl StandWood
+f 9/1/6 10/2/6 11/3/6
+f 12/1/5 14/2/5 13/3/5
+f 9/5/4 12/6/4 13/7/4 10/8/4
+f 10/5/3 13/6/3 14/7/3 11/8/3
+f 11/5/4 14/6/4 12/7/4 9/8/4
+
+# Support strut faces
+usemtl CardboardRim
+f 15/1/4 16/2/4 18/3/4 17/4/4
+f 16/1/3 20/2/3 18/3/3
+f 19/1/4 15/2/4 17/3/4
+f 15/1/6 19/2/6 20/3/6 16/4/6

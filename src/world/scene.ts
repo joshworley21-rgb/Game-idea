@@ -19,6 +19,7 @@ import { Sound } from "../audio/sound.ts";
 import { loadProps } from "./assetLoader.ts";
 import type { LoadProgress } from "./assetLoader.ts";
 import { PROPS_BY_ROOM } from "./props.ts";
+import { buildStandee, loadStandeeBase } from "./standee.ts";
 import type { GameState, StationId } from "../game/types.ts";
 
 /** Window light and mood shift with the season, so the term visibly passes. */
@@ -77,6 +78,8 @@ export class World {
   private people = new THREE.Group();
   private animator = new CharacterAnimator();
   private castKey = "";
+  /** The cardboard-cutout template, once loaded — see `standee.ts`. */
+  private standeeBase: THREE.Object3D | null = null;
   private clock = new THREE.Clock();
   private hemisphere: THREE.HemisphereLight;
   private raf = 0;
@@ -322,6 +325,18 @@ export class World {
       }
       const person = this.namedFor(slot, state);
       if (!person) continue;
+
+      if (slot.standee) {
+        // Not loaded yet: skip for now. loadAssets() re-syncs once the
+        // standee template is in, so it pops in the same way furniture does.
+        if (!this.standeeBase) continue;
+        const standee = buildStandee(this.standeeBase, person.seed);
+        standee.position.copy(slot.position);
+        standee.rotation.y = slot.rotationY;
+        this.people.add(standee);
+        continue;
+      }
+
       const character = buildCharacter({
         seed: person.seed,
         age: person.age,
@@ -384,7 +399,21 @@ export class World {
       room.group.add(props);
       propGroups.set(id, props);
     }
-    return loadProps(propGroups, onProgress);
+
+    const [loaded] = await Promise.all([
+      loadProps(propGroups, onProgress),
+      loadStandeeBase()
+        .then((base) => {
+          this.standeeBase = base;
+          // Cutouts pop in once the template is ready, the same way
+          // furniture does — resync now in case the player is already
+          // standing in a room that needed them.
+          this.castKey = "";
+          this.syncPeople(this.state);
+        })
+        .catch((error) => console.warn("[assets] could not load the standee template:", error)),
+    ]);
+    return loaded;
   }
 
   /**

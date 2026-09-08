@@ -39,6 +39,12 @@ export interface CastSlot {
   pose: Pose;
   /** Faction seat colour in the chamber, where the person is anonymous. */
   tint?: number;
+  /**
+   * Rendered as a real cardboard-cutout standee (see `world/standee.ts`)
+   * instead of a sculpted body — their actual portrait on a flat board on a
+   * stand, rather than a modelled figure. `pose` is unused for these.
+   */
+  standee?: boolean;
 }
 
 export interface RoomBuild {

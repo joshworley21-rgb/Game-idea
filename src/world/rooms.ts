@@ -26,11 +26,11 @@ import type { CastSlot, Door, Footprint, RoomBuild, StationAnchor } from "./room
  * slots where people stand or sit. The world manager swaps between them.
  */
 
-function anchor(id: StationAnchor["id"], x: number, z: number, fx: number, fz: number): StationAnchor {
+function anchor(id: StationAnchor["id"], x: number, z: number, fx: number, fz: number, focusY = 1.05): StationAnchor {
   return {
     id,
     position: new THREE.Vector3(x, 0, z),
-    focus: new THREE.Vector3(fx, 1.05, fz),
+    focus: new THREE.Vector3(fx, focusY, fz),
   };
 }
 
@@ -84,16 +84,19 @@ export function buildCabinetRoom(): RoomBuild {
   group.add(head);
   place(head, new THREE.BoxGeometry(0.52, 0.9, 0.08), standard(0x3a2a1e, 0.6), 0, 1.02, -0.22);
 
-  // Six secretaries, spread down the table rather than bunched at one end.
+  // Six secretaries, standing behind their chairs as real cardboard-cutout
+  // standees — their actual portrait on a board, not a sculpted body —
+  // spread down the table rather than bunched at one end.
   const order = [3, 9, 1, 11, 5, 13];
   order.forEach((seatIndex, i) => {
     const s = seats[seatIndex];
     cast.push({
       role: "cabinet",
       index: i,
-      position: new THREE.Vector3(s.x, 0, s.z + (s.ry === 0 ? -0.12 : 0.12)),
+      position: new THREE.Vector3(s.x, 0, s.z + (s.ry === 0 ? -0.28 : 0.28)),
       rotationY: s.ry,
-      pose: i % 3 === 0 ? "sit-forward" : "sit",
+      pose: "stand",
+      standee: true,
     });
   });
 
@@ -130,16 +133,19 @@ export function buildCabinetRoom(): RoomBuild {
   return {
     id: "cabinet",
     group,
-    anchors: [anchor("budget", 0, -2.55, 0, -1.4), anchor("staff", 3.0, 2.4, 3.4, 1.2)],
+    // "budget" looks up toward face height now that the secretaries across
+    // the table are standing cutouts rather than seated.
+    anchors: [anchor("budget", 0, -2.55, 0, -1.4, 1.6), anchor("staff", 3.0, 2.4, 3.4, 1.2)],
     doors: [
       door("oval", "The Oval Office", W / 2 - 0.9, 1.4, W / 2, 1.4),
       door("press", "The Briefing Room", -W / 2 + 0.9, -1.2, -W / 2, -1.2),
     ],
     // The meeting is already seated when you arrive — the head of the table,
-    // not the doorway.
+    // not the doorway. Aimed up toward face height now that the secretaries
+    // are standing cutouts rather than seated across the table.
     spawn: new THREE.Vector3(0, 0, -1.45),
-    spawnLook: new THREE.Vector3(0, 1.05, 1.72),
-    spawnEyeHeight: 1.34,
+    spawnLook: new THREE.Vector3(0, 1.75, 1.72),
+    spawnEyeHeight: 1.5,
     colliders,
     cast,
     clamp: rectClamp(W, D),
