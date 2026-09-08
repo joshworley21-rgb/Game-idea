@@ -7,6 +7,7 @@ import { BLOCS } from "../game/blocs.ts";
 import { PASS_THRESHOLD } from "../game/bills.ts";
 import { FACTION_BY_KEY } from "../game/congress.ts";
 import { memberById, stateOf } from "../game/family.ts";
+import { worldLeaderById } from "../game/diplomacy.ts";
 import { ROSTER_CATEGORIES, rosterByCategory, rosterByName } from "../game/roster.ts";
 import type { RosterPerson } from "../game/roster.ts";
 import { electionMargin, gradeFor, scoreLegacy } from "../game/endings.ts";
@@ -70,6 +71,15 @@ function portraitImg(speaker: Speaker): HTMLImageElement {
   img.addEventListener("error", tryNext);
   tryNext();
   return img;
+}
+
+/** Who a `target` on an action/conversation option actually names: a family member, a world leader, or "Them" if it can't be resolved. */
+function targetName(state: GameState, target: string): string {
+  if (target === "all") return "Everyone";
+  if (target.startsWith("leader:")) {
+    return worldLeaderById(target.slice("leader:".length))?.name ?? "Them";
+  }
+  return memberById(state, target)?.name ?? "Them";
 }
 
 const ADVICE_TONE: Record<string, "support" | "oppose" | ""> = {
@@ -357,7 +367,7 @@ export function stationPanel(
               ...(action.target && action.attention
                 ? [
                     {
-                      text: `${action.target === "all" ? "Everyone" : (memberById(s, action.target)?.name ?? "Them")} +${action.attention}`,
+                      text: `${targetName(s, action.target)} +${action.attention}`,
                       good: true,
                     },
                   ]
@@ -461,7 +471,7 @@ export function conversationPanel(engine: Engine, conversationId: string, host: 
               ...(option.target && option.attention
                 ? [
                     {
-                      text: `${option.target === "all" ? "Everyone" : (memberById(engine.state, option.target)?.name ?? "Them")} ${option.attention > 0 ? "+" : ""}${option.attention}`,
+                      text: `${targetName(engine.state, option.target)} ${option.attention > 0 ? "+" : ""}${option.attention}`,
                       good: option.attention > 0,
                     },
                   ]
