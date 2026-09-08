@@ -31,11 +31,29 @@
       "skillPath": "skills/dogfood/SKILL.md",
       "computedHash": "8e6dfbff0633e355210ce7ae109cb39a3e1347946b6e92aaa607271154526b6b"
     },
+    "flux-image": {
+      "source": "inference-sh/skills",
+      "sourceType": "github",
+      "skillPath": "tools/image/flux-image/SKILL.md",
+      "computedHash": "844dd4bd2320b7944f69aaf0bbf10104f510a0c85c5b1876c0770952e1c0e6b8"
+    },
+    "google-veo": {
+      "source": "inference-sh/skills",
+      "sourceType": "github",
+      "skillPath": "tools/video/google-veo/SKILL.md",
+      "computedHash": "f407ca9539c34c382f72a5e37f13ed664645d0c2ada11c5d0dca6237022d75a7"
+    },
     "ios-simulator": {
       "source": "callstack/agent-device",
       "sourceType": "github",
       "skillPath": "skills/ios-simulator/SKILL.md",
       "computedHash": "a0196ca78c5af1e2f25f4d534b3971fe8d9e5e6aa02a2d0f35a53b222bca57da"
+    },
+    "llm-models": {
+      "source": "inference-sh/skills",
+      "sourceType": "github",
+      "skillPath": "tools/llm/llm-models/SKILL.md",
+      "computedHash": "a4fd7bba32dc3b229a9e7859b1b1129da93ac26f3fcb5a7d1b98741b51d1a34f"
     },
     "unreal-mcp": {
       "source": "EpicGames/unreal-engine-skills-for-claude-code-plugin",
@@ -48,6 +66,12 @@
       "sourceType": "github",
       "skillPath": "skills/unreal-skill/SKILL.md",
       "computedHash": "bf49d05392fee755e0c94772ddf508cb56178d3672367054ccd7213ebb2736e2"
+    },
+    "web-search": {
+      "source": "inference-sh/skills",
+      "sourceType": "github",
+      "skillPath": "tools/llm/web-search/SKILL.md",
+      "computedHash": "3eef0d8ed249bc1ac663edc3d3b3b821b4eb35cae5b53cd943747f0d8dd9550b"
     }
   }
 }
