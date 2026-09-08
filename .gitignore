@@ -17,3 +17,10 @@ dogfood-output/
 
 # Raw model downloads; `npm run assets` regenerates them into public/models
 assets-src/
+
+# Skill installs from marketplaces unrelated to this project (e.g. `npx skills
+# add inference-sh/skills`) — kept available locally, never committed. Already
+# tracked skills (agent-device, blender, dogfood, etc.) are unaffected: an
+# ignore rule never untracks a path git already has in the index.
+.agents/skills/*
+.claude/skills/*
