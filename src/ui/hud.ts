@@ -1,7 +1,6 @@
 import { STATION_INFO, STATION_ORDER } from "../game/actions.ts";
 import { TERM_MONTHS, calendar } from "../game/state.ts";
 import type { GameState, StationId } from "../game/types.ts";
-import type { SceneLock } from "../world/roomkit.ts";
 import { clear, el, meter, one } from "./dom.ts";
 
 function statLine(key: string, value: string, tone: "ok" | "warn" | "bad" | ""): HTMLElement {
@@ -24,8 +23,6 @@ export class Hud {
   private power = el("div", { class: "hud-card", id: "hud-power" });
   private nation = el("div", { class: "hud-card", id: "hud-nation" });
   private self = el("div", { class: "hud-card", id: "hud-self" });
-  private prompt = el("div", { id: "prompt" });
-  private crosshair = el("div", { id: "crosshair" });
   private actions = el("div", { class: "hud-card", id: "hud-actions" });
   private endButton: HTMLButtonElement;
   private legend = el("div", { class: "hud-card", id: "hud-legend" });
@@ -33,7 +30,6 @@ export class Hud {
   private situations = el("div", { class: "hud-card", id: "hud-situations" });
   private roomReveal = el("div", { id: "room-reveal", "aria-live": "polite" });
   private roomRevealTimer = 0;
-  private sceneLock = el("div", { id: "scene-lock" });
 
   private muteButton: HTMLButtonElement;
 
@@ -84,44 +80,12 @@ export class Hud {
       this.legend,
       this.situations,
       this.roomReveal,
-      this.sceneLock,
     ]);
-    document.body.append(this.crosshair, this.prompt);
-  }
-
-  /** Shows (or clears) the "you can't walk right now" caption and its exit. */
-  setSceneLock(lock: SceneLock | null, onLeave: () => void): void {
-    clear(this.sceneLock);
-    if (!lock) {
-      this.sceneLock.classList.remove("show");
-      return;
-    }
-    this.sceneLock.append(
-      el("span", { class: "scene-lock-label" }, [lock.label]),
-      el("button", { class: "btn ghost small", onclick: onLeave }, [lock.leaveLabel]),
-    );
-    this.sceneLock.classList.add("show");
   }
 
   /** Reflects the stored preference once audio starts. */
   setMuted(muted: boolean): void {
     this.muteButton.textContent = muted ? "Sound off" : "Sound on";
-  }
-
-  setPrompt(station: StationId | null, blocked = false): void {
-    if (!station) {
-      this.prompt.classList.remove("show");
-      this.crosshair.classList.remove("hot");
-      return;
-    }
-    const info = STATION_INFO[station];
-    clear(this.prompt);
-    this.prompt.append(
-      el("kbd", {}, ["E"]),
-      document.createTextNode(` ${blocked ? "—" : "Open"} ${info.name}`),
-    );
-    this.prompt.classList.add("show");
-    this.crosshair.classList.add("hot");
   }
 
   setEndEnabled(enabled: boolean, label: string): void {

@@ -9,7 +9,7 @@ import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { buildOffice } from "./office.ts";
 import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
-import type { CastSlot, Door, RoomBuild, RoomId, SceneLock } from "./roomkit.ts";
+import type { CastSlot, Door, RoomBuild, RoomId } from "./roomkit.ts";
 import { CharacterAnimator, buildCharacter, buildCrowd } from "./character.ts";
 import type { CrowdMember } from "./character.ts";
 import { PlayerController } from "./controls.ts";
@@ -17,7 +17,7 @@ import { Stations } from "./stations.ts";
 import { Doors } from "./doors.ts";
 import { Sound } from "../audio/sound.ts";
 import { loadProps } from "./assetLoader.ts";
-import type { Footprint, LoadProgress } from "./assetLoader.ts";
+import type { LoadProgress } from "./assetLoader.ts";
 import { PROPS_BY_ROOM } from "./props.ts";
 import type { GameState, StationId } from "../game/types.ts";
 
@@ -43,6 +43,9 @@ export const STATION_ROOM: Record<StationId, RoomId> = {
 
 /** Ambient occlusion renders at half resolution; it is low-frequency anyway. */
 const AO_SCALE = 0.5;
+
+/** How long an in-room camera move to a different station takes. */
+const PAN_DURATION = 0.7;
 
 /** The five factions, left to right across the chamber. */
 const FACTION_COLOURS = [0x5b7fb4, 0x6a8cbd, 0x87858c, 0xa8836d, 0xb26f68];
@@ -91,21 +94,15 @@ export class World {
   private frameSamples = 0;
   private horizontalFov = ROOM_PRESENTATION.oval.horizontalFov;
   readonly sound = new Sound();
-  /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
-  readonly touch: boolean;
 
-  onNearestChange: (station: StationId | null) => void = () => {};
   /** A tap or click that landed on a station. */
   onStationTap: (station: StationId) => void = () => {};
-  /** A tap that landed near a door, with none open. */
-  onDoorTap: () => void = () => {};
-  /** The player has walked through a door into another room. */
+  /** A tap or click that landed on a door. */
+  onDoorTap: (door: Door) => void = () => {};
+  /** The room changed — a cut, not something the player walked through. */
   onRoomChange: (room: RoomId, name: string) => void = () => {};
-  /** The room just opened on a scene (or, with null, the player left one). */
-  onSceneLock: (lock: SceneLock | null) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement) {
-    this.touch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
     // The game only ships as an Android app now, on hardware at or above a
     // Galaxy S22+: no browser fallback to keep light for, so the renderer
     // asks for the full picture and leans on the frame-time watchdog below
@@ -144,15 +141,16 @@ export class World {
     this.camera.add(this.listener);
     this.player = new PlayerController(this.camera, this.renderer.domElement);
     this.lastPosition.copy(this.camera.position);
-    this.stations = new Stations(this.scene, [], this.touch);
+    this.stations = new Stations(this.scene, []);
     this.doors = new Doors(this.scene);
     this.player.onTap = ({ x, y }) => {
       const station = this.pickStation(x, y);
-      if (station) this.onStationTap(station);
-      // A door has no hitbox of its own: standing at one and tapping
-      // anywhere is enough, the same way "E" is on a keyboard.
-      else if (this.doors.nearest) this.onDoorTap();
-      else this.player.lock();
+      if (station) {
+        this.onStationTap(station);
+        return;
+      }
+      const door = this.pickDoor(x, y);
+      if (door) this.onDoorTap(door);
     };
 
     this.enterRoom("oval");
@@ -239,10 +237,12 @@ export class World {
   }
 
   /**
-   * Moves the president into a room: swaps the geometry, puts them at the door
-   * they came through, and rebuilds the markers and the people inside.
+   * Cuts straight to a room: swaps the geometry, places the camera at the
+   * room's establishing shot, and rebuilds the markers and the people
+   * inside. Instant — a caller taking the player through a cutscene calls
+   * this while the screen is hidden behind a fade.
    */
-  enterRoom(id: RoomId, arrivingFrom?: RoomId): void {
+  enterRoom(id: RoomId): void {
     const room = this.roomOf(id);
     if (this.current) this.current.group.visible = false;
     this.current = room;
@@ -255,21 +255,13 @@ export class World {
       this.scene.fog.far = presentation.fogFar;
     }
 
-    // Arrive at the door you would have come through, if there is one.
-    const back = arrivingFrom ? room.doors.find((d) => d.to === arrivingFrom) : undefined;
-    const spawn = back ? back.position.clone() : room.spawn.clone();
-    const look = back ? room.spawnLook.clone() : room.spawnLook.clone();
-    // Step away from the door rather than standing in it.
-    if (back) {
-      const inward = spawn.clone().sub(back.facing).setY(0).normalize().multiplyScalar(1.1);
-      spawn.add(inward);
-    }
-    this.player.teleport(spawn);
-    this.player.lookAt(look);
+    this.player.teleport(room.spawn, room.spawnEyeHeight);
+    this.player.lookAt(room.spawnLook);
+    // A teleport is a cut, not a step: the footstep-by-distance sound would
+    // otherwise read the jump itself as one very long stride.
+    this.lastPosition.copy(this.camera.position);
     this.resize();
 
-    this.player.colliders = room.colliders;
-    this.player.clamp = room.clamp;
     this.stations.rebuild(room.anchors);
     this.doors.rebuild(room.doors);
     this.castKey = "";
@@ -277,27 +269,26 @@ export class World {
     this.setMonth(this.month);
     if (room.fireplace) this.sound.attachRoom(this.listener, room.fireplace, room.clockSpot ?? room.fireplace);
     this.onRoomChange(id, ROOM_INFO[id].name);
-
-    // A room that opens on a scene roots you in it rather than leaving you
-    // free to walk in on people already seated.
-    if (room.sceneLock) {
-      this.player.root(room.sceneLock.position, room.sceneLock.eyeHeight);
-      this.player.lookAt(room.sceneLock.look);
-    }
-    this.onSceneLock(room.sceneLock ?? null);
   }
 
-  /** Steps out of the room's scene lock, so the player can walk again. */
-  leaveScene(): void {
-    this.player.unroot();
-    this.onSceneLock(null);
+  /** Which room a station lives in — for a caller deciding pan vs. cutscene. */
+  roomOfStation(station: StationId): RoomId {
+    return STATION_ROOM[station];
   }
 
-  /** The room a station lives in, for the number-key shortcuts. */
-  goToStation(station: StationId): void {
-    const target = STATION_ROOM[station];
-    if (target !== this.current.id) this.enterRoom(target);
-    this.focus(station);
+  /** Animates the camera to a station's vantage within the current room. */
+  panToStation(station: StationId): void {
+    const anchor = this.stations.anchorOf(station);
+    if (anchor) this.player.panTo(anchor.position, anchor.focus, undefined, PAN_DURATION);
+  }
+
+  /** Cuts straight to a station's vantage — for right after enterRoom(), hidden by a fade. */
+  snapToStation(station: StationId): void {
+    const anchor = this.stations.anchorOf(station);
+    if (!anchor) return;
+    this.player.teleport(anchor.position);
+    this.lastPosition.copy(this.camera.position);
+    this.player.lookAt(anchor.focus);
   }
 
   // ------------------------------------------------------------------ people
@@ -383,25 +374,17 @@ export class World {
 
   // ------------------------------------------------------------------ setup
 
-  /** Fetches the furniture models, adds them, and makes them solid. */
+  /** Fetches the furniture models and adds them to each room. */
   async loadAssets(onProgress?: (progress: LoadProgress) => void): Promise<number> {
     const propGroups = new Map<RoomId, THREE.Object3D>();
-    const footprints = new Map<RoomId, Footprint[]>();
     for (const id of Object.keys(PROPS_BY_ROOM) as RoomId[]) {
       const room = this.roomOf(id);
       const props = new THREE.Group();
       props.name = `${id}-signature-props`;
       room.group.add(props);
       propGroups.set(id, props);
-      footprints.set(id, []);
     }
-    const count = await loadProps(propGroups, onProgress, footprints);
-    for (const [id, roomFootprints] of footprints) {
-      const room = this.roomOf(id);
-      room.colliders = [...room.colliders, ...roomFootprints];
-    }
-    this.player.colliders = this.current.colliders;
-    return count;
+    return loadProps(propGroups, onProgress);
   }
 
   /**
@@ -434,34 +417,25 @@ export class World {
     }
   }
 
-  /** The station under a screen point, for tap and click to open. */
-  pickStation(clientX: number, clientY: number): StationId | null {
+  /** The screen-to-world raycast shared by pickStation and pickDoor. */
+  private ndcAt(clientX: number, clientY: number): THREE.Vector2 {
     const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
+    return new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
-    this.raycaster.setFromCamera(ndc, this.camera);
+  }
+
+  /** The station under a screen point, for tap and click to open. */
+  pickStation(clientX: number, clientY: number): StationId | null {
+    this.raycaster.setFromCamera(this.ndcAt(clientX, clientY), this.camera);
     return this.stations.pick(this.raycaster);
   }
 
-  focus(station: StationId): void {
-    const target = this.stations.focusOf(station);
-    if (target) this.player.lookAt(target);
-  }
-
-  /** The door the player is standing at, if any. */
-  get nearestDoor(): Door | null {
-    return this.doors.nearest;
-  }
-
-  /** Walks through the door the player is standing at. */
-  useDoor(): boolean {
-    const door = this.doors.nearest;
-    if (!door) return false;
-    const from = this.current.id;
-    this.enterRoom(door.to, from);
-    return true;
+  /** The door under a screen point, for tap and click to go through. */
+  pickDoor(clientX: number, clientY: number): Door | null {
+    this.raycaster.setFromCamera(this.ndcAt(clientX, clientY), this.camera);
+    return this.doors.pick(this.raycaster);
   }
 
   private resize = (): void => {
@@ -489,10 +463,8 @@ export class World {
       this.player.update(dt);
       this.sound.update(this.camera.position.distanceTo(this.lastPosition));
       this.lastPosition.copy(this.camera.position);
-      const before = this.stations.nearest;
-      const nearest = this.stations.update(dt, this.camera.position);
-      if (nearest !== before) this.onNearestChange(nearest);
-      this.doors.update(dt, this.camera.position);
+      this.stations.update(dt);
+      this.doors.update(dt);
       this.animator.update(dt, this.camera.position);
       if (this.composer) {
         const t0 = performance.now();

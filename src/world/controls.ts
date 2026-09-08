@@ -1,10 +1,6 @@
 import * as THREE from "three";
-import { resolveCollisions } from "./office.ts";
 
 const EYE_HEIGHT = 1.62;
-const SPEED = 3.1;
-const SPRINT = 5.0;
-const DAMPING = 11;
 /** A pointer that moves less than this over a short time counts as a tap. */
 const TAP_SLOP = 14;
 const TAP_MS = 400;
@@ -14,19 +10,22 @@ export interface TapEvent {
   y: number;
 }
 
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
 /**
- * First-person walker driven by pointer events, so a mouse drag and a thumb
- * drag take the same path. Pointer lock is used when the browser grants it;
- * on a phone, and in an embedded frame, drag-to-look carries the whole game.
+ * The camera: fixed wherever it was last put, free to look around by drag
+ * (mouse or thumb, the same code path either way), and moved only by a
+ * discrete `teleport` (a cut) or `panTo` (an animated camera move to a new
+ * vantage). There is no walking — the president chooses where to be, and the
+ * camera goes there for them.
  */
 export class PlayerController {
   readonly camera: THREE.PerspectiveCamera;
   private dom: HTMLElement;
   private yaw = 0;
   private pitch = 0;
-  private velocity = new THREE.Vector3();
-  private keys = new Set<string>();
-  private bob = 0;
 
   /** Look drag in progress, keyed by pointer id. */
   private lookPointer: number | null = null;
@@ -35,23 +34,24 @@ export class PlayerController {
   private pressedPos = { x: 0, y: 0 };
   private moved = 0;
 
-  /** Movement from an on-screen stick: x strafes, y walks forward. */
-  moveInput = { x: 0, y: 0 };
-
-  /** Furniture footprints the player cannot walk through. */
-  colliders: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
-  /** Pushes the player back inside whichever room they are in. */
-  clamp: (p: THREE.Vector3) => void = () => {};
-
-  /** Set false while a UI panel is open. */
+  /** Set false while a UI panel is open, so dragging cannot spin the view. */
   enabled = true;
-  locked = false;
-  /** Set while the player is rooted to a scene spot — see root(). */
-  private rootPos: THREE.Vector3 | null = null;
-  private rootEyeY = EYE_HEIGHT;
-  onLockChange: (locked: boolean) => void = () => {};
   /** Fired for a press that did not turn into a drag. */
   onTap: (event: TapEvent) => void = () => {};
+  /** Fired once an animated panTo() reaches its target. */
+  onPanComplete: () => void = () => {};
+
+  // A pan tweens position and orientation together over panDuration seconds;
+  // panT === 1 means idle. Yaw is unwrapped to the shortest angular path so a
+  // pan never spins the long way around to face somewhere just left of you.
+  private panFromPos = new THREE.Vector3();
+  private panFromYaw = 0;
+  private panFromPitch = 0;
+  private panDeltaYaw = 0;
+  private panTargetPos = new THREE.Vector3();
+  private panTargetPitch = 0;
+  private panT = 1;
+  private panDuration = 1;
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
@@ -59,9 +59,6 @@ export class PlayerController {
     camera.position.set(0, EYE_HEIGHT, 3.0);
     this.applyRotation();
 
-    window.addEventListener("keydown", this.onKeyDown);
-    window.addEventListener("keyup", this.onKeyUp);
-    document.addEventListener("pointerlockchange", this.onPointerLockChange);
     dom.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
@@ -70,9 +67,6 @@ export class PlayerController {
   }
 
   dispose(): void {
-    window.removeEventListener("keydown", this.onKeyDown);
-    window.removeEventListener("keyup", this.onKeyUp);
-    document.removeEventListener("pointerlockchange", this.onPointerLockChange);
     this.dom.removeEventListener("pointerdown", this.onPointerDown);
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
@@ -80,39 +74,16 @@ export class PlayerController {
     window.removeEventListener("blur", this.release);
   }
 
-  /** Requests pointer lock. Silently ignored where it is unavailable. */
-  lock(): void {
-    if (!this.enabled) return;
-    if (matchMedia("(pointer: coarse)").matches) return;
-    void this.dom.requestPointerLock?.();
-  }
-
-  unlock(): void {
-    if (document.pointerLockElement === this.dom) document.exitPointerLock();
+  get panning(): boolean {
+    return this.panT < 1;
   }
 
   private release = (): void => {
-    this.keys.clear();
     this.lookPointer = null;
-    this.moveInput = { x: 0, y: 0 };
-  };
-
-  private onPointerLockChange = (): void => {
-    this.locked = document.pointerLockElement === this.dom;
-    this.onLockChange(this.locked);
-  };
-
-  private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    this.keys.add(e.code);
-  };
-
-  private onKeyUp = (e: KeyboardEvent): void => {
-    this.keys.delete(e.code);
   };
 
   private onPointerDown = (e: PointerEvent): void => {
-    if (!this.enabled || this.lookPointer !== null) return;
+    if (!this.enabled || this.panning || this.lookPointer !== null) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     this.lookPointer = e.pointerId;
     this.lastPointer = { x: e.clientX, y: e.clientY };
@@ -122,23 +93,11 @@ export class PlayerController {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (!this.enabled) return;
-    const dragging = this.lookPointer === e.pointerId;
-    if (!this.locked && !dragging) return;
-
-    // movementX/Y is only meaningful under pointer lock; outside it, track the
-    // pointer ourselves so drag-to-look behaves the same everywhere.
-    let dx: number;
-    let dy: number;
-    if (this.locked && !dragging) {
-      dx = e.movementX;
-      dy = e.movementY;
-    } else {
-      dx = e.clientX - this.lastPointer.x;
-      dy = e.clientY - this.lastPointer.y;
-      this.lastPointer = { x: e.clientX, y: e.clientY };
-      this.moved += Math.abs(dx) + Math.abs(dy);
-    }
+    if (!this.enabled || this.panning || this.lookPointer !== e.pointerId) return;
+    const dx = e.clientX - this.lastPointer.x;
+    const dy = e.clientY - this.lastPointer.y;
+    this.lastPointer = { x: e.clientX, y: e.clientY };
+    this.moved += Math.abs(dx) + Math.abs(dy);
 
     const sensitivity = e.pointerType === "touch" ? 0.0034 : 0.0022;
     this.yaw -= dx * sensitivity;
@@ -156,42 +115,20 @@ export class PlayerController {
       Math.abs(e.clientX - this.pressedPos.x) < TAP_SLOP &&
       Math.abs(e.clientY - this.pressedPos.y) < TAP_SLOP &&
       this.moved < TAP_SLOP * 2;
-    if (this.enabled && quick && still) this.onTap({ x: e.clientX, y: e.clientY });
+    if (this.enabled && !this.panning && quick && still) this.onTap({ x: e.clientX, y: e.clientY });
   };
 
   private applyRotation(): void {
     this.camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
   }
 
-  /** Turns the camera to face a point. */
-  /** Drops the player at a spot, killing any momentum they had. */
-  teleport(position: THREE.Vector3): void {
-    this.rootPos = null;
-    this.camera.position.set(position.x, EYE_HEIGHT, position.z);
-    this.velocity.set(0, 0, 0);
+  /** Cuts straight to a spot — no camera move, just there. */
+  teleport(groundPos: THREE.Vector3, eyeHeight = EYE_HEIGHT): void {
+    this.panT = 1;
+    this.camera.position.set(groundPos.x, eyeHeight, groundPos.z);
   }
 
-  get rooted(): boolean {
-    return this.rootPos !== null;
-  }
-
-  /**
-   * Pins the player to a spot — a seat, a podium — so they can still turn to
-   * look around but cannot walk away from it. update() short-circuits the
-   * movement it would otherwise apply.
-   */
-  root(position: THREE.Vector3, eyeHeight = EYE_HEIGHT): void {
-    this.rootPos = position.clone();
-    this.rootEyeY = eyeHeight;
-    this.camera.position.set(position.x, eyeHeight, position.z);
-    this.velocity.set(0, 0, 0);
-  }
-
-  /** Frees the player to walk again, from wherever they were rooted. */
-  unroot(): void {
-    this.rootPos = null;
-  }
-
+  /** Turns the camera to face a point, from wherever it currently is. */
   lookAt(target: THREE.Vector3): void {
     const dir = target.clone().sub(this.camera.position);
     this.yaw = Math.atan2(-dir.x, -dir.z);
@@ -199,40 +136,35 @@ export class PlayerController {
     this.applyRotation();
   }
 
+  /**
+   * Animates the camera to a new spot and orientation over `duration`
+   * seconds — the "walk over and look at this" of a game with no walking.
+   */
+  panTo(groundPos: THREE.Vector3, lookTarget: THREE.Vector3, eyeHeight = EYE_HEIGHT, duration = 0.7): void {
+    this.panFromPos.copy(this.camera.position);
+    this.panFromYaw = this.yaw;
+    this.panFromPitch = this.pitch;
+    this.panTargetPos.set(groundPos.x, eyeHeight, groundPos.z);
+
+    const dir = lookTarget.clone().sub(this.panTargetPos);
+    const targetYaw = Math.atan2(-dir.x, -dir.z);
+    this.panTargetPitch = Math.atan2(dir.y, Math.hypot(dir.x, dir.z));
+    let dYaw = targetYaw - this.panFromYaw;
+    dYaw = ((dYaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    this.panDeltaYaw = dYaw;
+
+    this.panT = 0;
+    this.panDuration = Math.max(0.05, duration);
+  }
+
   update(dt: number): void {
-    if (this.rootPos) {
-      // Looking around still works — that is handled in onPointerMove,
-      // independent of this update — but position never leaves the spot.
-      this.camera.position.set(this.rootPos.x, this.rootEyeY, this.rootPos.z);
-      this.velocity.set(0, 0, 0);
-      return;
-    }
-
-    const keyForward = Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
-      Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
-    const keyStrafe = Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
-      Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
-
-    const forward = keyForward + this.moveInput.y;
-    const strafe = keyStrafe + this.moveInput.x;
-
-    if (this.enabled && (forward || strafe)) {
-      const sprinting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
-      const speed = sprinting ? SPRINT : SPEED;
-      const dir = new THREE.Vector3(strafe, 0, -forward);
-      if (dir.lengthSq() > 1) dir.normalize();
-      dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
-      this.velocity.addScaledVector(dir, speed * DAMPING * dt);
-    }
-
-    this.velocity.multiplyScalar(Math.max(0, 1 - DAMPING * dt));
-    this.camera.position.addScaledVector(this.velocity, dt);
-    this.clamp(this.camera.position);
-    resolveCollisions(this.camera.position, this.colliders);
-
-    // A little head bob so walking has weight.
-    const speed = this.velocity.length();
-    this.bob += dt * speed * 2.4;
-    this.camera.position.y = EYE_HEIGHT + Math.sin(this.bob * 2) * Math.min(0.035, speed * 0.012);
+    if (this.panT >= 1) return;
+    this.panT = Math.min(1, this.panT + dt / this.panDuration);
+    const e = easeInOutCubic(this.panT);
+    this.camera.position.lerpVectors(this.panFromPos, this.panTargetPos, e);
+    this.yaw = this.panFromYaw + this.panDeltaYaw * e;
+    this.pitch = THREE.MathUtils.lerp(this.panFromPitch, this.panTargetPitch, e);
+    this.applyRotation();
+    if (this.panT >= 1) this.onPanComplete();
   }
 }

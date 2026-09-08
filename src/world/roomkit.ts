@@ -29,23 +29,6 @@ export interface Door {
   facing: THREE.Vector3;
 }
 
-/**
- * A room that opens on a scene already in progress: the president is rooted
- * in place — the head of the cabinet table, the well of the House, the
- * briefing-room podium — free to look around but not to walk, until they
- * choose to step out of it.
- */
-export interface SceneLock {
-  position: THREE.Vector3;
-  look: THREE.Vector3;
-  /** Lower than the standing eye line, for a seated scene. */
-  eyeHeight?: number;
-  /** Shown as the scene's caption. */
-  label: string;
-  /** Shown on the button that steps out of it. */
-  leaveLabel: string;
-}
-
 /** Somebody who belongs in this room, and how they are sitting or standing. */
 export interface CastSlot {
   /** Which list the person comes from, and their index in it. */
@@ -63,9 +46,11 @@ export interface RoomBuild {
   group: THREE.Group;
   anchors: StationAnchor[];
   doors: Door[];
-  /** Where you appear, and what you are looking at, when you walk in. */
+  /** Where the camera lands, and what it looks at, when you arrive. */
   spawn: THREE.Vector3;
   spawnLook: THREE.Vector3;
+  /** Lower than the standing eye line, for a room you arrive already seated in. */
+  spawnEyeHeight?: number;
   colliders: Footprint[];
   cast: CastSlot[];
   /** Pushes a position back inside the room. */
@@ -75,8 +60,6 @@ export interface RoomBuild {
   /** Anchors for positional sound, when the room has any. */
   fireplace?: THREE.Object3D;
   clockSpot?: THREE.Object3D;
-  /** Set when the room should open on a scene, rather than free to walk. */
-  sceneLock?: SceneLock;
 }
 
 export const ROOM_INFO: Record<RoomId, { name: string; blurb: string }> = {

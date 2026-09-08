@@ -17,9 +17,10 @@ allow installs from unknown sources when Android asks, and open it — no
 network connection needed once it's installed. See [Android](#android) below
 for the details, including how to build it yourself.
 
-You walk six rooms in first person, and each one does what that room really
-does. Doors on the floor take you between them; the station chips along the
-bottom take you straight to a station, wherever it lives.
+You move through six rooms in first person, and each one does what that room
+really does. Tapping a door cuts you to the room on the other side of it; the
+station chips along the bottom, or tapping a station directly in the room,
+take you straight to a station, wherever it lives.
 
 | Room | Station | What happens there |
 | --- | --- | --- |
@@ -37,10 +38,12 @@ table, your family is upstairs, a press corps fills the briefing room, and the
 House chamber holds a hundred members seated in their five faction blocks. They
 breathe, blink, shift their weight, and turn to look at you when you walk in.
 
-**Controls** — a thumb stick to walk, drag anywhere else to look around, and a
-tap opens whatever you're standing at or walks you through the door under your
-feet. The station chips, the dashboard and ending the month are all buttons in
-the HUD. Everything is reachable from a thumb alone.
+**Controls** — drag anywhere to look around; tap a station or a door in the
+room and the camera takes you there, panning to a station in the same room or
+cutting to the next one through a door. There is no walking to fumble with —
+you choose where to be, not how to get there. The station chips, the
+dashboard and ending the month are all buttons in the HUD. Everything is
+reachable from a thumb alone.
 
 Progress saves to the device after every action.
 
@@ -394,10 +397,11 @@ It needs a JDK (17 or newer), Gradle, and an Android SDK with platform 36 and
 build-tools 36. Point `ANDROID_HOME` at the SDK before building.
 
 **Touch play.** The phone build is not the desktop build in a frame. Input runs
-on pointer events, so a thumb drag looks around exactly as a mouse drag does; a
-stick in the bottom-left corner walks; and tapping an object in the room, or a
-door under your feet, opens or uses it. The HUD reflows below 900px: the four
-corner cards collapse into a top bar and a stat strip, the stations become a
+on pointer events, so a thumb drag looks around exactly as a mouse drag does,
+and tapping a station or a door in the room sends the camera there — there is
+no separate touch-only control, since neither build ever walks. The HUD
+reflows below 900px: the four corner cards collapse into a top bar and a stat
+strip, the stations become a
 scrolling row of chips along the bottom edge, and panels take the full screen.
 The camera's vertical field of view is derived from a fixed horizontal one,
 because three.js measures FOV vertically and a portrait phone would otherwise
@@ -426,7 +430,7 @@ debug-signed, so it is for sideloading rather than the Play Store.
 ```
 src/game/     simulation: state, sim tick, bills, crises, actions, endings
 src/world/    three.js: office geometry, props, controls, stations, asset loading
-src/ui/       HUD, panels, touch stick, styling
+src/ui/       HUD, panels, the room-to-room travel veil, styling
 src/audio/    procedural sound synthesis
 src/tools/    headless balance harness
 android/      Capacitor Android project

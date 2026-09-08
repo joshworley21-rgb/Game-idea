@@ -3,9 +3,7 @@ import { STATION_INFO } from "../game/actions.ts";
 import type { StationId } from "../game/types.ts";
 import type { StationAnchor } from "./roomkit.ts";
 
-const REACH = 1.9;
-
-function labelTexture(title: string, hint: string, active: boolean): THREE.CanvasTexture {
+function labelTexture(title: string, badge: boolean): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 160;
@@ -15,20 +13,20 @@ function labelTexture(title: string, hint: string, active: boolean): THREE.Canva
   const radius = 26;
   ctx.beginPath();
   ctx.roundRect(6, 34, 500, 92, radius);
-  ctx.fillStyle = active ? "rgba(20,28,44,0.92)" : "rgba(16,20,30,0.62)";
+  ctx.fillStyle = "rgba(20,28,44,0.9)";
   ctx.fill();
   ctx.lineWidth = 3;
-  ctx.strokeStyle = active ? "rgba(226,193,110,0.95)" : "rgba(226,220,205,0.28)";
+  ctx.strokeStyle = badge ? "rgba(224,106,74,0.95)" : "rgba(226,193,110,0.85)";
   ctx.stroke();
 
   ctx.textAlign = "center";
-  ctx.fillStyle = active ? "#f6e9c8" : "rgba(238,232,220,0.72)";
+  ctx.fillStyle = "#f6e9c8";
   ctx.font = "600 34px Georgia, 'Times New Roman', serif";
   ctx.fillText(title, 256, 74);
 
   ctx.font = "500 22px system-ui, sans-serif";
-  ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.42)";
-  ctx.fillText(hint, 256, 108);
+  ctx.fillStyle = badge ? "rgba(224,106,74,0.95)" : "rgba(226,193,110,0.9)";
+  ctx.fillText(badge ? "NEEDS YOU NOW" : "tap to open", 256, 108);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -42,28 +40,24 @@ interface StationVisual {
   /** Invisible volume so a tap or click can open the station directly. */
   hit: THREE.Mesh;
   badge: number;
-  active: boolean;
 }
 
-/** Floor markers that make the room's interactive points legible. */
+/** The room's interactive points: always tappable, wherever the camera is. */
 export class Stations {
   private visuals: StationVisual[] = [];
   private clock = 0;
   private labelScale = 1;
-  private touch: boolean;
-  nearest: StationId | null = null;
 
   private scene: THREE.Scene;
   private group = new THREE.Group();
 
-  constructor(scene: THREE.Scene, anchors: StationAnchor[], touch = false) {
-    this.touch = touch;
+  constructor(scene: THREE.Scene, anchors: StationAnchor[]) {
     this.scene = scene;
     this.scene.add(this.group);
     this.rebuild(anchors);
   }
 
-  /** Replaces every marker, for when the president walks into another room. */
+  /** Replaces every marker, for when the president moves to another room. */
   rebuild(anchors: StationAnchor[]): void {
     for (const v of this.visuals) {
       v.ring.geometry.dispose();
@@ -74,14 +68,13 @@ export class Stations {
     }
     this.group.clear();
     this.visuals = [];
-    this.nearest = null;
     for (const anchor of anchors) {
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.42, 0.52, 40),
         new THREE.MeshBasicMaterial({
           color: 0xe2c16e,
           transparent: true,
-          opacity: 0.35,
+          opacity: 0.4,
           side: THREE.DoubleSide,
           depthWrite: false,
         }),
@@ -92,11 +85,7 @@ export class Stations {
 
       const info = STATION_INFO[anchor.id];
       const sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-          map: labelTexture(info.name, this.touch ? "tap to open" : "walk closer", false),
-          transparent: true,
-          depthTest: false,
-        }),
+        new THREE.SpriteMaterial({ map: labelTexture(info.name, false), transparent: true, depthTest: false }),
       );
       sprite.position.copy(anchor.position).setY(1.62);
       sprite.scale.set(1.5, 0.47, 1);
@@ -113,7 +102,7 @@ export class Stations {
       hit.userData.stationId = anchor.id;
       this.group.add(hit);
 
-      this.visuals.push({ anchor, ring, sprite, hit, badge: 0, active: false });
+      this.visuals.push({ anchor, ring, sprite, hit, badge: 0 });
     }
   }
 
@@ -122,56 +111,23 @@ export class Stations {
     const v = this.visuals.find((s) => s.anchor.id === id);
     if (!v || v.badge === count) return;
     v.badge = count;
-    this.refreshLabel(v);
-  }
-
-  private refreshLabel(v: StationVisual): void {
     const info = STATION_INFO[v.anchor.id];
-    const hint = v.badge > 0
-      ? "NEEDS YOU NOW"
-      : this.touch
-        ? "tap to open"
-        : v.active
-          ? "press E to open"
-          : "walk closer";
     v.sprite.material.map?.dispose();
-    v.sprite.material.map = labelTexture(info.name, hint, v.active || v.badge > 0);
+    v.sprite.material.map = labelTexture(info.name, v.badge > 0);
     v.sprite.material.needsUpdate = true;
   }
 
-  update(dt: number, playerPosition: THREE.Vector3): StationId | null {
+  /** Idle pulse on the floor rings, so the room does not feel static. */
+  update(dt: number): void {
     this.clock += dt;
-    let best: StationVisual | null = null;
-    let bestDist = REACH;
-
     for (const v of this.visuals) {
-      const dist = v.anchor.position.distanceTo(
-        new THREE.Vector3(playerPosition.x, 0, playerPosition.z),
-      );
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = v;
-      }
-    }
-
-    for (const v of this.visuals) {
-      const active = v === best;
-      if (active !== v.active) {
-        v.active = active;
-        this.refreshLabel(v);
-      }
       const urgent = v.badge > 0;
       const pulse = 0.5 + 0.5 * Math.sin(this.clock * (urgent ? 5 : 2) + v.anchor.position.x);
-      v.ring.material.opacity = (active ? 0.55 : urgent ? 0.4 : 0.18) + pulse * (urgent ? 0.35 : 0.14);
+      v.ring.material.opacity = (urgent ? 0.42 : 0.24) + pulse * (urgent ? 0.35 : 0.14);
       v.ring.material.color.setHex(urgent ? 0xe06a4a : 0xe2c16e);
-      const scale = active ? 1.12 : 1;
-      v.ring.scale.setScalar(scale + pulse * 0.03);
+      v.ring.scale.setScalar(1 + pulse * 0.03);
       v.sprite.position.y = 1.62 + Math.sin(this.clock * 1.4 + v.anchor.position.z) * 0.03;
-      v.sprite.material.opacity = active ? 1 : urgent ? 0.95 : 0.6;
     }
-
-    this.nearest = best?.anchor.id ?? null;
-    return this.nearest;
   }
 
   /** Shrinks the floating labels on small screens. */
@@ -191,7 +147,7 @@ export class Stations {
     return typeof id === "string" ? (id as StationId) : null;
   }
 
-  focusOf(id: StationId): THREE.Vector3 | null {
-    return this.visuals.find((v) => v.anchor.id === id)?.anchor.focus ?? null;
+  anchorOf(id: StationId): StationAnchor | null {
+    return this.visuals.find((v) => v.anchor.id === id)?.anchor ?? null;
   }
 }

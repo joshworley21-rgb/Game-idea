@@ -2,7 +2,7 @@ import "./ui/style.css";
 import { Engine } from "./game/engine.ts";
 import type { Outcome } from "./game/engine.ts";
 import { clearSave, hasSave, loadGame, saveGame } from "./game/save.ts";
-import { STATION_ORDER } from "./game/actions.ts";
+import { STATION_INFO, STATION_ORDER } from "./game/actions.ts";
 import { calendar } from "./game/state.ts";
 import { CAMPAIGN_INTRO, CAMPAIGN_START, campaignBeats, mergeCampaignDeltas } from "./game/campaign.ts";
 import type { CampaignDeltas } from "./game/campaign.ts";
@@ -22,8 +22,9 @@ import {
   stationPanel,
 } from "./ui/panels.ts";
 import { clear, el } from "./ui/dom.ts";
-import { MoveStick, isTouchDevice } from "./ui/touch.ts";
-import { STATION_ROOM, World } from "./world/scene.ts";
+import { TravelVeil } from "./ui/travel.ts";
+import { World } from "./world/scene.ts";
+import type { Door } from "./world/roomkit.ts";
 
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 
@@ -36,9 +37,8 @@ class Game {
   private hud: Hud;
   private host = new PanelHost();
   private queue: Modal[] = [];
-  private nearest: StationId | null = null;
   private ended = false;
-  private stick = new MoveStick();
+  private travelVeil = new TravelVeil();
 
   constructor(engine: Engine) {
     this.engine = engine;
@@ -47,44 +47,23 @@ class Game {
       () => this.endMonth(),
       () => this.open(() => dashboardPanel(this.engine, this.host)),
       (station) => {
-        if (!this.host.isOpen && !this.ended) this.openStation(station);
+        if (!this.host.isOpen && !this.ended) this.visitStation(station);
       },
       () => this.world.sound.toggleMute(),
     );
-    document.body.append(this.hud.root, this.stick.root);
+    document.body.append(this.hud.root, this.travelVeil.root);
 
     // The oath click is the user gesture browsers require before audio starts.
     this.world.startAudio();
     this.hud.setMuted(this.world.sound.isMuted);
 
-    // Walking with a thumb. The stick only appears once a touch is seen.
-    this.stick.onChange = (x, y) => {
-      this.world.player.moveInput = { x, y };
-    };
-    if (isTouchDevice()) this.stick.enable();
-    window.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (e.pointerType === "touch") this.stick.enable();
-      },
-      { capture: true },
-    );
-
     // Tapping or clicking a station in the room opens it.
     this.world.onStationTap = (station) => {
-      if (!this.host.isOpen && !this.ended) this.openStation(station);
+      if (!this.host.isOpen && !this.ended) this.visitStation(station);
     };
-    // Tapping anywhere while standing at a door walks through it — there is
-    // no "E" key on a phone.
-    this.world.onDoorTap = () => {
-      if (!this.host.isOpen && !this.ended) this.walkThrough();
-    };
-
-    // A room that opens on a scene — the cabinet already seated, the House
-    // already in session — roots the player until they choose to step out.
-    this.world.onSceneLock = (lock) => {
-      this.stick.setRooted(lock !== null);
-      this.hud.setSceneLock(lock, () => this.world.leaveScene());
+    // Tapping or clicking a door heads through it.
+    this.world.onDoorTap = (door) => {
+      if (!this.host.isOpen && !this.ended) this.travelThroughDoor(door);
     };
 
     // Android's back button closes what is open rather than leaving the game.
@@ -100,20 +79,11 @@ class Game {
     this.host.onClose = () => {
       this.world.sound.closePanel();
       if (this.drain()) return;
-      if (!this.ended) {
-        this.world.player.enabled = true;
-        this.hud.setPrompt(this.nearest);
-        this.world.player.lock();
-      }
+      if (!this.ended) this.world.player.enabled = true;
     };
 
     this.world.onRoomChange = (_room, name) => this.hud.setRoom(name);
     this.hud.setRoom(this.world.roomName);
-
-    this.world.onNearestChange = (station) => {
-      this.nearest = station;
-      this.hud.setPrompt(this.host.isOpen ? null : station);
-    };
 
     engine.on("state", (s) => this.onState(s));
     engine.on("outcome", (o: Outcome) => {
@@ -188,15 +158,8 @@ class Game {
     if (digit) {
       e.preventDefault();
       const station = STATION_ORDER[Number(digit[1]) - 1];
-      // A number key now walks you to the room the station is actually in.
-      if (station) this.goToStation(station);
+      if (station) this.visitStation(station);
       return;
-    }
-    if (e.code === "KeyE") {
-      e.preventDefault();
-      // A door under your feet takes priority: you are standing in it.
-      if (this.world.nearestDoor) this.walkThrough();
-      else if (this.nearest) this.openStation(this.nearest);
     }
     if (e.code === "Enter") {
       e.preventDefault();
@@ -204,20 +167,35 @@ class Game {
     }
   };
 
-  /** Walks into the room a station lives in, then opens it. */
-  private goToStation(station: StationId): void {
-    const moved = this.world.room !== STATION_ROOM[station];
-    this.world.goToStation(station);
-    if (moved) this.world.sound.paper();
-    this.openStation(station);
+  /**
+   * Heads to a station: an animated camera pan if it is in the room the
+   * president is already in, or a cut — a travel line held over black, the
+   * same one a door uses — if it means changing rooms first.
+   */
+  private visitStation(station: StationId): void {
+    const targetRoom = this.world.roomOfStation(station);
+    if (this.world.room === targetRoom) {
+      this.world.panToStation(station);
+      this.openStation(station);
+      return;
+    }
+    this.world.sound.paper();
+    void this.travelVeil
+      .play(`Walking to ${STATION_INFO[station].name}…`, () => {
+        this.world.enterRoom(targetRoom);
+        this.world.snapToStation(station);
+      })
+      .then(() => {
+        if (!this.host.isOpen && !this.ended) this.openStation(station);
+      });
   }
 
-  /** Uses the door the president is standing at. */
-  private walkThrough(): void {
-    if (!this.world.useDoor()) return;
+  /** Cuts to the room on the other side of a door. */
+  private travelThroughDoor(door: Door): void {
     this.world.sound.paper();
-    this.hud.setRoom(this.world.roomName);
-    this.hud.setPrompt(null);
+    void this.travelVeil.play(`Walking to ${door.label}…`, () => {
+      this.world.enterRoom(door.to);
+    });
   }
 
   private openStation(station: StationId): void {
@@ -236,8 +214,6 @@ class Game {
   private open(factory: () => HTMLElement, locked = false): void {
     this.world.sound.openPanel();
     this.world.player.enabled = false;
-    this.world.player.unlock();
-    this.hud.setPrompt(null);
     this.host.show(factory(), locked);
   }
 
@@ -275,7 +251,6 @@ class Game {
     this.ended = true;
     this.queue.length = 0;
     this.world.player.enabled = false;
-    this.world.player.unlock();
     this.host.release();
     clearSave();
     document.body.append(
@@ -385,8 +360,8 @@ function titleScreen(): void {
             : null,
         ]),
         el("div", { class: "help-list" }, [
-          el("div", {}, [el("b", {}, ["Move"]), " — the stick to walk, drag anywhere else to look."]),
-          el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're standing at, or walk through the door under your feet."]),
+          el("div", {}, [el("b", {}, ["Look"]), " — drag anywhere to look around."]),
+          el("div", {}, [el("b", {}, ["Go"]), " — tap a door or a station and the camera takes you there."]),
           el("div", {}, [el("b", {}, ["Full stats"]), " and ", el("b", {}, ["End the month"]), " are the buttons in the bar below."]),
           el("div", {}, [
             "You get two or three actions a month, and rather more than three things that need doing.",

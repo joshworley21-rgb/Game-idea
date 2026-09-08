@@ -110,13 +110,6 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 .meter-track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
 .meter-fill { height: 100%; border-radius: 3px; background: currentColor; transition: width 0.4s ease; }
 
-#crosshair {
-  position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
-  border-radius: 50%; background: rgba(255,255,255,0.5); box-shadow: 0 0 6px rgba(0,0,0,0.6);
-  pointer-events: none; transition: transform 0.18s ease, background 0.18s ease;
-}
-#crosshair.hot { transform: scale(1.9); background: var(--gold); }
-
 #room-reveal {
   position: fixed;
   top: 104px;
@@ -146,27 +139,21 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
   100% { opacity: 0; transform: translate(-50%, -5px); letter-spacing: 0.1em; }
 }
 
-#prompt {
-  position: fixed; left: 50%; top: calc(50% + 46px); transform: translateX(-50%);
-  padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line);
-  background: rgba(28, 32, 42, 0.72); backdrop-filter: blur(6px);
-  font-size: 13.5px; letter-spacing: 0.02em;
-  opacity: 0; transition: opacity 0.18s ease; pointer-events: none; white-space: nowrap;
+/*
+ * The cut between rooms — solid black rather than the ink token, so it reads
+ * as a true blackout rather than a tinted overlay.
+ */
+#travel-veil {
+  position: fixed; inset: 0; background: #05070b; opacity: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; transition: opacity 0.35s ease; z-index: 60;
 }
-#prompt.show { opacity: 1; }
-
-#scene-lock {
-  position: fixed; left: 50%; bottom: 78px; transform: translate(-50%, 8px);
-  display: flex; align-items: center; gap: 12px;
-  padding: 9px 10px 9px 18px; border-radius: 999px; border: 1px solid var(--line);
-  background: rgba(28, 32, 42, 0.82); backdrop-filter: blur(6px);
-  opacity: 0; pointer-events: none; transition: opacity 0.22s ease, transform 0.22s ease;
-  z-index: 21; white-space: nowrap;
+#travel-veil.show { opacity: 1; pointer-events: auto; }
+.travel-label {
+  font-family: var(--serif); font-size: 20px; letter-spacing: 0.1em; color: var(--ink-dim);
+  opacity: 0; transition: opacity 0.3s ease 0.2s;
 }
-#scene-lock.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-.scene-lock-label {
-  font-family: var(--serif); font-size: 14px; letter-spacing: 0.02em; color: var(--ink);
-}
+#travel-veil.show .travel-label { opacity: 1; }
 
 kbd {
   font-family: var(--sans); font-size: 11px; font-weight: 700; padding: 2px 6px; margin: 0 3px;
@@ -391,28 +378,7 @@ body {
 }
 
 /* Text in panels stays selectable; the game world does not. */
-#hud, #scene, #prompt, #crosshair { user-select: none; -webkit-user-select: none; }
-
-.stick {
-  position: fixed;
-  left: max(20px, env(safe-area-inset-left));
-  bottom: calc(96px + env(safe-area-inset-bottom));
-  width: 132px; height: 132px; border-radius: 50%;
-  border: 1px solid rgba(226, 193, 110, 0.3);
-  background: radial-gradient(circle, rgba(20, 24, 34, 0.5), rgba(12, 15, 22, 0.34));
-  display: none; place-items: center; z-index: 20;
-  touch-action: none;
-}
-.stick.visible { display: grid; }
-.stick.rooted { display: none !important; }
-.stick-knob {
-  width: 56px; height: 56px; border-radius: 50%;
-  background: rgba(226, 193, 110, 0.72);
-  border: 1px solid rgba(255, 240, 200, 0.7);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  transition: transform 0.08s ease-out;
-  pointer-events: none;
-}
+#hud, #scene, #travel-veil { user-select: none; -webkit-user-select: none; }
 
 /*
  * Phone layout. The four corner cards become one top bar; the nation and
@@ -423,7 +389,6 @@ body {
  */
 @media (max-width: 900px), (pointer: coarse) {
   #hud-nation, #hud-self { display: none; }
-  #crosshair { display: none; }
   #room-reveal { top: 92px; font-size: 15px; }
 
   .hud-card { padding: 8px 10px; border-radius: 10px; }
@@ -467,15 +432,7 @@ body {
   }
   #hud-actions .btn { flex: 1; padding: 10px 8px; font-size: 13px; }
 
-  #prompt { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 148px); font-size: 12.5px; }
-  #scene-lock {
-    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 132px);
-    max-width: calc(100vw - 24px);
-    flex-direction: column; align-items: stretch;
-    border-radius: 14px; padding: 10px 14px; white-space: normal;
-  }
-  .scene-lock-label { font-size: 12.5px; white-space: normal; text-align: center; }
-  #scene-lock .btn { width: 100%; }
+  .travel-label { font-size: 16px; }
 
   /* Panels take the whole screen, with room for the toast lane above them. */
   #panel-root.open { padding: 74px 8px calc(8px + env(safe-area-inset-bottom)); }
