@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { suitingMat, weaveMat } from "./materials.ts";
 
 /**
  * People, built in code.
@@ -235,8 +234,9 @@ function deform(p: THREE.Vector3, look: Look): THREE.Vector3 {
 }
 
 function sculptHead(look: Look): THREE.BufferGeometry {
-  // Dense enough that the brow, nose and lips are geometry rather than paint.
-  const geo = new THREE.SphereGeometry(1, 84, 60);
+  // Low-poly on purpose: few enough facets that the faceting itself is the
+  // style, not a budget compromise trying to pass for smooth.
+  const geo = new THREE.SphereGeometry(1, 12, 9);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   const v = new THREE.Vector3();
@@ -252,50 +252,25 @@ function sculptHead(look: Look): THREE.BufferGeometry {
 
 // -------------------------------------------------------------- face canvas
 
-/** Value noise, for skin mottling and stubble that is not a flat wash. */
-function noiseField(rnd: () => number, size: number): (x: number, y: number) => number {
-  const grid = 24;
-  const table: number[] = [];
-  for (let i = 0; i < (grid + 1) * (grid + 1); i++) table.push(rnd());
-  const smooth = (t: number) => t * t * (3 - 2 * t);
-  return (x, y) => {
-    const gx = (x / size) * grid;
-    const gy = (y / size) * grid;
-    const x0 = Math.max(0, Math.min(grid, Math.floor(gx)));
-    const y0 = Math.max(0, Math.min(grid, Math.floor(gy)));
-    const x1 = Math.min(grid, x0 + 1);
-    const y1 = Math.min(grid, y0 + 1);
-    const tx = smooth(gx - x0);
-    const ty = smooth(gy - y0);
-    const a = table[y0 * (grid + 1) + x0];
-    const b = table[y0 * (grid + 1) + x1];
-    const c = table[y1 * (grid + 1) + x0];
-    const d = table[y1 * (grid + 1) + x1];
-    return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
-  };
-}
-
 /**
- * The face, painted onto the warped UVs at the landmark coordinates. Geometry
- * gives you a skull; this is what makes it a person — the lash line, the brow
- * hairs, the vermillion border and the shadow under the jaw do more for
- * recognition than any amount of extra polygons.
+ * The face, painted flat onto the warped UVs at the landmark coordinates.
+ * Deliberately spare — a few bold shapes (brows, lips, a cheek flush, facial
+ * hair) rather than a painted sculpt, so it reads as a match to the faceted
+ * low-poly head rather than a smooth portrait pasted onto a blocky mesh.
  */
 function faceTexture(look: Look, seed: string): THREE.CanvasTexture {
-  const size = 1024;
+  const size = 256;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
   const rnd = seeded(`${seed}:skin`);
   const skin = new THREE.Color(look.skin);
+  const hair = new THREE.Color(look.hair);
+  const deep = skin.clone().multiplyScalar(0.46);
 
   const rgba = (c: THREE.Color, a: number) =>
     `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${a})`;
-  const shade = skin.clone().multiplyScalar(0.66);
-  const deep = skin.clone().multiplyScalar(0.46);
-  const light = skin.clone().lerp(new THREE.Color(0xffffff), 0.22);
-  const hair = new THREE.Color(look.hair);
 
   ctx.fillStyle = `#${skin.getHexString()}`;
   ctx.fillRect(0, 0, size, size);
@@ -305,234 +280,81 @@ function faceTexture(look: Look, seed: string): THREE.CanvasTexture {
     const uv = uvOf({ theta: m.theta + dTheta, phi: m.phi + dPhi });
     return [uv.u * size, (1 - uv.v) * size];
   };
-  // The warp stretches azimuth and polar angle by different amounts, so a
-  // degree is worth a different number of pixels across than down.
   const sx = Math.abs(at(FACE.noseTip, 5)[0] - at(FACE.noseTip, -5)[0]) / 10;
   const sy = Math.abs(at(FACE.noseTip, 0, 5)[1] - at(FACE.noseTip, 0, -5)[1]) / 10;
   const px = (deg: number) => deg * sx;
   const py = (deg: number) => deg * sy;
+  const jitter = (deg: number) => (rnd() - 0.5) * deg;
 
-  // --- Skin: mottling, so it is not a flat plastic wash.
-  const noise = noiseField(rnd, size);
-  const detail = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const n = noise(x, y) - 0.5;
-      const i = (y * size + x) * 4;
-      detail.data[i] = detail.data[i + 1] = detail.data[i + 2] = 128;
-      detail.data[i + 3] = Math.max(0, Math.min(255, Math.abs(n) * 90));
-    }
-  }
-  // Painted as a soft overlay rather than replacing the base.
-  const mottle = document.createElement("canvas");
-  mottle.width = mottle.height = size;
-  mottle.getContext("2d")!.putImageData(detail, 0, 0);
-  ctx.save();
-  ctx.globalAlpha = 0.22;
-  ctx.globalCompositeOperation = "overlay";
-  ctx.drawImage(mottle, 0, 0);
-  ctx.restore();
-
-  const softBlob = (
-    x: number,
-    y: number,
-    rx: number,
-    ry: number,
-    colour: THREE.Color,
-    alpha: number,
-  ) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(1, ry / rx);
-    const g = ctx.createRadialGradient(0, 0, rx * 0.15, 0, 0, rx);
-    g.addColorStop(0, rgba(colour, alpha));
-    g.addColorStop(0.6, rgba(colour, alpha * 0.45));
-    g.addColorStop(1, rgba(colour, 0));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, rx, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  };
-
-  // --- Modelling. Light, because the geometry and the room's lighting already
-  // do most of it: paint is here to add what a sculpt cannot.
-  softBlob(...at(FACE.noseBridge, 0, -30), px(20), py(11), light, 0.14);
-  for (const m of [FACE.cheekL, FACE.cheekR]) {
-    softBlob(...at(m, 0, -2), px(12), py(9), light, 0.1);
-    softBlob(...at(m, 0, 8), px(10), py(7), shade, 0.1);
-  }
-  softBlob(...at(FACE.chin, 0, -3), px(8), py(5), light, 0.1);
-  softBlob(...at(FACE.chin, 0, 11), px(15), py(7), shade, 0.16);
-
-  // --- Eye sockets: a shadow the eyeball sits in.
-  for (const m of [FACE.eyeL, FACE.eyeR]) {
-    softBlob(...at(m, 0, 0), px(10), py(7), shade, 0.3);
-    softBlob(...at(m, 0, 5.5), px(7), py(3), shade, 0.16); // under-eye
-  }
-
-  // --- Nose: bridge highlight, alar creases, nostril shadow.
-  softBlob(...at(FACE.noseBridge, 0, 3), px(3.2), py(12), light, 0.2);
-  softBlob(...at(FACE.noseTip, 0, -1), px(4.2), py(3.2), light, 0.22);
-  for (const d of [-4.6, 4.6]) {
-    softBlob(...at(FACE.noseTip, d * 1.15, 0.4), px(2.4), py(2.2), shade, 0.35);
-  }
-  for (const d of [-3.1, 3.1]) {
-    softBlob(...at(FACE.noseTip, d, 2.6), px(1.6), py(1.1), deep, 0.7);
-  }
-  softBlob(...at(FACE.noseTip, 0, 4.4), px(6), py(2.2), shade, 0.28); // under the nose
-
-  // --- Lips: two tones, a border, a philtrum and corner shadows.
-  const lipBase = skin.clone().lerp(new THREE.Color(0xa8514c), 0.52);
-  const lipTop = lipBase.clone().multiplyScalar(0.82);
-  const mouthW = 10.5;
-  const [lx, ly] = at(FACE.mouth, -mouthW, 0.2);
-  const [rx, ry] = at(FACE.mouth, mouthW, 0.2);
-  const [cx, cy] = at(FACE.mouth, 0, 0);
-  const upperPeak = at(FACE.mouth, 0, -3.4);
-  const cupidL = at(FACE.mouth, -2.1, -2.6);
-  const cupidR = at(FACE.mouth, 2.1, -2.6);
-  const lowerLow = at(FACE.mouth, 0, 5.0);
-
-  ctx.fillStyle = `#${lipTop.getHexString()}`;
-  ctx.beginPath();
-  ctx.moveTo(lx, ly);
-  ctx.quadraticCurveTo(at(FACE.mouth, -6, -2.6)[0], at(FACE.mouth, -6, -2.6)[1], cupidL[0], cupidL[1]);
-  ctx.quadraticCurveTo(upperPeak[0], upperPeak[1] + px(1.2), cupidR[0], cupidR[1]);
-  ctx.quadraticCurveTo(at(FACE.mouth, 6, -2.6)[0], at(FACE.mouth, 6, -2.6)[1], rx, ry);
-  ctx.quadraticCurveTo(cx, cy + px(0.4), lx, ly);
-  ctx.fill();
-
-  ctx.fillStyle = `#${lipBase.getHexString()}`;
-  ctx.beginPath();
-  ctx.moveTo(lx, ly);
-  ctx.quadraticCurveTo(cx, cy + px(0.4), rx, ry);
-  ctx.quadraticCurveTo(at(FACE.mouth, 5, 4.4)[0], at(FACE.mouth, 5, 4.4)[1], lowerLow[0], lowerLow[1]);
-  ctx.quadraticCurveTo(at(FACE.mouth, -5, 4.4)[0], at(FACE.mouth, -5, 4.4)[1], lx, ly);
-  ctx.fill();
-
-  // The line where the lips meet, and the corners.
-  ctx.strokeStyle = rgba(deep, 0.75);
-  ctx.lineWidth = px(0.55);
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(lx, ly);
-  ctx.quadraticCurveTo(cx, cy + px(0.5), rx, ry);
-  ctx.stroke();
-  for (const [x, y] of [[lx, ly], [rx, ry]]) softBlob(x, y, px(1.6), py(1.4), deep, 0.4);
-  // Philtrum, and the shadow below the lower lip.
-  softBlob(...at(FACE.mouth, 0, -6.4), px(1.4), py(2.4), shade, 0.2);
-  softBlob(...at(FACE.mouth, 0, 7.6), px(5.5), py(2.4), shade, 0.24);
-
-  // --- Eyebrows, as strokes rather than a bar.
+  // --- Eyebrows: one bold flat stroke each, an arch not a bar.
   const browColour = hair.clone().multiplyScalar(look.hairStyle === "bald" ? 0.9 : 0.78);
-  ctx.strokeStyle = rgba(browColour, 0.85);
+  ctx.strokeStyle = rgba(browColour, 0.95);
   ctx.lineCap = "round";
+  ctx.lineWidth = px(1.6) * look.browWeight;
   for (const m of [FACE.browL, FACE.browR]) {
-    const inner = m.phi < 90 ? 1 : -1; // toward the nose
-    for (let i = 0; i < 26; i++) {
-      const t = i / 25;
-      // An arch: highest a third of the way out from the nose.
-      const along = inner * (8.5 - t * 19);
-      const lift = -2.0 * Math.sin(Math.min(1, t * 1.5) * Math.PI * 0.85) - t * 0.8;
-      const [x0, y0] = at(m, along, lift + 3.4 + (rnd() - 0.5) * 0.8);
-      const [x1, y1] = at(m, along - inner * 1.1, lift + 1.0 + (rnd() - 0.5) * 0.8);
-      ctx.lineWidth = px(0.4) * look.browWeight * (0.6 + rnd() * 0.8);
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-    }
-  }
-
-  // --- The lid crease. The lash line itself is geometry on the eyelid, so it
-  // cannot drift away from the eyeball the way a painted one does.
-  for (const m of [FACE.eyeL, FACE.eyeR]) {
-    ctx.strokeStyle = rgba(shade, 0.45);
-    ctx.lineWidth = px(0.5);
+    const inner = m.phi < 90 ? 1 : -1;
+    const [x0, y0] = at(m, inner * (8 + jitter(1)), 4 + jitter(1));
+    const [x1, y1] = at(m, inner * -1, -1.5 + jitter(0.6));
+    const [x2, y2] = at(m, inner * -(8.5 + jitter(1)), 3.5 + jitter(1));
     ctx.beginPath();
-    ctx.moveTo(...at(m, -7, -7.5));
-    ctx.quadraticCurveTo(...at(m, 0, -9.5), ...at(m, 7, -7.2));
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(x1, y1, x2, y2);
     ctx.stroke();
   }
 
-  // --- Cheek warmth, and freckles on pale skin.
-  const warm = skin.clone().lerp(new THREE.Color(0xb4655a), 0.3);
-  for (const m of [FACE.cheekL, FACE.cheekR]) softBlob(...at(m, 0, 1), px(9), py(7), warm, 0.13);
-  if (look.skin === SKIN[0] || look.skin === SKIN[1]) {
-    ctx.fillStyle = rgba(skin.clone().lerp(new THREE.Color(0x8a5a3b), 0.55), 0.4);
-    for (let i = 0; i < 90; i++) {
-      const m = rnd() < 0.5 ? FACE.cheekL : FACE.cheekR;
-      const [x, y] = at(m, (rnd() - 0.5) * 26, (rnd() - 0.5) * 22);
+  // --- Lips: one flat shape, one clean line.
+  const lipColour = skin.clone().lerp(new THREE.Color(0xa8514c), 0.5);
+  const mouthW = 10;
+  const [lx, ly] = at(FACE.mouth, -mouthW, 0);
+  const [rxp, ryp] = at(FACE.mouth, mouthW, 0);
+  const [cx, cy] = at(FACE.mouth, 0, 3);
+  ctx.fillStyle = `#${lipColour.getHexString()}`;
+  ctx.beginPath();
+  ctx.moveTo(lx, ly);
+  ctx.quadraticCurveTo(cx, cy, rxp, ryp);
+  ctx.quadraticCurveTo(cx, cy - py(2), lx, ly);
+  ctx.fill();
+  ctx.strokeStyle = rgba(deep, 0.6);
+  ctx.lineWidth = px(0.6);
+  ctx.beginPath();
+  ctx.moveTo(lx, ly);
+  ctx.quadraticCurveTo(cx, cy - py(0.5), rxp, ryp);
+  ctx.stroke();
+
+  // --- A little cheek warmth, so the flat colour doesn't read as plastic.
+  const warm = skin.clone().lerp(new THREE.Color(0xb4655a), 0.28);
+  for (const m of [FACE.cheekL, FACE.cheekR]) {
+    const [x, y] = at(m, 0, 2);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, px(11));
+    g.addColorStop(0, rgba(warm, 0.22));
+    g.addColorStop(1, rgba(warm, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, px(11), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- Facial hair as one flat shape, not stippled strands.
+  if (look.facialHair !== "none") {
+    const dark = hair.clone().multiplyScalar(0.7);
+    ctx.fillStyle = rgba(dark, look.facialHair === "stubble" ? 0.35 : 0.88);
+    if (look.facialHair === "moustache") {
+      const [x, y] = at(FACE.mouth, 0, -3.5);
       ctx.beginPath();
-      ctx.arc(x, y, px(0.22) * (0.5 + rnd()), 0, Math.PI * 2);
+      ctx.ellipse(x, y, px(9), py(2.6), 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(...at(FACE.cheekL, -2, 6));
+      ctx.quadraticCurveTo(...at(FACE.chin, 0, 14), ...at(FACE.cheekR, 2, 6));
+      ctx.quadraticCurveTo(...at(FACE.mouth, 0, 8), ...at(FACE.cheekL, -2, 6));
       ctx.fill();
     }
   }
 
-  // --- Facial hair, stippled over the jaw rather than painted as a block.
-  if (look.facialHair !== "none") {
-    const dark = hair.clone().multiplyScalar(0.72);
-    const dense = look.facialHair === "stubble" ? 900 : 2600;
-    const spread = look.facialHair === "moustache" ? 0 : 1;
-    ctx.strokeStyle = rgba(dark, look.facialHair === "stubble" ? 0.5 : 0.9);
-    for (let i = 0; i < dense; i++) {
-      const dPhi = (rnd() - 0.5) * (spread ? 34 : 13);
-      const dTheta = spread ? -2 + rnd() * 20 : -5.5 + rnd() * 3.4;
-      // Keep the lips clear.
-      if (spread && Math.abs(dPhi) < 9 && dTheta > -1.5 && dTheta < 5.5) continue;
-      const m = { theta: FACE.mouth.theta, phi: FACE.mouth.phi };
-      const [x, y] = at(m, dPhi, dTheta);
-      ctx.lineWidth = px(0.16);
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + (rnd() - 0.5) * px(0.8), y + px(0.6));
-      ctx.stroke();
-    }
-  }
-
-  // --- Age: folds and lines, not a wrinkle map.
-  if (look.age > 48) {
-    const strength = Math.min(1, (look.age - 48) / 22);
-    ctx.strokeStyle = rgba(shade, 0.3 * strength);
-    ctx.lineWidth = px(0.4);
-    // Crow's feet.
-    for (const m of [FACE.eyeL, FACE.eyeR]) {
-      const out = m.phi < 90 ? -1 : 1;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(...at(m, out * 7.4, -1.6 + i * 2.2));
-        ctx.lineTo(...at(m, out * 11.5, -3.2 + i * 3.0));
-        ctx.stroke();
-      }
-    }
-    // Nasolabial folds.
-    for (const side of [-1, 1]) {
-      ctx.lineWidth = px(0.6);
-      ctx.beginPath();
-      ctx.moveTo(...at(FACE.noseTip, side * 5.2, 1.6));
-      ctx.quadraticCurveTo(...at(FACE.mouth, side * 11, -2), ...at(FACE.mouth, side * 11.5, 4));
-      ctx.stroke();
-    }
-    // Forehead.
-    ctx.lineWidth = px(0.45);
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(...at(FACE.noseBridge, -14, -28 - i * 4));
-      ctx.quadraticCurveTo(...at(FACE.noseBridge, 0, -30.5 - i * 4), ...at(FACE.noseBridge, 14, -28 - i * 4));
-      ctx.stroke();
-    }
-  }
-
-  // --- A shadow where the hair meets the forehead, so the hairline is soft.
-  if (look.hairStyle !== "bald") {
-    const line = look.hairStyle === "receding" ? -44 : -32;
-    softBlob(...at(FACE.noseBridge, 0, line), px(24), py(5), deep, 0.28);
-  }
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 4;
   return tex;
 }
 
@@ -546,57 +368,12 @@ function faceTexture(look: Look, seed: string): THREE.CanvasTexture {
  * Colour comes from each card's own vertex colours, so one texture serves
  * every hairstyle in the cast.
  */
-let hairCardTex: THREE.CanvasTexture | null = null;
-function hairCardAlpha(): THREE.CanvasTexture {
-  if (hairCardTex) return hairCardTex;
-  const w = 48;
-  const h = 96;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  const rnd = seeded("hair-card-alpha");
-  const strands = 6;
-  for (let s = 0; s < strands; s++) {
-    let x = w * (0.15 + (s / (strands - 1)) * 0.7) + (rnd() - 0.5) * 6;
-    const curve = (rnd() - 0.5) * 14;
-    const startWidth = 6 + rnd() * 4;
-    const alpha = 0.6 + rnd() * 0.35;
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    const segments = 12;
-    let py = h;
-    let pw = startWidth;
-    for (let i = 1; i <= segments; i++) {
-      const t = i / segments;
-      const y = h - t * h;
-      const nx = x + curve * t * t;
-      const nw = startWidth * (1 - t) ** 1.5;
-      ctx.beginPath();
-      ctx.moveTo(x - pw / 2, py);
-      ctx.lineTo(x + pw / 2, py);
-      ctx.lineTo(nx + nw / 2, y);
-      ctx.lineTo(nx - nw / 2, y);
-      ctx.closePath();
-      ctx.fill();
-      x = nx;
-      py = y;
-      pw = nw;
-    }
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  hairCardTex = tex;
-  return tex;
-}
-
 /**
- * Hair is a shell that hugs the skull down to a hairline, built from the same
- * deform function so it never floats. The hairline is higher at the front than
- * at the sides, and higher again at the temples if they are receding. A layer
- * of alpha-tested strand cards sits on top of the shell: the shell alone reads
- * as a helmet no matter how well its edge is faded, because a silhouette that
- * ends in a mesh edge is still a hard geometric line. The cards give that
- * silhouette individual, wispy strands instead.
+ * Hair is a low-poly shell that hugs the skull down to a hairline, built from
+ * the same deform function so it never floats. The hairline is higher at the
+ * front than at the sides, and higher again at the temples if they are
+ * receding. Flat-shaded and coarse on purpose, to match the faceted head
+ * rather than trying to fake individual strands.
  */
 function buildHair(look: Look, seed: string): THREE.Object3D | null {
   if (look.hairStyle === "bald") return null;
@@ -604,12 +381,10 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
   const base = new THREE.Color(look.hair);
   const mat = new THREE.MeshStandardMaterial({
     color: base,
-    roughness: 0.7,
+    roughness: 0.75,
     metalness: 0.03,
     side: THREE.DoubleSide,
-    vertexColors: true,
-    // A little sheen along the strands is what stops hair reading as a helmet.
-    flatShading: false,
+    flatShading: true,
   });
   const group = new THREE.Group();
 
@@ -650,15 +425,11 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
     Math.sin(phi * 1.63 + 4.1) * 0.007 * t +
     Math.sin(phi * 3.1 + t * 6) * 0.005 * t;
 
-  const rings = 18;
-  const cols = 64;
+  const rings = 6;
+  const cols = 14;
   const positions: number[] = [];
-  const colours: number[] = [];
   const indices: number[] = [];
   const v = new THREE.Vector3();
-  const root = base.clone().multiplyScalar(0.62);
-  const tipC = base.clone().lerp(new THREE.Color(0xffffff), 0.12);
-  const c = new THREE.Color();
 
   for (let ring = 0; ring <= rings; ring++) {
     for (let col = 0; col <= cols; col++) {
@@ -677,17 +448,12 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
       // proud of the scalp — `edgeFade` forces the last stretch down to a
       // true zero so the shell actually thins to nothing at its edge instead
       // of ending in a visible step.
-      // Flatter than the shell used to be: the card layer above now carries
-      // most of the volume, so the base no longer needs to be a full dome.
       const edgeFade = Math.min(1, t / 0.12);
       const thick =
         (0.028 + 0.055 * t * t + 0.028 * t + lump(phi, t) - partDip(phi) * 0.055 * t) * edgeFade;
       const lift = 1.022 + Math.max(0, thick);
       const sweep = long ? 0 : Math.max(0, Math.sin((phi * Math.PI) / 180)) * 0.022 * t;
       positions.push(d.x * lift, d.y * lift + 0.018 * t, d.z * lift - sweep);
-      // Dark at the roots and along the parting, lighter at the tips.
-      c.copy(root).lerp(tipC, Math.min(1, 0.25 + (1 - t) * 0.85));
-      colours.push(c.r, c.g, c.b);
     }
   }
   for (let ring = 0; ring < rings; ring++) {
@@ -699,7 +465,6 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   const shell = new THREE.Mesh(geo, mat);
@@ -707,91 +472,10 @@ function buildHair(look: Look, seed: string): THREE.Object3D | null {
   shell.receiveShadow = true;
   group.add(shell);
 
-  // --- Card fringe: individual wisps breaking up the shell's silhouette,
-  // thick around the hairline where the shell's edge would otherwise show,
-  // and scattered thinly over the crown so the dome is not a smooth cap.
-  {
-    const cardPositions: number[] = [];
-    const cardColours: number[] = [];
-    const cardUvs: number[] = [];
-    const cardIndices: number[] = [];
-    const outward = new THREE.Vector3();
-    const side = new THREE.Vector3();
-    const down = new THREE.Vector3(0, -1, 0);
-
-    const addCard = (phi: number, theta: number, len: number, width: number, droop: number) => {
-      v.set(
-        -Math.cos((phi * Math.PI) / 180) * Math.sin((theta * Math.PI) / 180),
-        Math.cos((theta * Math.PI) / 180),
-        Math.sin((phi * Math.PI) / 180) * Math.sin((theta * Math.PI) / 180),
-      );
-      const rootPoint = deform(v, look);
-      outward.copy(rootPoint).normalize();
-      side.set(-outward.z, 0, outward.x);
-      if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
-      side.normalize();
-      const tipPoint = rootPoint
-        .clone()
-        .addScaledVector(outward, len)
-        .addScaledVector(down, droop * len);
-      const base0 = rootPoint.clone().addScaledVector(outward, 0.008);
-      const idx = cardPositions.length / 3;
-      const verts = [
-        base0.clone().addScaledVector(side, width / 2),
-        base0.clone().addScaledVector(side, -width / 2),
-        tipPoint.clone().addScaledVector(side, width * 0.12),
-        tipPoint.clone().addScaledVector(side, -width * 0.12),
-      ];
-      for (const p of verts) cardPositions.push(p.x, p.y, p.z);
-      cardUvs.push(0, 0, 1, 0, 0, 1, 1, 1);
-      for (let i = 0; i < 2; i++) cardColours.push(root.r, root.g, root.b);
-      for (let i = 0; i < 2; i++) cardColours.push(tipC.r, tipC.g, tipC.b);
-      cardIndices.push(idx, idx + 1, idx + 2, idx + 1, idx + 3, idx + 2);
-      // The back face too, so a card is not invisible from the wrong side.
-      cardIndices.push(idx + 2, idx + 1, idx, idx + 2, idx + 3, idx + 1);
-    };
-
-    // A ring of wisps right at the hairline, where the shell's edge is.
-    const fringeCount = 40;
-    for (let i = 0; i < fringeCount; i++) {
-      if (rnd() < 0.18) continue; // gaps, so it is not a picket fence
-      const phi = (i / fringeCount) * 360 + (rnd() - 0.5) * 6;
-      const theta = hairline(phi) * (0.9 + rnd() * 0.14);
-      const len = (long ? 0.1 : 0.065) * (0.7 + rnd() * 0.6);
-      addCard(phi, theta, len, 0.055 + rnd() * 0.02, 0.35 + rnd() * 0.35);
-    }
-    // A thin scatter over the crown, so the dome breaks up under a light.
-    const crownCount = 18;
-    for (let i = 0; i < crownCount; i++) {
-      const phi = rnd() * 360;
-      const theta = hairline(phi) * (0.2 + rnd() * 0.55);
-      const len = (long ? 0.07 : 0.05) * (0.6 + rnd() * 0.7);
-      addCard(phi, theta, len, 0.05 + rnd() * 0.02, 0.15 + rnd() * 0.25);
-    }
-
-    const cardGeo = new THREE.BufferGeometry();
-    cardGeo.setAttribute("position", new THREE.Float32BufferAttribute(cardPositions, 3));
-    cardGeo.setAttribute("color", new THREE.Float32BufferAttribute(cardColours, 3));
-    cardGeo.setAttribute("uv", new THREE.Float32BufferAttribute(cardUvs, 2));
-    cardGeo.setIndex(cardIndices);
-    cardGeo.computeVertexNormals();
-    const cardMat = new THREE.MeshStandardMaterial({
-      map: hairCardAlpha(),
-      alphaTest: 0.4,
-      vertexColors: true,
-      roughness: 0.65,
-      metalness: 0.03,
-      side: THREE.DoubleSide,
-    });
-    const cards = new THREE.Mesh(cardGeo, cardMat);
-    cards.castShadow = true;
-    group.add(cards);
-  }
-
-  const lockMat = new THREE.MeshStandardMaterial({ color: base, roughness: 0.72 });
+  const lockMat = new THREE.MeshStandardMaterial({ color: base, roughness: 0.72, flatShading: true });
 
   if (look.hairStyle === "tied") {
-    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.31, 18, 14), lockMat);
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.31, 8, 6), lockMat);
     bun.position.set(0, 0.14, -0.95);
     bun.scale.set(1, 0.92, 0.85);
     bun.castShadow = true;
@@ -812,10 +496,10 @@ function limb(
   const joint = new THREE.Group();
   // A shaft with a rounded cap at each end, so an elbow or knee is a joint
   // rather than the seam between two cylinders.
-  const shaft = new THREE.CylinderGeometry(topR, botR, length, 18, 1, false);
+  const shaft = new THREE.CylinderGeometry(topR, botR, length, 7, 1, false);
   shaft.translate(0, -length / 2, 0);
-  const top = new THREE.SphereGeometry(topR, 14, 10);
-  const bottom = new THREE.SphereGeometry(botR * 1.04, 14, 10);
+  const top = new THREE.SphereGeometry(topR, 6, 5);
+  const bottom = new THREE.SphereGeometry(botR * 1.04, 6, 5);
   bottom.translate(0, -length, 0);
   const mesh = new THREE.Mesh(shaft, mat);
   mesh.castShadow = true;
@@ -852,34 +536,32 @@ export function buildCharacter(spec: CharacterSpec): Character {
 
   const scale = look.height / 1.75;
   const build = look.build;
-  // The painted face carries its own shading, so the flat skin on the neck and
-  // hands is toned down to sit with it rather than glowing beside it. A thin
-  // clearcoat is what stops skin reading as matte plastic: real skin has a
-  // faint oily sheen that catches a highlight a pure-diffuse material cannot.
-  const skinMat = new THREE.MeshPhysicalMaterial({
+  // Flat colour, flat-shaded: the faceting itself is the style, so paint and
+  // sheen would only fight the low-poly geometry rather than help it.
+  const skinMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(look.skin).multiplyScalar(0.9),
-    roughness: 0.62,
-    metalness: 0.01,
-    clearcoat: 0.18,
-    clearcoatRoughness: 0.4,
-    // A warm sheen at grazing angles is the cheapest stand-in for real
-    // subsurface scattering: it is why an ear or the edge of a cheek glows
-    // faintly red-gold against the light instead of just going dark.
-    sheen: 0.35,
-    sheenRoughness: 0.6,
-    sheenColor: new THREE.Color(look.skin).lerp(new THREE.Color(0xff6a3c), 0.55),
+    roughness: 0.7,
+    metalness: 0,
+    flatShading: true,
   });
   const dress = spec.dress ?? "suit";
-  // Wool suiting and woven shirt cloth, not flat colour: the same procedural
-  // fabric the furniture already uses, cached by colour so a chamber full of
-  // the same five suit tones costs one texture, not fifty.
-  const suitMat = suitingMat(look.suit, 5);
-  suitMat.roughness = dress === "robe" ? 0.92 : 0.78;
-  const shirtMat = weaveMat(dress === "casual" ? look.accent : 0xf2efe6, 9);
-  shirtMat.roughness = 0.8;
-  shirtMat.normalScale.set(0.25, 0.25); // a shirt's weave is finer than a sofa's
-  const accentMat = new THREE.MeshStandardMaterial({ color: look.accent, roughness: 0.6 });
-  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x241d18, roughness: 0.45, metalness: 0.08 });
+  const suitMat = new THREE.MeshStandardMaterial({
+    color: look.suit,
+    roughness: dress === "robe" ? 0.92 : 0.78,
+    flatShading: true,
+  });
+  const shirtMat = new THREE.MeshStandardMaterial({
+    color: dress === "casual" ? look.accent : 0xf2efe6,
+    roughness: 0.8,
+    flatShading: true,
+  });
+  const accentMat = new THREE.MeshStandardMaterial({ color: look.accent, roughness: 0.6, flatShading: true });
+  const shoeMat = new THREE.MeshStandardMaterial({
+    color: 0x241d18,
+    roughness: 0.45,
+    metalness: 0.08,
+    flatShading: true,
+  });
 
   // --- The skeleton, in metres for a 1.75m person.
   //   hip joint 0.92 · shoulder 1.44 · chin 1.52 · eyes 1.63 · crown 1.75
@@ -911,7 +593,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
   ];
   const torsoGeo = new THREE.LatheGeometry(
     rows.map(([y, r]) => new THREE.Vector2(r * build, y)),
-    28,
+    8,
   );
   torsoGeo.scale(1, 1, 0.72);
   const torso = new THREE.Mesh(torsoGeo, dress === "casual" ? shirtMat : suitMat);
@@ -921,7 +603,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
 
   // Hips and seat, so a seated figure has something to sit on.
   const seat = new THREE.Mesh(
-    new THREE.SphereGeometry(0.168 * build, 20, 14, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.58),
+    new THREE.SphereGeometry(0.168 * build, 8, 6, 0, Math.PI * 2, Math.PI * 0.42, Math.PI * 0.58),
     suitMat,
   );
   seat.scale.set(1, 0.72, 0.78);
@@ -946,7 +628,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
       knot.position.set(0, 0.212, 0.114 * build);
       chest.add(knot);
     } else {
-      const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 8, 20, Math.PI * 1.3), accentMat);
+      const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 5, 10, Math.PI * 1.3), accentMat);
       scarf.position.set(0, 0.2, 0.055 * build);
       scarf.rotation.set(Math.PI / 2.2, 0, Math.PI * 0.85);
       chest.add(scarf);
@@ -960,13 +642,13 @@ export function buildCharacter(spec: CharacterSpec): Character {
     }
     // A shirt collar standing at the neck, and the jacket's collar behind it.
     const shirtCollar = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.058 * build, 0.052 * build, 0.05, 18, 1, true),
+      new THREE.CylinderGeometry(0.058 * build, 0.052 * build, 0.05, 7, 1, true),
       shirtMat,
     );
     shirtCollar.position.set(0, 0.248, 0.004);
     chest.add(shirtCollar);
     const jacketCollar = new THREE.Mesh(
-      new THREE.TorusGeometry(0.072 * build, 0.02, 8, 20, Math.PI * 1.25),
+      new THREE.TorusGeometry(0.072 * build, 0.02, 5, 10, Math.PI * 1.25),
       suitMat,
     );
     jacketCollar.rotation.set(Math.PI / 2, 0, Math.PI * 1.38);
@@ -990,7 +672,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
       [0.06, 0.056],
       [0.1, 0.057],
     ].map(([y, r]) => new THREE.Vector2(r, y)),
-    18,
+    8,
   );
   const neckMesh = new THREE.Mesh(neckGeo, skinMat);
   neckMesh.castShadow = true;
@@ -1002,19 +684,13 @@ export function buildCharacter(spec: CharacterSpec): Character {
   neck.add(head);
 
   const headRadius = 0.113;
-  // Physical, matching `skinMat` below, so the join at the jaw and ears is a
-  // seam in the sculpt rather than a seam in how the material responds to
-  // light — a painted face with a plastic clearcoat next to a warm neck
-  // reads as two different materials even when the colours line up.
-  const headMat = new THREE.MeshPhysicalMaterial({
+  // Matches `skinMat`'s flat shading, so the join at the jaw and ears is a
+  // seam in the sculpt, not a seam in how the material responds to light.
+  const headMat = new THREE.MeshStandardMaterial({
     map: faceTexture(look, spec.seed),
-    roughness: 0.62,
-    metalness: 0.01,
-    clearcoat: 0.18,
-    clearcoatRoughness: 0.4,
-    sheen: 0.35,
-    sheenRoughness: 0.6,
-    sheenColor: new THREE.Color(look.skin).lerp(new THREE.Color(0xff6a3c), 0.55),
+    roughness: 0.7,
+    metalness: 0,
+    flatShading: true,
   });
   const skull = new THREE.Mesh(sculptHead(look), headMat);
   skull.scale.setScalar(headRadius);
@@ -1030,7 +706,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
       .addScaledVector(deform(dirOf(m), look).normalize(), out * headRadius);
 
   for (const m of [FACE.earL, FACE.earR] as Landmark[]) {
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(headRadius * 0.2, 12, 10), skinMat);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(headRadius * 0.2, 6, 5), skinMat);
     ear.scale.set(0.3, 1, 0.6);
     const p = onSkull(m, -0.02);
     ear.position.copy(p);
@@ -1038,13 +714,13 @@ export function buildCharacter(spec: CharacterSpec): Character {
     head.add(ear);
   }
 
-  // Eyes: a white ball, an iris and a pupil, so they catch the light.
-  const scleraMat = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.22 });
-  const irisMat = new THREE.MeshStandardMaterial({ color: look.eye, roughness: 0.18, metalness: 0.05 });
+  // Eyes: a white ball, an iris and a pupil — simple flat shapes, no glossy
+  // cornea layer to fight the faceted look.
+  const scleraMat = new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.4, flatShading: true });
+  const irisMat = new THREE.MeshStandardMaterial({ color: look.eye, roughness: 0.3, flatShading: true });
   const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0a0908 });
   const eyelids: THREE.Mesh[] = [];
   const eyeR = headRadius * 0.135;
-  const lashMat = new THREE.MeshStandardMaterial({ color: 0x241a14, roughness: 0.55 });
   for (const m of [FACE.eyeL, FACE.eyeR] as Landmark[]) {
     const eye = new THREE.Group();
     // Set into the socket so the ball bulges the way an eye does rather than
@@ -1053,41 +729,19 @@ export function buildCharacter(spec: CharacterSpec): Character {
     eye.lookAt(new THREE.Vector3(eye.position.x * 2.4, eye.position.y, eye.position.z * 3));
     head.add(eye);
 
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 20, 16), scleraMat);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 8, 6), scleraMat);
     eye.add(ball);
-    const iris = new THREE.Mesh(new THREE.CircleGeometry(eyeR * 0.46, 24), irisMat);
+    const iris = new THREE.Mesh(new THREE.CircleGeometry(eyeR * 0.46, 10), irisMat);
     iris.position.z = eyeR * 0.915;
     eye.add(iris);
-    // A limbal ring: the dark edge that makes an iris read as an iris.
-    const limbal = new THREE.Mesh(
-      new THREE.RingGeometry(eyeR * 0.38, eyeR * 0.47, 24),
-      new THREE.MeshBasicMaterial({ color: 0x2b2018, transparent: true, opacity: 0.55 }),
-    );
-    limbal.position.z = eyeR * 0.925;
-    eye.add(limbal);
-    const pupil = new THREE.Mesh(new THREE.CircleGeometry(eyeR * 0.2, 16), pupilMat);
+    const pupil = new THREE.Mesh(new THREE.CircleGeometry(eyeR * 0.2, 8), pupilMat);
     pupil.position.z = eyeR * 0.93;
     eye.add(pupil);
-    // A glossy cornea over the iris, which is where the catchlight comes from.
-    const cornea = new THREE.Mesh(
-      new THREE.SphereGeometry(eyeR * 1.02, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.32),
-      new THREE.MeshPhysicalMaterial({
-        transmission: 0.9,
-        roughness: 0.02,
-        metalness: 0,
-        thickness: 0.002,
-        transparent: true,
-        opacity: 0.35,
-      }),
-    );
-    cornea.rotation.x = Math.PI / 2;
-    eye.add(cornea);
 
-    // Lids as geometry, so the aperture is a real shape and the lash line
-    // cannot drift away from the eyeball the way a painted one does.
+    // Lids as geometry, so the aperture is a real shape.
     const makeLid = (upper: boolean): THREE.Mesh => {
       const lid = new THREE.Mesh(
-        new THREE.SphereGeometry(eyeR * 1.06, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.56),
+        new THREE.SphereGeometry(eyeR * 1.06, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.56),
         skinMat,
       );
       // Rotated so the rim cuts across the ball: the top third and the bottom
@@ -1099,14 +753,6 @@ export function buildCharacter(spec: CharacterSpec): Character {
     eye.add(makeLid(false));
     const lid = makeLid(true);
     eye.add(lid);
-
-    // The lash line rides the upper lid's leading edge, so it can never drift
-    // away from the eyeball the way a painted one does.
-    const lashGeo = new THREE.TorusGeometry(eyeR * 1.055, eyeR * 0.05, 6, 20, Math.PI * 0.72);
-    lashGeo.rotateX(Math.PI / 2);
-    lashGeo.rotateY(-Math.PI * 0.14);
-    const lash = new THREE.Mesh(lashGeo, lashMat);
-    lid.add(lash);
     eyelids.push(lid);
   }
 
@@ -1121,7 +767,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2622, roughness: 0.35, metalness: 0.5 });
     for (const m of [FACE.eyeL, FACE.eyeR] as Landmark[]) {
       const rim = new THREE.Mesh(
-        new THREE.TorusGeometry(headRadius * 0.17, headRadius * 0.014, 8, 20),
+        new THREE.TorusGeometry(headRadius * 0.17, headRadius * 0.014, 5, 10),
         frameMat,
       );
       rim.position.copy(onSkull(m, 0.03));
@@ -1150,7 +796,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
     const shoulder = new THREE.Group();
     shoulder.position.set(side * 0.163 * build, 0.185, 0);
     chest.add(shoulder);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.043 * build, 14, 12), sleeve);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.043 * build, 6, 5), sleeve);
     cap.scale.set(1, 0.8, 0.92);
     cap.castShadow = true;
     shoulder.add(cap);
@@ -1161,10 +807,10 @@ export function buildCharacter(spec: CharacterSpec): Character {
 
     // A thin shirt cuff at the sleeve's edge, then a hand that overlaps it, so
     // the wrist is a join rather than a gap.
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.0325, 0.0315, 0.011, 14), shirtMat);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.0325, 0.0315, 0.011, 7), shirtMat);
     cuff.position.y = -0.2495;
     fore.add(cuff);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 12), skinMat);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.036, 6, 5), skinMat);
     hand.scale.set(0.78, 1.5, 0.48);
     hand.position.y = -0.288;
     hand.castShadow = true;
@@ -1184,7 +830,7 @@ export function buildCharacter(spec: CharacterSpec): Character {
     shin.position.y = -0.4;
     const shoe = new THREE.Group();
     shoe.position.set(0, -0.452, 0.03);
-    const last = new THREE.Mesh(new THREE.SphereGeometry(0.062, 16, 12), shoeMat);
+    const last = new THREE.Mesh(new THREE.SphereGeometry(0.062, 6, 5), shoeMat);
     last.scale.set(0.72, 0.46, 1.85);
     last.position.z = 0.03;
     last.castShadow = true;
@@ -1399,7 +1045,7 @@ function seatedBodyGeometry(): THREE.BufferGeometry {
   ];
   const torso = new THREE.LatheGeometry(
     rows.map(([y, r]) => new THREE.Vector2(r, y)),
-    16,
+    7,
   );
   torso.scale(1, 1, 0.74);
   torso.translate(0, 0.5, 0);
@@ -1407,30 +1053,30 @@ function seatedBodyGeometry(): THREE.BufferGeometry {
 
   // Thighs forward, shins down.
   for (const side of [-1, 1]) {
-    const thigh = new THREE.CylinderGeometry(0.075, 0.06, 0.4, 8);
+    const thigh = new THREE.CylinderGeometry(0.075, 0.06, 0.4, 6);
     thigh.rotateX(Math.PI / 2);
     thigh.translate(side * 0.085, 0.48, 0.2);
     parts.push(thigh);
-    const shin = new THREE.CylinderGeometry(0.06, 0.045, 0.42, 8);
+    const shin = new THREE.CylinderGeometry(0.06, 0.045, 0.42, 6);
     shin.translate(side * 0.085, 0.26, 0.39);
     parts.push(shin);
   }
   // Arms tucked against the body, forearms resting forward on the desk, so a
   // packed bench reads as people rather than a row of aeroplanes.
   for (const side of [-1, 1]) {
-    const upper = new THREE.CylinderGeometry(0.044, 0.036, 0.3, 8);
+    const upper = new THREE.CylinderGeometry(0.044, 0.036, 0.3, 6);
     upper.rotateX(0.42);
     upper.rotateZ(side * -0.08);
     upper.translate(side * 0.152, 0.82, 0.03);
     parts.push(upper);
-    const fore = new THREE.CylinderGeometry(0.035, 0.029, 0.26, 8);
+    const fore = new THREE.CylinderGeometry(0.035, 0.029, 0.26, 6);
     fore.rotateX(Math.PI / 2.1);
     fore.translate(side * 0.14, 0.71, 0.22);
     parts.push(fore);
   }
   // Shoulders, sitting on the torso rather than beyond it.
   for (const side of [-1, 1]) {
-    const cap = new THREE.SphereGeometry(0.045, 10, 8);
+    const cap = new THREE.SphereGeometry(0.045, 6, 5);
     cap.scale(1, 0.82, 1);
     cap.translate(side * 0.152, 0.955, 0);
     parts.push(cap);
@@ -1476,7 +1122,7 @@ function crowdFaceTexture(): THREE.CanvasTexture {
 /** A simplified head and hair for someone you will never speak to. */
 function crowdHeadGeometry(): THREE.BufferGeometry {
   const look = pickLook({ seed: "crowd" });
-  const geo = new THREE.SphereGeometry(1, 22, 16);
+  const geo = new THREE.SphereGeometry(1, 12, 9);
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
@@ -1491,7 +1137,7 @@ function crowdHeadGeometry(): THREE.BufferGeometry {
 }
 
 function crowdHairGeometry(): THREE.BufferGeometry {
-  const sphere = new THREE.SphereGeometry(1.04, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52);
+  const sphere = new THREE.SphereGeometry(1.04, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.52);
   const look = pickLook({ seed: "crowd" });
   const pos = sphere.attributes.position as THREE.BufferAttribute;
   const v = new THREE.Vector3();
@@ -1530,9 +1176,13 @@ export function buildCrowd(members: CrowdMember[], styles: CrowdStyle[]): THREE.
 
   for (const [groupIndex, list] of byGroup) {
     const style = styles[groupIndex % styles.length];
-    const bodyMat = new THREE.MeshStandardMaterial({ color: style.suit, roughness: 0.8 });
-    const headMat = new THREE.MeshStandardMaterial({ map: crowdFaceTexture(), roughness: 0.66 });
-    const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: style.suit, roughness: 0.8, flatShading: true });
+    const headMat = new THREE.MeshStandardMaterial({
+      map: crowdFaceTexture(),
+      roughness: 0.7,
+      flatShading: true,
+    });
+    const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true });
 
     const body = new THREE.InstancedMesh(bodyGeo, bodyMat, list.length);
     const head = new THREE.InstancedMesh(headGeo, headMat, list.length);
