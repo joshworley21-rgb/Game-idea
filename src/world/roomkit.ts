@@ -60,6 +60,8 @@ export interface RoomBuild {
   /** Anchors for positional sound, when the room has any. */
   fireplace?: THREE.Object3D;
   clockSpot?: THREE.Object3D;
+  /** Per-frame upkeep — fire flicker, sconce flicker — while this room is current. */
+  animate?: (dt: number, t: number) => void;
 }
 
 export const ROOM_INFO: Record<RoomId, { name: string; blurb: string }> = {
@@ -302,19 +304,51 @@ export function boardTable(
   return { minX: -w / 2, maxX: w / 2, minZ: -d / 2, maxZ: d / 2 };
 }
 
-/** Sconces down a wall, so a windowless room is not a cave. */
-export function sconces(root: THREE.Group, points: [number, number][], y = 2.1): void {
+/**
+ * Sconces down a wall, so a windowless room is not a cave — a brass
+ * backplate and arm holding the shade, not just a light floating on the
+ * wall. Returns an update(dt, t) that flickers each bulb a little, out of
+ * phase with its neighbours, so the wall never looks perfectly electric.
+ */
+export function sconces(
+  root: THREE.Group,
+  points: [number, number][],
+  y = 2.1,
+): (dt: number, t: number) => void {
+  const brass = new THREE.MeshStandardMaterial({ color: PALETTE.brass, roughness: 0.35, metalness: 0.7 });
+  const lights: THREE.PointLight[] = [];
+  const bases: number[] = [];
   for (const [x, z] of points) {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    // The backplate and arm face into the room; a wall segment runs roughly
+    // along X here, so the fixture reaches toward +Z or -Z depending which
+    // side of the room it is on.
+    const out = z < 0 ? 1 : -1;
+    place(g, new THREE.CylinderGeometry(0.05, 0.05, 0.02, 12), brass, 0, 0, 0).rotation.x = Math.PI / 2;
+    place(g, new THREE.CylinderGeometry(0.012, 0.012, 0.13, 8), brass, 0, 0, out * 0.065).rotation.x = Math.PI / 2;
     const shade = new THREE.Mesh(
       new THREE.CylinderGeometry(0.11, 0.07, 0.2, 12, 1, true),
-      new THREE.MeshStandardMaterial({ color: 0xf2e6c8, roughness: 0.9, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0xf2e6c8, roughness: 0.9, side: THREE.DoubleSide, emissive: 0x2a2010, emissiveIntensity: 0.4 }),
     );
-    shade.position.set(x, y, z);
-    root.add(shade);
+    shade.position.set(0, 0, out * 0.14);
+    g.add(shade);
+    root.add(g);
+
     const bulb = new THREE.PointLight(0xffe6b8, 3.2, 7, 2);
-    bulb.position.set(x, y, z);
+    bulb.position.set(x, y, z + out * 0.14);
     root.add(bulb);
+    lights.push(bulb);
+    bases.push(bulb.intensity);
   }
+  return (_dt, t) => {
+    lights.forEach((l, i) => {
+      const seed = points[i][0] * 977 + points[i][1] * 131;
+      const flicker =
+        Math.sin(t * 3.1 + seed) * 0.03 + Math.sin(t * 7.4 + seed * 1.7) * 0.02 + Math.sin(t * 1.3 + seed * 0.5) * 0.02;
+      l.intensity = bases[i] * (0.95 + flicker);
+    });
+  };
 }
 
 /**
@@ -440,6 +474,101 @@ export function fruitBowl(root: THREE.Group, x: number, y: number, z: number): v
     );
     fruit.castShadow = true;
   }
+}
+
+let flameTex: THREE.CanvasTexture | null = null;
+/** A soft radial glow, painted once and reused by every fireplace. */
+function flameTexture(): THREE.CanvasTexture {
+  if (flameTex) return flameTex;
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size * 0.6, 0, size / 2, size * 0.55, size * 0.5);
+  g.addColorStop(0, "rgba(255,246,210,0.95)");
+  g.addColorStop(0.35, "rgba(255,168,60,0.85)");
+  g.addColorStop(0.7, "rgba(224,88,32,0.35)");
+  g.addColorStop(1, "rgba(200,60,20,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(size / 2, size * 0.55, size * 0.42, size * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  flameTex = new THREE.CanvasTexture(canvas);
+  return flameTex;
+}
+
+export interface Fire {
+  /** For sound.attachRoom — the fireplace's position anchor. */
+  object: THREE.Object3D;
+  update: (dt: number, t: number) => void;
+}
+
+/**
+ * A firebox: crossed logs, a cluster of flickering flame sprites, and the
+ * light they throw. Drop it inside whatever marble-and-firebox surround the
+ * room already builds, at the point flames should rise from.
+ */
+export function fire(root: THREE.Group, x: number, y: number, z: number, scale = 1): Fire {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  root.add(group);
+
+  // Logs, charred and crossed.
+  const logMat = standard(0x1d1712, 0.9);
+  const log1 = place(group, new THREE.CylinderGeometry(0.045, 0.05, 0.55 * scale, 8), logMat, 0, 0.055 * scale, 0);
+  log1.rotation.z = Math.PI / 2;
+  log1.rotation.y = 0.15;
+  const log2 = place(
+    group,
+    new THREE.CylinderGeometry(0.04, 0.045, 0.5 * scale, 8),
+    logMat,
+    0.02,
+    0.11 * scale,
+    -0.03,
+  );
+  log2.rotation.z = Math.PI / 2;
+  log2.rotation.y = -0.22;
+
+  // Flame sprites: layered and additive, so they read as light rather than
+  // paint — a texture would need to face the camera to convince, and a
+  // sprite always does.
+  const sprites: THREE.Sprite[] = [];
+  const baseScales: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const mat = new THREE.SpriteMaterial({
+      map: flameTexture(),
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+    });
+    const s = new THREE.Sprite(mat);
+    const base = (0.34 - i * 0.045) * scale;
+    s.position.set((i - 1) * 0.09 * scale, 0.17 * scale, 0.015 * i);
+    s.scale.set(base * 0.8, base, 1);
+    group.add(s);
+    sprites.push(s);
+    baseScales.push(base);
+  }
+
+  const light = new THREE.PointLight(0xff8a3c, 4.2, 3.4 * scale, 2);
+  light.position.set(0, 0.22 * scale, 0.05);
+  group.add(light);
+
+  const baseIntensity = light.intensity;
+  const seed = x * 977 + z * 131 + 41;
+  const update = (_dt: number, t: number): void => {
+    const flicker =
+      Math.sin(t * 11 + seed) * 0.5 + Math.sin(t * 23 + seed * 1.7) * 0.3 + Math.sin(t * 5.3 + seed * 0.4) * 0.2;
+    light.intensity = baseIntensity * (0.8 + flicker * 0.24);
+    sprites.forEach((s, i) => {
+      const n = Math.sin(t * (7 + i * 2.3) + seed + i * 5) * 0.5 + 0.5;
+      const sc = baseScales[i] * (0.85 + n * 0.3);
+      s.scale.set(sc * 0.8, sc, 1);
+      s.position.y = 0.15 * scale + i * 0.015 + n * 0.03 * scale;
+    });
+  };
+
+  return { object: group, update };
 }
 
 /** A folded newspaper, dropped rather than squared to the edge of the table. */

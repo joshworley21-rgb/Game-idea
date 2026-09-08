@@ -466,6 +466,7 @@ export class World {
       this.stations.update(dt);
       this.doors.update(dt);
       this.animator.update(dt, this.camera.position);
+      this.current.animate?.(dt, this.clock.elapsedTime);
       if (this.composer) {
         const t0 = performance.now();
         this.composer.render();

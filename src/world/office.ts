@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { PALETTE, carpetMat, metal, place, plasterMat, standard, weaveMat, woodMat } from "./materials.ts";
-import { mug } from "./roomkit.ts";
+import { fire, mug, sconces } from "./roomkit.ts";
 import type { Door, RoomBuild, RoomId, StationAnchor } from "./roomkit.ts";
 import type { StationId } from "../game/types.ts";
 
@@ -212,6 +212,42 @@ function buildDesk(root: THREE.Group): THREE.Vector3 {
   // takes the surface height, not the cup's centre — the desktop sits at
   // 0.805 (0.76 top box, half its 0.09 height above that).
   mug(g, -0.15, 0.805, -0.22, 0xf2efe6);
+
+  // Reading glasses, left on the papers rather than worn.
+  const lensMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    roughness: 0.05,
+    transparent: true,
+    opacity: 0.4,
+  });
+  const frameMat = standard(0x2a2622, 0.4, 0.4);
+  for (const side of [-1, 1]) {
+    const lens = place(g, new THREE.TorusGeometry(0.032, 0.005, 8, 20), frameMat, -0.55 + side * 0.045, 0.828, 0.1);
+    lens.rotation.x = Math.PI / 2;
+    place(g, new THREE.CircleGeometry(0.031, 20), lensMat, -0.55 + side * 0.045, 0.827, 0.1).rotation.x = -Math.PI / 2;
+  }
+  place(g, new THREE.BoxGeometry(0.016, 0.006, 0.006), frameMat, -0.55, 0.828, 0.1);
+  for (const side of [-1, 1]) {
+    const arm = place(g, new THREE.BoxGeometry(0.11, 0.005, 0.006), frameMat, -0.55 + side * 0.13, 0.828, 0.11);
+    arm.rotation.y = side * 0.35;
+  }
+
+  // A pen holder, two fountain pens leaning rather than standing to attention.
+  place(g, new THREE.CylinderGeometry(0.038, 0.034, 0.09, 14), standard(PALETTE.leather, 0.55), -0.05, 0.85, 0.32);
+  for (const [dx, tilt] of [[-0.012, -0.12], [0.014, 0.09]] as const) {
+    const pen = place(g, new THREE.CylinderGeometry(0.006, 0.006, 0.16, 8), metal(0x1a1a1a, 0.4), -0.05 + dx, 0.925, 0.32);
+    pen.rotation.z = tilt;
+    place(g, new THREE.ConeGeometry(0.006, 0.016, 8), metal(PALETTE.brass, 0.3), -0.05 + dx + Math.sin(tilt) * 0.08, 0.925 + Math.cos(tilt) * 0.08, 0.32).rotation.z = tilt;
+  }
+
+  // A family photograph, angled slightly toward the chair.
+  const frame = new THREE.Group();
+  frame.position.set(-0.85, 0.805, -0.38);
+  frame.rotation.y = 0.5;
+  g.add(frame);
+  place(frame, new THREE.BoxGeometry(0.14, 0.18, 0.012), metal(PALETTE.brass, 0.35), 0, 0.09, 0);
+  place(frame, new THREE.PlaneGeometry(0.1, 0.14), standard(0xcfd6de, 0.7), 0, 0.09, 0.008);
+  place(frame, new THREE.BoxGeometry(0.1, 0.02, 0.06), metal(PALETTE.brass, 0.35), 0, 0.005, 0.03).rotation.x = -0.3;
   const lampBase = place(g, new THREE.CylinderGeometry(0.09, 0.12, 0.06, 16), metal(PALETTE.brass), 0.85, 0.83, -0.3);
   lampBase.castShadow = false;
   place(g, new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8), metal(PALETTE.brass), 0.85, 0.98, -0.3);
@@ -258,7 +294,7 @@ function buildFlags(root: THREE.Group): void {
   }
 }
 
-function buildFireplace(root: THREE.Group): THREE.Object3D {
+function buildFireplace(root: THREE.Group): { object: THREE.Object3D; update: (dt: number, t: number) => void } {
   const g = new THREE.Group();
   g.position.set(0.2, 0, ROOM.rz - 0.28);
   const marble = standard(PALETTE.marble, 0.5);
@@ -266,13 +302,11 @@ function buildFireplace(root: THREE.Group): THREE.Object3D {
   for (const sx of [-0.85, 0.85]) place(g, new THREE.BoxGeometry(0.3, 1.2, 0.34), marble, sx, 0.6, 0);
   place(g, new THREE.BoxGeometry(2.0, 0.22, 0.34), marble, 0, 1.09, 0);
   place(g, new THREE.BoxGeometry(1.4, 1.0, 0.16), standard(0x22201d, 0.95), 0, 0.5, -0.05);
-  const embers = new THREE.PointLight(0xff7a2a, 2.2, 3.2, 2);
-  embers.position.set(0, 0.35, -0.1);
-  g.add(embers);
+  const lit = fire(g, 0, 0.16, 0.02, 1.15);
 
   // The portrait above the mantel is a model; see props.ts.
   root.add(g);
-  return g;
+  return { object: g, update: lit.update };
 }
 
 /** Small furniture pieces that carry the interactive stations. */
@@ -373,9 +407,20 @@ export function buildOffice(): RoomBuild {
   buildDoors(group);
   buildDesk(group);
   buildFlags(group);
-  const fireplace = buildFireplace(group);
+  const lit = buildFireplace(group);
   const anchors = buildStationFurniture(group);
   const doors = buildRoomDoors(group);
+
+  // Wall sconces either side of the fireplace — the only stretch of wall
+  // without a window or a door to interrupt it.
+  const flicker = sconces(
+    group,
+    [
+      [-1.9, ROOM.rz - 0.55],
+      [2.3, ROOM.rz - 0.55],
+    ],
+    2.15,
+  );
 
   const daylight = new THREE.DirectionalLight(0xfff4e0, 1.5);
   daylight.position.set(-2.5, 7.5, -9);
@@ -419,8 +464,12 @@ export function buildOffice(): RoomBuild {
     clamp: (p) => clampToRoom(p),
     daylight,
     windowLights,
-    fireplace,
+    fireplace: lit.object,
     clockSpot,
+    animate: (dt, t) => {
+      lit.update(dt, t);
+      flicker(dt, t);
+    },
   };
 }
 

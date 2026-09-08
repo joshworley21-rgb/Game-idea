@@ -6,6 +6,7 @@ import {
   chair,
   daylightFor,
   doorway,
+  fire,
   fruitBowl,
   mug,
   newspaper,
@@ -117,7 +118,7 @@ export function buildCabinetRoom(): RoomBuild {
   // hand-built here any more — a placeholder box under it was doubling the
   // furniture up.
 
-  sconces(group, [
+  const flicker = sconces(group, [
     [-W / 2 + 0.2, -2.4],
     [-W / 2 + 0.2, 2.4],
     [W / 2 - 0.2, -2.4],
@@ -144,6 +145,7 @@ export function buildCabinetRoom(): RoomBuild {
     clamp: rectClamp(W, D),
     daylight,
     windowLights,
+    animate: flicker,
   };
 }
 
@@ -263,7 +265,7 @@ export function buildCapitol(): RoomBuild {
     );
     gallery.castShadow = true;
   }
-  sconces(group, [
+  const flicker = sconces(group, [
     [-W / 2 + 0.5, -5],
     [-W / 2 + 0.5, 2],
     [W / 2 - 0.5, -5],
@@ -309,6 +311,7 @@ export function buildCapitol(): RoomBuild {
     },
     daylight,
     windowLights,
+    animate: flicker,
   };
 }
 
@@ -409,7 +412,7 @@ export function buildPressRoom(): RoomBuild {
     place(group, new THREE.CylinderGeometry(0.03, 0.05, 1.0, 8), metal(0x222222, 0.5), x, 0.95, D / 2 - 1.3);
   }
 
-  sconces(group, [
+  const flicker = sconces(group, [
     [-W / 2 + 0.3, -3],
     [-W / 2 + 0.3, 2],
     [W / 2 - 0.3, -3],
@@ -441,6 +444,7 @@ export function buildPressRoom(): RoomBuild {
     clamp: rectClamp(W, D),
     daylight,
     windowLights,
+    animate: flicker,
   };
 }
 
@@ -525,12 +529,7 @@ export function buildResidence(): RoomBuild {
   group.add(hearth);
   place(hearth, new THREE.BoxGeometry(2.0, 1.3, 0.35), marbleMat(PALETTE.marble, 1.4), 0, 0.65, 0);
   place(hearth, new THREE.BoxGeometry(1.2, 0.85, 0.2), standard(0x1a1512, 0.95), 0, 0.45, 0.12);
-  const fireLight = new THREE.PointLight(0xff9a45, 5, 7, 2);
-  fireLight.position.set(0, 0.5, 0.35);
-  hearth.add(fireLight);
-  const fireplace = new THREE.Object3D();
-  fireplace.position.set(W / 2 - 0.6, 0.5, 1.6);
-  group.add(fireplace);
+  const lit = fire(hearth, 0, 0.14, 0.05, 1.3);
 
   // Family photographs on the mantel, which is the whole point of the room.
   for (let i = 0; i < 4; i++) {
@@ -554,7 +553,7 @@ export function buildResidence(): RoomBuild {
     { role: "family", index: 2, position: new THREE.Vector3(-1.9, 0, -1.9), rotationY: -Math.PI / 2, pose: "sit-forward" },
   ];
 
-  sconces(group, [
+  const flicker = sconces(group, [
     [-W / 2 + 0.3, 1],
     [W / 2 - 0.3, -2],
   ], 2.2);
@@ -576,7 +575,11 @@ export function buildResidence(): RoomBuild {
     clamp: rectClamp(W, D),
     daylight,
     windowLights,
-    fireplace,
+    fireplace: lit.object,
+    animate: (dt, t) => {
+      lit.update(dt, t);
+      flicker(dt, t);
+    },
   };
 }
 
@@ -660,12 +663,7 @@ export function buildStudy(): RoomBuild {
   group.add(hearth);
   place(hearth, new THREE.BoxGeometry(1.5, 1.1, 0.3), marbleMat(PALETTE.marble, 1.4), 0, 0.55, 0);
   place(hearth, new THREE.BoxGeometry(0.9, 0.7, 0.18), standard(0x1a1512, 0.95), 0, 0.38, 0.1);
-  const fireLight = new THREE.PointLight(0xff8f3c, 4, 6, 2);
-  fireLight.position.set(0, 0.45, 0.3);
-  hearth.add(fireLight);
-  const fireplace = new THREE.Object3D();
-  fireplace.position.set(0, 0.45, D / 2 - 0.55);
-  group.add(fireplace);
+  const lit = fire(hearth, 0, 0.13, 0.04, 1.05);
 
   group.add(new THREE.PointLight(0xffe8c8, 2.2, 9, 2).translateY(2.6));
   const daylight = daylightFor(group, new THREE.Vector3(0, 6, -8), new THREE.Vector3(0, 0.9, 0));
@@ -683,6 +681,7 @@ export function buildStudy(): RoomBuild {
     clamp: rectClamp(W, D, 0.45),
     daylight,
     windowLights,
-    fireplace,
+    fireplace: lit.object,
+    animate: lit.update,
   };
 }

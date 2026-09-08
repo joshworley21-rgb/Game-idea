@@ -91,6 +91,16 @@ function shade(n: number, t: number): number {
   return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }
 
+/** Blends two colours by channel — for a lip or blush tone derived from skin. */
+function mix(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+
 /**
  * The shape itself: a flat illustrated bust built from this person's actual
  * traits, not just their name. Shared between the live in-browser fallback
@@ -100,11 +110,20 @@ function shade(n: number, t: number): number {
  */
 export function buildPortraitSvg(look: Look): string {
   const skin = hex(look.skin);
+  const skinLight = hex(shade(look.skin, 1.16));
+  const skinShadow = hex(shade(look.skin, 0.74));
   const hair = hex(look.hair);
+  const hairLight = hex(shade(look.hair, 1.3));
+  const hairDark = hex(shade(look.hair, 0.55));
   const suit = hex(look.suit);
+  const suitDark = hex(shade(look.suit, 0.68));
   const accent = hex(look.accent);
-  const browColour = hex(shade(look.hair, 0.7));
-  const deep = hex(shade(look.skin, 0.6));
+  const browColour = hex(shade(look.hair, 0.65));
+  const deep = hex(shade(look.skin, 0.55));
+  const eye = hex(look.eye);
+  const lip = hex(mix(look.skin, 0xa8514c, 0.55));
+  const lipDark = hex(mix(look.skin, 0x7a352f, 0.6));
+  const blush = hex(mix(look.skin, 0xc85a4a, 0.3));
 
   const long = look.hairStyle === "long" || look.hairStyle === "bob" || look.hairStyle === "tied";
   const bald = look.hairStyle === "bald";
@@ -112,16 +131,18 @@ export function buildPortraitSvg(look: Look): string {
 
   // The skull's own width, not a fixed circle — the single biggest lever
   // for two people not reading as the same shape wearing different colours.
-  const rx = (42 + look.jawWidth * 12).toFixed(1);
+  const rxNum = 42 + look.jawWidth * 12;
+  const rx = rxNum.toFixed(1);
   const ry = 56;
+  const cheekOffset = (rxNum * 0.52).toFixed(1);
 
   const hairPath = bald
     ? ""
     : long
-      ? `<path d="M42 88 Q40 30 100 26 Q160 30 158 88 Q158 130 148 150 L148 96 Q148 60 100 56 Q52 60 52 96 L52 150 Q42 130 42 88 Z" fill="${hair}"/>`
+      ? `<path d="M42 88 Q40 30 100 26 Q160 30 158 88 Q158 130 148 150 L148 96 Q148 60 100 56 Q52 60 52 96 L52 150 Q42 130 42 88 Z" fill="url(#hairGrad)" stroke="${hairDark}" stroke-width="1" stroke-opacity="0.4"/>`
       : thin
-        ? `<path d="M56 70 Q60 32 100 30 Q140 32 144 70 Q120 52 100 52 Q80 52 56 70 Z" fill="${hair}"/>`
-        : `<path d="M45 82 Q42 28 100 24 Q158 28 155 82 Q140 50 100 48 Q60 50 45 82 Z" fill="${hair}"/>`;
+        ? `<path d="M56 70 Q60 32 100 30 Q140 32 144 70 Q120 52 100 52 Q80 52 56 70 Z" fill="url(#hairGrad)" stroke="${hairDark}" stroke-width="1" stroke-opacity="0.4"/>`
+        : `<path d="M45 82 Q42 28 100 24 Q158 28 155 82 Q140 50 100 48 Q60 50 45 82 Z" fill="url(#hairGrad)" stroke="${hairDark}" stroke-width="1" stroke-opacity="0.4"/>`;
 
   const browW = (2 + look.browWeight * 2.4).toFixed(1);
   const eyebrows = `
@@ -130,6 +151,24 @@ export function buildPortraitSvg(look: Look): string {
 
   const noseLen = 14 + look.noseLength * 10;
   const nose = `<path d="M100 92 L${(96).toFixed(1)} ${(92 + noseLen).toFixed(1)} Q100 ${(97 + noseLen).toFixed(1)} ${(104).toFixed(1)} ${(92 + noseLen).toFixed(1)}" stroke="${deep}" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.55"/>`;
+
+  const eyes = `
+    <ellipse cx="82" cy="98" rx="6.2" ry="4.3" fill="#f4f1ea"/>
+    <ellipse cx="118" cy="98" rx="6.2" ry="4.3" fill="#f4f1ea"/>
+    <circle cx="82" cy="98" r="3.3" fill="${eye}"/>
+    <circle cx="118" cy="98" r="3.3" fill="${eye}"/>
+    <circle cx="82" cy="98" r="1.6" fill="#181410"/>
+    <circle cx="118" cy="98" r="1.6" fill="#181410"/>
+    <circle cx="83.1" cy="96.6" r="0.8" fill="#fff" opacity="0.9"/>
+    <circle cx="119.1" cy="96.6" r="0.8" fill="#fff" opacity="0.9"/>`;
+
+  const lips = `
+    <path d="M82 121 Q100 128 118 121 Q100 136 82 121 Z" fill="${lip}"/>
+    <path d="M85 122 Q100 126.5 115 122" stroke="${lipDark}" stroke-width="1.3" fill="none" stroke-linecap="round" opacity="0.55"/>`;
+
+  const blushMarks = `
+    <ellipse cx="${100 - Number(cheekOffset)}" cy="112" rx="14" ry="9" fill="url(#blush)"/>
+    <ellipse cx="${100 + Number(cheekOffset)}" cy="112" rx="14" ry="9" fill="url(#blush)"/>`;
 
   const facial =
     look.facialHair === "beard"
@@ -156,18 +195,40 @@ export function buildPortraitSvg(look: Look): string {
         <stop offset="0%" stop-color="#2b3040"/>
         <stop offset="100%" stop-color="#171a22"/>
       </radialGradient>
+      <radialGradient id="face" cx="40%" cy="32%" r="75%">
+        <stop offset="0%" stop-color="${skinLight}"/>
+        <stop offset="58%" stop-color="${skin}"/>
+        <stop offset="100%" stop-color="${skinShadow}"/>
+      </radialGradient>
+      <linearGradient id="hairGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${hairLight}"/>
+        <stop offset="100%" stop-color="${hairDark}"/>
+      </linearGradient>
+      <linearGradient id="suitGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${suit}"/>
+        <stop offset="100%" stop-color="${suitDark}"/>
+      </linearGradient>
+      <radialGradient id="blush" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="${blush}" stop-opacity="0.32"/>
+        <stop offset="100%" stop-color="${blush}" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="jaw" cx="50%" cy="0%" r="70%">
+        <stop offset="0%" stop-color="${deep}" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="${deep}" stop-opacity="0"/>
+      </radialGradient>
     </defs>
     <rect width="200" height="220" rx="14" fill="url(#g)"/>
     <rect x="1.5" y="1.5" width="197" height="217" rx="13" fill="none" stroke="#dcb96e" stroke-opacity="0.35" stroke-width="2"/>
-    <rect x="52" y="150" width="96" height="20" fill="${skin}"/>
-    <path d="M28 220 Q28 158 100 152 Q172 158 172 220 Z" fill="${suit}"/>
+    <rect x="52" y="150" width="96" height="20" fill="${skinShadow}"/>
+    <path d="M28 220 Q28 158 100 152 Q172 158 172 220 Z" fill="url(#suitGrad)"/>
     <path d="M92 168 L100 182 L108 168 L100 200 Z" fill="${accent}"/>
-    <ellipse cx="100" cy="100" rx="${rx}" ry="${ry}" fill="${skin}"/>
+    <ellipse cx="100" cy="100" rx="${rx}" ry="${ry}" fill="url(#face)"/>
+    <ellipse cx="100" cy="138" rx="${(rxNum * 0.78).toFixed(1)}" ry="20" fill="url(#jaw)"/>
+    ${blushMarks}
     ${nose}
-    <circle cx="82" cy="98" r="4.5" fill="#241a12"/>
-    <circle cx="118" cy="98" r="4.5" fill="#241a12"/>
+    ${eyes}
     ${eyebrows}
-    <path d="M84 122 Q100 132 116 122" stroke="#6b3a34" stroke-width="3" fill="none" stroke-linecap="round"/>
+    ${lips}
     ${facial}
     ${hairPath}
     ${glasses}
