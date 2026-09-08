@@ -1,53 +1,64 @@
 # Conversation portraits
 
 The conversation panel shows a small portrait (52×57, cropped with
-`object-fit: cover`) next to whoever is speaking. It looks for a real
-image here first — `<role>.png`, then `.jpg`, then `.webp` — and only
-falls back to a generated placeholder shape if none of those exist. See
-`src/ui/portrait.ts` for the lookup.
+`object-fit: cover`) next to whoever is speaking. Two tiers, most specific
+first — see `src/ui/portrait.ts` for the actual lookup order.
 
-Portraits are keyed by **role**, not by the specific person currently
-holding it — cabinet secretaries get a new random name every playthrough,
-so there's no such thing as "the portrait for this one Treasury
-Secretary." Eight roles cover every speaker the conversation system
-currently names:
+## Tier 1 — `cast/<name-slug>.{png,jpg,webp}`
 
-| filename stem  | who                                   |
-|-----------------|----------------------------------------|
-| `chief`          | The Chief of Staff                     |
-| `treasury`       | The Treasury Secretary                 |
-| `state`          | The Secretary of State                 |
-| `defense`        | The Defense Secretary                  |
-| `justice`        | The Attorney General                   |
-| `health`         | The Health Secretary                   |
-| `correspondent`  | The hostile press interview            |
-| `prime-minister` | The allied head of government on calls |
+One file per person in the 100-name cabinet pool (`NAME_POOL` in
+`src/game/cabinet.ts`), keyed by their exact name, lowercased and
+hyphenated — `"Margaret Lindqvist"` → `cast/margaret-lindqvist.png`.
+Cabinet secretaries are drawn from this same fixed pool every game, so
+unlike an infinite random cast, giving each of these 100 people their own
+face is a finite, describable job.
 
-## Brief
+**Every name in the pool already has a file here** — `npm run
+render:portraits` generated them from that person's actual traits (skin,
+hair, face shape, glasses, facial hair — whatever `pickLook` derives for
+their 3D model), rasterised from `buildPortraitSvg` in
+`src/ui/portrait.ts`. That's a flat illustrated shape, not a painting —
+there's no image-generation tool available to produce real art with — but
+it's genuinely *that person's* shape, not a shared placeholder.
 
-Head-and-shoulders, roughly 4:5 portrait (works well cropped at 1024×1280
-or similar). Digital-painting portrait style — the same kind of thing a
-premium mobile game uses for a dialogue portrait, not a photo. Three-quarter
-turn, direct gaze, plain softly-lit background so the crop reads clearly at
-avatar size. Consistent lighting and rendering style across all eight, so
-the cast reads as one cast.
+To replace one with real art (commissioned, or run through whatever AI
+image tool you have access to), drop a file at that same path — png beats
+jpg beats webp, and any real file beats the generated one outright, since
+`portraitImg` in `panels.ts` tries the checked-in file first. Only re-run
+`npm run render:portraits` if you want to regenerate the *generated* set
+(e.g. after changing `buildPortraitSvg` or the pool itself) — it won't
+touch files for names that don't map back into the current pool, but it
+will overwrite generated files you haven't replaced, so do it before,
+not after, commissioning real art for the ones you keep.
+
+## Tier 2 — `<role>.{png,jpg,webp}`
+
+Falls back to a role rather than a person for anyone outside the pool: two
+recurring but never-named characters the conversation system talks to
+without a name attached.
+
+| filename stem    | who                                     |
+|-------------------|------------------------------------------|
+| `correspondent`   | The hostile press interview             |
+| `prime-minister`  | The allied head of government on calls  |
+
+(`chief`, `treasury`, `state`, `defense`, `justice`, `health` are also
+valid stems here and worked as a fallback in an earlier version of this
+system, but every cabinet secretary now resolves through Tier 1 first —
+these six only matter if you delete someone's Tier 1 file without
+replacing it.)
+
+## Brief, if drawing real art
+
+Head-and-shoulders, roughly 4:5 portrait (crops well at 1024×1280 or
+similar). Digital-painting portrait style — the kind of thing a premium
+mobile game uses for a dialogue portrait, not a photo. Three-quarter turn,
+direct gaze, plain softly-lit background so the crop reads clearly at
+avatar size. Keep lighting and rendering style consistent across however
+many you draw, so the cast reads as one cast rather than a scrapbook.
 
 Common suffix for every prompt: *"digital painting, professional portrait
 illustration, head and shoulders, three-quarter view, direct gaze, soft
 studio lighting, plain dark blue-grey background, painterly realistic
 style, formal attire, composed expression — no text, no watermark, no
 signature, no border."*
-
-## One line per role
-
-- **chief** — Chief of Staff, 40s-50s, sharp and composed, tailored dark suit, the person who actually runs the room.
-- **treasury** — Treasury Secretary, salt-and-pepper hair, reading glasses optional, dark suit, analytical bearing.
-- **state** — Secretary of State, 50s, diplomatic and unflappable, dark suit.
-- **defense** — Defense Secretary, close-cropped hair, disciplined bearing, dark suit or subdued uniform touches.
-- **justice** — Attorney General, serious and exacting, dark formal attire.
-- **health** — Health Secretary, warm but authoritative, dark suit or a white coat over one.
-- **correspondent** — veteran White House correspondent, sharp blazer, press-ready, faintly skeptical expression.
-- **prime-minister** — allied head of government, international-statesman bearing, dark suit, understated.
-
-Drop the files in this folder with the exact filename stems above and they
-show up automatically — nothing else needs to change.

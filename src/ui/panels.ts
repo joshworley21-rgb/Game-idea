@@ -48,7 +48,7 @@ function chips(effects: { text: string; good: boolean }[]): HTMLElement {
  * so the art director's job is just dropping a file at that path.
  */
 function portraitImg(speaker: Speaker): HTMLImageElement {
-  const candidates = [...portraitCandidates(speaker.role)];
+  const candidates = [...portraitCandidates(speaker)];
   const img = el("img", { class: "convo-portrait", alt: speaker.seed }) as HTMLImageElement;
   const tryNext = () => {
     const next = candidates.shift();

@@ -47,7 +47,7 @@ const LAST = [
  * time the game runs, only the draw from it should vary.
  */
 const CAST_POOL_SIZE = 100;
-const NAME_POOL: string[] = (() => {
+export const NAME_POOL: string[] = (() => {
   const pairs: string[] = [];
   for (const first of FIRST) for (const last of LAST) pairs.push(`${first} ${last}`);
   const shuffle = new Rng(0xc0ffee);

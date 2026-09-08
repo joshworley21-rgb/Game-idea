@@ -1,4 +1,5 @@
 import { pickLook } from "../world/character.ts";
+import type { Look } from "../world/character.ts";
 import type { GameState } from "../game/types.ts";
 
 /**
@@ -7,17 +8,20 @@ import type { GameState } from "../game/types.ts";
  * beside the dialogue, rather than asking a real-time 3D face to carry a
  * close-up.
  *
- * Real illustrated art goes in `public/portraits/<role>.{png,jpg,webp}` —
- * see the README there for the exact brief and one prompt per role. `role`
- * is a job, not a person: cabinet secretaries are re-rolled with a new name
- * every playthrough, so bespoke art per generated individual isn't practical
- * (nobody is commissioning infinite portraits), but there are only ever six
- * cabinet offices plus a couple of recurring unnamed roles — a small, fixed
- * set worth actually drawing. Until art exists for a role, or for anyone
- * outside these fixed roles, `portraitUri` draws a flat geometric bust
- * instead — a shape, not a painting, and deliberately not pretending
- * otherwise — using the exact skin, hair and suit colours `pickLook`
- * already derives for that person's 3D model, so it's never a blank space.
+ * Three tiers, most specific first. Real painted art always wins if it
+ * exists: `public/portraits/cast/<name-slug>.{png,jpg,webp}` for one of the
+ * 100 people in the cabinet pool (`src/game/cabinet.ts`) by name, or
+ * `public/portraits/<role>.{png,jpg,webp}` for a handful of fixed unnamed
+ * roles (the hostile correspondent, the allied prime minister). Below that,
+ * every one of the 100 pool names already has a *generated* portrait — see
+ * `scripts/render-cast-portraits.mjs`, which calls `buildPortraitSvg` below
+ * once per pool name and rasterises it to `public/portraits/cast/`. That
+ * generated art is a shape built from this person's actual traits (face
+ * width, eyebrows, facial hair, glasses, hair colour and style), not a
+ * painting — deliberately not pretending otherwise — but it is genuinely
+ * theirs rather than a stand-in shared across the whole cast. Anyone
+ * outside the pool (a one-off seed) falls back to `portraitUri` computing
+ * the same shape live, for exactly the same reason.
  */
 
 /** Which cabinet office, if any, a fixed speaker label refers to — also the art's filename stem. */
@@ -37,9 +41,9 @@ const ROLE_BY_FIXED_SPEAKER: Record<string, string> = {
 };
 
 export interface Speaker {
-  /** Drives the placeholder's colours, and is who they are for `pickLook`. */
+  /** Drives the generated portrait, and is who they are for `pickLook`. */
   seed: string;
-  /** The art file to look for: `public/portraits/<role>.png` (or .jpg/.webp). */
+  /** The role's fallback art file: `public/portraits/<role>.png` (or .jpg/.webp). */
   role: string;
 }
 
@@ -55,30 +59,61 @@ export function speakerInfo(state: GameState, speaker: string): Speaker | null {
   return null;
 }
 
-/** Where real art for a role would live, in declining format preference. */
-export function portraitCandidates(role: string): string[] {
-  return [`portraits/${role}.png`, `portraits/${role}.jpg`, `portraits/${role}.webp`];
+/** `"Margaret Lindqvist"` -> `"margaret-lindqvist"`, for filenames and URLs. */
+export function slug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Where real or pre-generated art for this speaker would live, most
+ * specific first: this exact person by name, then the role they hold, in
+ * declining format preference. `portraitImg` in panels.ts tries each of
+ * these before falling back to `portraitUri`'s live-generated data URI.
+ */
+export function portraitCandidates(speaker: Speaker): string[] {
+  const exts = ["png", "jpg", "webp"];
+  return [
+    ...exts.map((ext) => `portraits/cast/${slug(speaker.seed)}.${ext}`),
+    ...exts.map((ext) => `portraits/${speaker.role}.${ext}`),
+  ];
 }
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
-/** Cache by seed: the drawing is deterministic, no reason to rebuild it. */
-const cache = new Map<string, string>();
+/** Scales a colour's channels toward black (t<1) or white (t>1). */
+function shade(n: number, t: number): number {
+  const r = Math.min(255, Math.max(0, ((n >> 16) & 0xff) * t));
+  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) * t));
+  const b = Math.min(255, Math.max(0, (n & 0xff) * t));
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+}
 
-/** A data URI for the seed's portrait, stable for as long as the page lives. */
-export function portraitUri(seed: string): string {
-  const hit = cache.get(seed);
-  if (hit) return hit;
-
-  const look = pickLook({ seed });
+/**
+ * The shape itself: a flat illustrated bust built from this person's actual
+ * traits, not just their name. Shared between the live in-browser fallback
+ * (`portraitUri`) and `scripts/render-cast-portraits.mjs`, which calls this
+ * once per pool name to pre-render real files — same drawing, same inputs,
+ * so a person's generated portrait never disagrees with their 3D model.
+ */
+export function buildPortraitSvg(look: Look): string {
   const skin = hex(look.skin);
   const hair = hex(look.hair);
   const suit = hex(look.suit);
   const accent = hex(look.accent);
+  const browColour = hex(shade(look.hair, 0.7));
+  const deep = hex(shade(look.skin, 0.6));
 
   const long = look.hairStyle === "long" || look.hairStyle === "bob" || look.hairStyle === "tied";
   const bald = look.hairStyle === "bald";
   const thin = look.hairStyle === "receding";
+
+  // The skull's own width, not a fixed circle — the single biggest lever
+  // for two people not reading as the same shape wearing different colours.
+  const rx = (42 + look.jawWidth * 12).toFixed(1);
+  const ry = 56;
 
   const hairPath = bald
     ? ""
@@ -88,7 +123,34 @@ export function portraitUri(seed: string): string {
         ? `<path d="M56 70 Q60 32 100 30 Q140 32 144 70 Q120 52 100 52 Q80 52 56 70 Z" fill="${hair}"/>`
         : `<path d="M45 82 Q42 28 100 24 Q158 28 155 82 Q140 50 100 48 Q60 50 45 82 Z" fill="${hair}"/>`;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220">
+  const browW = (2 + look.browWeight * 2.4).toFixed(1);
+  const eyebrows = `
+    <path d="M72 86 Q82 80 92 85" stroke="${browColour}" stroke-width="${browW}" fill="none" stroke-linecap="round"/>
+    <path d="M108 85 Q118 80 128 86" stroke="${browColour}" stroke-width="${browW}" fill="none" stroke-linecap="round"/>`;
+
+  const noseLen = 14 + look.noseLength * 10;
+  const nose = `<path d="M100 92 L${(96).toFixed(1)} ${(92 + noseLen).toFixed(1)} Q100 ${(97 + noseLen).toFixed(1)} ${(104).toFixed(1)} ${(92 + noseLen).toFixed(1)}" stroke="${deep}" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.55"/>`;
+
+  const facial =
+    look.facialHair === "beard"
+      ? `<path d="M60 110 Q58 148 100 156 Q142 148 140 110 Q140 138 100 144 Q60 138 60 110 Z" fill="${hair}" opacity="0.92"/>`
+      : look.facialHair === "moustache"
+        ? `<path d="M86 122 Q100 128 114 122 Q100 132 86 122 Z" fill="${hair}"/>`
+        : look.facialHair === "stubble"
+          ? `<path d="M62 108 Q60 140 100 150 Q140 140 138 108 Q140 132 100 140 Q60 132 62 108 Z" fill="${hair}" opacity="0.3"/>`
+          : "";
+
+  const glasses = look.glasses
+    ? `<g stroke="#2a2622" stroke-width="3" fill="none" opacity="0.85">
+        <rect x="66" y="88" width="30" height="24" rx="6"/>
+        <rect x="104" y="88" width="30" height="24" rx="6"/>
+        <path d="M96 98 L104 98"/>
+        <path d="M66 96 L54 92"/>
+        <path d="M134 96 L146 92"/>
+      </g>`
+    : "";
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220">
     <defs>
       <radialGradient id="g" cx="50%" cy="38%" r="65%">
         <stop offset="0%" stop-color="#2b3040"/>
@@ -100,14 +162,26 @@ export function portraitUri(seed: string): string {
     <rect x="52" y="150" width="96" height="20" fill="${skin}"/>
     <path d="M28 220 Q28 158 100 152 Q172 158 172 220 Z" fill="${suit}"/>
     <path d="M92 168 L100 182 L108 168 L100 200 Z" fill="${accent}"/>
-    <circle cx="100" cy="98" r="52" fill="${skin}"/>
+    <ellipse cx="100" cy="100" rx="${rx}" ry="${ry}" fill="${skin}"/>
+    ${nose}
     <circle cx="82" cy="98" r="4.5" fill="#241a12"/>
     <circle cx="118" cy="98" r="4.5" fill="#241a12"/>
+    ${eyebrows}
     <path d="M84 122 Q100 132 116 122" stroke="#6b3a34" stroke-width="3" fill="none" stroke-linecap="round"/>
+    ${facial}
     ${hairPath}
+    ${glasses}
   </svg>`;
+}
 
-  const uri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+/** Cache by seed: the drawing is deterministic, no reason to rebuild it. */
+const cache = new Map<string, string>();
+
+/** A data URI for the seed's portrait, stable for as long as the page lives. */
+export function portraitUri(seed: string): string {
+  const hit = cache.get(seed);
+  if (hit) return hit;
+  const uri = `data:image/svg+xml;utf8,${encodeURIComponent(buildPortraitSvg(pickLook({ seed })))}`;
   cache.set(seed, uri);
   return uri;
 }
