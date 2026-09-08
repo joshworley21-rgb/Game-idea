@@ -9,6 +9,72 @@ import type { Conversation, ConversationOption, Effects, GameState } from "./typ
  * first can open or close what you're offered next.
  */
 export const CONVERSATIONS: Conversation[] = [
+  // ------------------------------------------------------- The Oval Office
+  // Plays once, queued automatically on a brand-new game — see main.ts. The
+  // huge cooldown is just insurance against it ever showing up again in a
+  // station's normal meeting list.
+  {
+    id: "orientation",
+    station: "desk",
+    label: "Your first morning",
+    detail: "Arthur Vance is waiting. This one only happens once.",
+    ap: 0,
+    cooldown: 9999,
+    intro:
+      "Half past six, and the Chief of Staff is already at the door with a pocket watch and a look that says the day started without you.",
+    startBeat: "open",
+    beats: {
+      open: {
+        id: "open",
+        speaker: "Arthur Vance",
+        prompt:
+          "\"Congratulations,\" he says, in the tone of a man delivering bad news. \"The transition team left you a stack of things nobody finished, the Cabinet is confirmed, and the previous administration's lawyers are still returning our calls about a filing cabinet. Welcome to the house.\"",
+        options: [
+          {
+            id: "ask-urgent",
+            label: "Ask what's actually urgent",
+            detail: "Skip the tour. Get the list.",
+            effects: { "politics.capital": 2 },
+            resultText: "",
+            next: "guide",
+          },
+          {
+            id: "say-ready",
+            label: "Tell him you've read the briefings",
+            detail: "You have. Most of them.",
+            effects: { "politics.party": 2, "personal.integrity": 1 },
+            resultText: "",
+            next: "guide",
+          },
+          {
+            id: "sit-down",
+            label: "Say nothing yet and sit down",
+            detail: "Let the desk do the talking first.",
+            effects: { "personal.stress": -2 },
+            resultText: "",
+            next: "guide",
+          },
+        ],
+      },
+      guide: {
+        id: "guide",
+        speaker: "Arthur Vance",
+        prompt:
+          "He walks you through it without waiting to be asked: the desk for anything you can do alone, the Cabinet Room through that door for money and people, the Capitol when the House needs whipping, the press pool when they need feeding, and the Residence upstairs, when there's time for it. \"You won't get to all of it. Nobody does. Try anyway.\"",
+        options: [
+          {
+            id: "get-to-work",
+            label: "Get to work",
+            detail: "Four years starts now.",
+            effects: {},
+            resultText:
+              "He leaves the briefing books and the pocket watch goes back in his waistcoat. The door closes. It is, technically, your desk now.",
+          },
+        ],
+      },
+    },
+  },
+
   // --------------------------------------------------------- Cabinet Room
   {
     id: "cabinet",

@@ -337,14 +337,17 @@ function buildStationFurniture(root: THREE.Group): StationAnchor[] {
   place(globe, new THREE.SphereGeometry(0.3, 24, 18), standard(0x2f6d8c, 0.75), 0, 1.05, 0);
   root.add(globe);
 
-  const anchor = (id: StationId, x: number, z: number, fx: number, fz: number): StationAnchor => ({
+  const anchor = (id: StationId, x: number, z: number, fx: number, fz: number, focusY = 1.1): StationAnchor => ({
     id,
     position: new THREE.Vector3(x, 0, z),
-    focus: new THREE.Vector3(fx, 1.1, fz),
+    focus: new THREE.Vector3(fx, focusY, fz),
   });
 
   return [
-    anchor("desk", 0, -1.85, 0, -2.75),
+    // Looking down at the desk from the chair, not across it from the
+    // visitor's side — the president is already sitting there. Pulled back
+    // enough that the pen holder doesn't loom in the foreground.
+    anchor("desk", 0, -3.7, 0, -2.5, 1.15),
     anchor("phone", 2.95, -1.35, 4.15, -1.55),
   ];
 }
@@ -457,10 +460,23 @@ export function buildOffice(): RoomBuild {
     group,
     anchors,
     doors,
-    spawn: new THREE.Vector3(0, 0, 1.6),
-    spawnLook: new THREE.Vector3(0, 1.0, -2.75),
+    // In the chair, behind the desk, looking out into the room rather than
+    // standing in front of it like a visitor would.
+    spawn: new THREE.Vector3(0, 0, -3.55),
+    spawnLook: new THREE.Vector3(0, 1.2, 2.2),
+    spawnEyeHeight: 1.7,
     colliders: [{ minX: -1.25, maxX: 1.25, minZ: -3.5, maxZ: -2.1 }],
-    cast: [],
+    cast: [
+      {
+        // Right of the desk (screen-right from spawn) so the station legend
+        // panel on the left doesn't cover him.
+        role: "aide",
+        index: 0,
+        position: new THREE.Vector3(-1.7, 0, -1.6),
+        rotationY: 2.5,
+        pose: "stand",
+      },
+    ],
     clamp: (p) => clampToRoom(p),
     daylight,
     windowLights,

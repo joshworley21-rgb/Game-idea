@@ -41,7 +41,7 @@ class Game {
   private ended = false;
   private travelVeil = new TravelVeil();
 
-  constructor(engine: Engine) {
+  constructor(engine: Engine, isNewGame = false) {
     this.engine = engine;
     this.world = new World(canvas);
     this.hud = new Hud(
@@ -123,6 +123,10 @@ class Game {
     // Any crises already waiting from a loaded save.
     for (const crisis of engine.pendingCrises) {
       this.queue.push(() => this.open(() => crisisPanel(this.engine, crisis, this.host), true));
+    }
+    // A new administration starts with Arthur Vance already in the room.
+    if (isNewGame) {
+      this.queue.push(() => this.open(() => conversationPanel(this.engine, "orientation", this.host)));
     }
     this.drain();
   }
@@ -333,7 +337,7 @@ function titleScreen(): void {
         })()
       : new Engine({ name: nameInput.value.trim() || "President Reyes", party });
     if (!state && campaign) engine.applyCampaignResult(campaign.deltas, campaign.summary);
-    new Game(engine);
+    new Game(engine, !state);
   };
 
   const saved = hasSave() ? loadGame() : null;

@@ -1,52 +1,24 @@
 import * as THREE from "three";
-import { STATION_INFO } from "../game/actions.ts";
 import type { StationId } from "../game/types.ts";
 import type { StationAnchor } from "./roomkit.ts";
-
-function labelTexture(title: string, badge: boolean): THREE.CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 160;
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const radius = 26;
-  ctx.beginPath();
-  ctx.roundRect(6, 34, 500, 92, radius);
-  ctx.fillStyle = "rgba(20,28,44,0.9)";
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = badge ? "rgba(224,106,74,0.95)" : "rgba(226,193,110,0.85)";
-  ctx.stroke();
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#f6e9c8";
-  ctx.font = "600 34px Georgia, 'Times New Roman', serif";
-  ctx.fillText(title, 256, 74);
-
-  ctx.font = "500 22px system-ui, sans-serif";
-  ctx.fillStyle = badge ? "rgba(224,106,74,0.95)" : "rgba(226,193,110,0.9)";
-  ctx.fillText(badge ? "NEEDS YOU NOW" : "tap to open", 256, 108);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
 
 interface StationVisual {
   anchor: StationAnchor;
   ring: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
-  sprite: THREE.Sprite;
   /** Invisible volume so a tap or click can open the station directly. */
   hit: THREE.Mesh;
   badge: number;
 }
 
-/** The room's interactive points: always tappable, wherever the camera is. */
+/**
+ * The room's interactive points: always tappable, wherever the camera is.
+ * No floating label — the legend list and the room's own furniture already
+ * say what's here; the ring just marks the spot and glows when something
+ * needs you.
+ */
 export class Stations {
   private visuals: StationVisual[] = [];
   private clock = 0;
-  private labelScale = 1;
 
   private scene: THREE.Scene;
   private group = new THREE.Group();
@@ -62,8 +34,6 @@ export class Stations {
     for (const v of this.visuals) {
       v.ring.geometry.dispose();
       v.ring.material.dispose();
-      (v.sprite.material.map as THREE.Texture | null)?.dispose();
-      v.sprite.material.dispose();
       v.hit.geometry.dispose();
     }
     this.group.clear();
@@ -83,16 +53,6 @@ export class Stations {
       ring.position.copy(anchor.position).setY(0.02);
       this.group.add(ring);
 
-      const info = STATION_INFO[anchor.id];
-      const sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: labelTexture(info.name, false), transparent: true, depthTest: false }),
-      );
-      sprite.position.copy(anchor.position).setY(1.62);
-      sprite.scale.set(1.5, 0.47, 1);
-      sprite.userData.baseScale = [1.5, 0.47];
-      sprite.renderOrder = 10;
-      this.group.add(sprite);
-
       // Fully transparent rather than `visible: false`, which the raycaster skips.
       const hit = new THREE.Mesh(
         new THREE.CylinderGeometry(0.85, 0.85, 2.4, 12),
@@ -102,19 +62,14 @@ export class Stations {
       hit.userData.stationId = anchor.id;
       this.group.add(hit);
 
-      this.visuals.push({ anchor, ring, sprite, hit, badge: 0 });
+      this.visuals.push({ anchor, ring, hit, badge: 0 });
     }
   }
 
   /** Marks a station as demanding attention (a pending crisis, a due budget). */
   setBadge(id: StationId, count: number): void {
     const v = this.visuals.find((s) => s.anchor.id === id);
-    if (!v || v.badge === count) return;
-    v.badge = count;
-    const info = STATION_INFO[v.anchor.id];
-    v.sprite.material.map?.dispose();
-    v.sprite.material.map = labelTexture(info.name, v.badge > 0);
-    v.sprite.material.needsUpdate = true;
+    if (v) v.badge = count;
   }
 
   /** Idle pulse on the floor rings, so the room does not feel static. */
@@ -126,17 +81,6 @@ export class Stations {
       v.ring.material.opacity = (urgent ? 0.42 : 0.24) + pulse * (urgent ? 0.35 : 0.14);
       v.ring.material.color.setHex(urgent ? 0xe06a4a : 0xe2c16e);
       v.ring.scale.setScalar(1 + pulse * 0.03);
-      v.sprite.position.y = 1.62 + Math.sin(this.clock * 1.4 + v.anchor.position.z) * 0.03;
-    }
-  }
-
-  /** Shrinks the floating labels on small screens. */
-  setLabelScale(factor: number): void {
-    if (this.labelScale === factor) return;
-    this.labelScale = factor;
-    for (const v of this.visuals) {
-      const [x, y] = v.sprite.userData.baseScale as [number, number];
-      v.sprite.scale.set(x * factor, y * factor, 1);
     }
   }
 

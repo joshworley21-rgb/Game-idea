@@ -376,6 +376,9 @@ export class World {
         dress: person.kind === "spouse" ? "smart" : "casual",
       };
     }
+    // The aide is always the same person — not drawn from state, the way the
+    // cabinet or family are, because they're the one constant across a term.
+    if (slot.role === "aide") return { seed: "Arthur Vance", dress: "suit" };
     return { seed: `aide-${slot.index}`, dress: "suit" };
   }
 
@@ -481,8 +484,6 @@ export class World {
     const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
     this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
     this.camera.updateProjectionMatrix();
-    // World-space labels need to shrink on a small screen or they swamp it.
-    this.stations.setLabelScale(w < 620 ? 0.66 : 1);
   };
 
   start(): void {
