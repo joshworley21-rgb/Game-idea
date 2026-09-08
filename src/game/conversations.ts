@@ -495,6 +495,7 @@ function buildLeaderConversation(state: GameState, leader: WorldLeader): Convers
     detail: `${leader.role} — ${leader.agenda}`,
     ap: 1,
     cooldown: 2,
+    group: leader.category,
     intro: `Forty minutes on the secure line with ${leader.name}, ${leader.role}. ${leader.quirks}`,
     startBeat: "open",
     beats: {

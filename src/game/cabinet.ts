@@ -1,6 +1,6 @@
 import { Rng } from "../core/rng.ts";
 import { FACTIONS } from "./congress.ts";
-import { ROSTER } from "./roster.ts";
+import { CABINET_ELIGIBLE_CATEGORIES, ROSTER } from "./roster.ts";
 import type { CrisisTag, FactionKey, GameState, Secretary } from "./types.ts";
 
 /**
@@ -22,17 +22,24 @@ export const OFFICES = [
 ] as const;
 
 /**
- * The pool every secretary's name is drawn from — the same hundred people
- * `roster.ts` describes, in their fixed listed order. Two numbers decide
- * how repeats feel: within one game, six offices plus a handful of
- * resignations draw maybe 10-15 names, so a pool this size never collides —
- * but it's also big enough that two playthroughs don't draw nearly the same
- * roster. For two games each drawing k names from a pool of size N, the
- * expected number of names they share is roughly k²/N. At k≈15, N=100 puts
- * that at just over 2 — a familiar face turning up again now and then, not
- * a rerun of your last administration.
+ * The pool every secretary's name is drawn from — the roster's own Cabinet
+ * and Executive Staff people, not the whole roster. A foreign head of state
+ * or a citizen off the street has no business turning up as Treasury
+ * Secretary on a reshuffle; only people plausibly appointable to a cabinet
+ * office are eligible.
+ *
+ * Two numbers decide how repeats feel: within one game, six offices plus a
+ * handful of resignations draw maybe 10-15 names, so a pool this size only
+ * just clears that — but two playthroughs also shouldn't draw nearly the
+ * same roster. For two games each drawing k names from a pool of size N,
+ * the expected number of names they share is roughly k²/N. At k≈15 against
+ * this pool, a familiar face turning up again now and then is expected;
+ * that's the trade a closed, plausible pool makes against a wider, emptier
+ * one.
  */
-export const NAME_POOL: string[] = ROSTER.map((p) => p.name);
+export const NAME_POOL: string[] = ROSTER.filter((p) =>
+  CABINET_ELIGIBLE_CATEGORIES.includes(p.category),
+).map((p) => p.name);
 
 /**
  * The roster already names a real Chief of Staff and five real Cabinet

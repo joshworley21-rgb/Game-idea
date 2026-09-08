@@ -359,6 +359,8 @@ export interface Conversation {
   intro: string;
   startBeat: string;
   beats: Record<string, ConversationBeat>;
+  /** A subtitle to cluster this under when a station lists many conversations at once. */
+  group?: string;
 }
 
 export interface OfficeAction {

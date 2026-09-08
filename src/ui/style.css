@@ -242,6 +242,11 @@ kbd {
   margin: 22px 0 11px;
 }
 .section-title:first-child { margin-top: 0; }
+.section-subtitle {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+  margin: 14px 0 8px;
+}
+.section-subtitle:first-child { margin-top: 0; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
 

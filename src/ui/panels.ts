@@ -289,45 +289,59 @@ export function stationPanel(
   const conversations = engine.conversationsFor(station);
   if (conversations.length) {
     body.append(el("div", { class: "section-title" }, ["Meetings"]));
-    const grid = el("div", { class: "option-grid" });
+    // A station with a lot of conversations on offer (the Secure Line, with
+    // one call per world leader) clusters them by group — a category from
+    // the roster — so thirty names read as sections, not one long list.
+    // Grouped by key rather than by run, so a category that isn't
+    // contiguous in roster order (three "Multilateral Body" entries spread
+    // across the list) still reads as one section.
+    const buckets = new Map<string, typeof conversations>();
     for (const conv of conversations) {
-      const cooldown = engine.conversationCooldownLeft(conv);
-      const shortAp = s.ap < conv.ap;
-      const shortCapital = (conv.capitalCost ?? 0) > s.politics.capital;
-      const disabled = cooldown > 0 || shortAp || shortCapital;
-      const cost = [
-        `${conv.ap} action${conv.ap > 1 ? "s" : ""}`,
-        conv.capitalCost ? `${conv.capitalCost} capital` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      grid.append(
-        el(
-          "button",
-          {
-            class: "option",
-            disabled,
-            onclick: () => onOpenConversation(conv.id),
-          },
-          [
-            el("div", { class: "option-top" }, [
-              el("span", { class: "option-label" }, [conv.label]),
-              el("span", { class: "option-cost" }, [cost]),
-            ]),
-            el("div", { class: "option-detail" }, [conv.detail]),
-            el("div", { class: "chips" }, [el("span", { class: "chip neutral" }, ["a conversation, not a click"])]),
-            cooldown > 0
-              ? el("div", { class: "reason" }, [`Not again for ${cooldown} month${cooldown > 1 ? "s" : ""}.`])
-              : shortAp
-                ? el("div", { class: "reason" }, ["Not enough action points left this month."])
-                : shortCapital
-                  ? el("div", { class: "reason" }, ["Not enough political capital."])
-                  : null,
-          ],
-        ),
-      );
+      const key = conv.group ?? "";
+      (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(conv);
     }
-    body.append(grid);
+    for (const [group, items] of buckets) {
+      if (group) body.append(el("div", { class: "section-subtitle" }, [group]));
+      const grid = el("div", { class: "option-grid" });
+      for (const conv of items) {
+        const cooldown = engine.conversationCooldownLeft(conv);
+        const shortAp = s.ap < conv.ap;
+        const shortCapital = (conv.capitalCost ?? 0) > s.politics.capital;
+        const disabled = cooldown > 0 || shortAp || shortCapital;
+        const cost = [
+          `${conv.ap} action${conv.ap > 1 ? "s" : ""}`,
+          conv.capitalCost ? `${conv.capitalCost} capital` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        grid.append(
+          el(
+            "button",
+            {
+              class: "option",
+              disabled,
+              onclick: () => onOpenConversation(conv.id),
+            },
+            [
+              el("div", { class: "option-top" }, [
+                el("span", { class: "option-label" }, [conv.label]),
+                el("span", { class: "option-cost" }, [cost]),
+              ]),
+              el("div", { class: "option-detail" }, [conv.detail]),
+              el("div", { class: "chips" }, [el("span", { class: "chip neutral" }, ["a conversation, not a click"])]),
+              cooldown > 0
+                ? el("div", { class: "reason" }, [`Not again for ${cooldown} month${cooldown > 1 ? "s" : ""}.`])
+                : shortAp
+                  ? el("div", { class: "reason" }, ["Not enough action points left this month."])
+                  : shortCapital
+                    ? el("div", { class: "reason" }, ["Not enough political capital."])
+                    : null,
+            ],
+          ),
+        );
+      }
+      body.append(grid);
+    }
   }
 
   const actions = actionsFor(s, station);

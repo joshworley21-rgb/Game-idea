@@ -1,15 +1,17 @@
 import type { Rng } from "../core/rng.ts";
-import { rosterByCategory } from "./roster.ts";
-import type { RosterPerson } from "./roster.ts";
+import { DIPLOMATIC_CATEGORIES, ROSTER } from "./roster.ts";
+import type { RosterCategory, RosterPerson } from "./roster.ts";
 import type { DiplomaticRelation, GameState } from "./types.ts";
 
 /**
- * The world outside the fence, as ten actual people rather than one dial
- * called `nation.standing`. Each is a "Foreign Leader" from the roster, with
- * their own relationship to you — separate from anyone else's — that warms
- * or cools with attention, and that can carry an actual agreement: a trade
- * deal, a defense arrangement, an open back-channel to someone you can't
- * exactly call an ally.
+ * The world outside the fence, as real people rather than one dial called
+ * `nation.standing`. Each is drawn from one of the roster's international
+ * categories (`DIPLOMATIC_CATEGORIES` in `roster.ts`) — a head of state, a
+ * multilateral body, a bloc that won't pick a side — with their own
+ * relationship to you, separate from anyone else's, that warms or cools
+ * with attention, and that can carry an actual agreement: a trade deal, a
+ * defense arrangement, an open back-channel to someone you can't exactly
+ * call an ally.
  */
 
 export type Disposition = "ally" | "rival" | "adversary" | "partner";
@@ -18,7 +20,28 @@ export interface WorldLeader extends RosterPerson {
   disposition: Disposition;
 }
 
+/**
+ * Some categories already say the disposition outright — "Rival
+ * Superpower," "Frontline Ally" — where the role and agenda text alone
+ * wouldn't necessarily mention it. Those win outright; everything else
+ * (including the original "Foreign Leader" bucket, where the category
+ * itself is neutral) still falls back to reading the role and agenda.
+ */
+const CATEGORY_DISPOSITION: Partial<Record<RosterCategory, Disposition>> = {
+  "Rival Superpower": "rival",
+  "Western Ally": "ally",
+  "Allied Trading Partner": "ally",
+  "Regional Ally": "ally",
+  "Frontline Ally": "ally",
+  // Explicitly neutral by definition — playing sides off each other is the
+  // point, so a mention of a rival superpower in their own agenda text
+  // shouldn't read as them being one.
+  "Non-Aligned Bloc": "partner",
+};
+
 function dispositionOf(p: RosterPerson): Disposition {
+  const fromCategory = CATEGORY_DISPOSITION[p.category];
+  if (fromCategory) return fromCategory;
   const text = `${p.role} ${p.agenda}`.toLowerCase();
   if (text.includes("rogue") || text.includes("adversary")) return "adversary";
   if (text.includes("rival")) return "rival";
@@ -34,10 +57,11 @@ const BASE_STANDING: Record<Disposition, number> = {
   adversary: 20,
 };
 
-export const WORLD_LEADERS: WorldLeader[] = rosterByCategory("Foreign Leader").map((p) => ({
-  ...p,
-  disposition: dispositionOf(p),
-}));
+const DIPLOMATIC_SET = new Set(DIPLOMATIC_CATEGORIES);
+
+export const WORLD_LEADERS: WorldLeader[] = ROSTER.filter((p) => DIPLOMATIC_SET.has(p.category)).map(
+  (p) => ({ ...p, disposition: dispositionOf(p) }),
+);
 
 export function worldLeaderById(id: string): WorldLeader | undefined {
   return WORLD_LEADERS.find((l) => String(l.id) === id);

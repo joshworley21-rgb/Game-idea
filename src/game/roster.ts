@@ -24,6 +24,17 @@ export type RosterCategory =
   | "Media"
   | "Civil Society"
   | "Foreign Leader"
+  | "Multilateral Body"
+  | "Western Ally"
+  | "Regional Power"
+  | "Middle Eastern Partner"
+  | "Allied Trading Partner"
+  | "Non-Aligned Bloc"
+  | "Rival Superpower"
+  | "Diplomatic Corps"
+  | "Regional Ally"
+  | "Frontline Ally"
+  | "Strategic Partner"
   | "Citizen";
 
 export interface RosterPerson {
@@ -137,6 +148,26 @@ export const ROSTER: RosterPerson[] = [
   { id: 98, name: "Clarence Boyd", role: "Fixed-Income Senior", category: "Citizen", agenda: "Social security COLA hikes; prescription cost cuts.", quirks: "Cups hand behind ear; repeats questions to ensure accuracy.", cutout: "Yellowed archival paperboard; visible bend across midsection." },
   { id: 99, name: "Rosa Delgado", role: "Port Trucker", category: "Citizen", agenda: "Ending port delays; diesel fuel subsidies.", quirks: "Wears reflective vest; direct, blunt speech with no filter.", cutout: "Heavy corrugated packing board; rough fibrous perimeter." },
   { id: 100, name: "Devon Washington", role: "Veteran & Small Farmer", category: "Citizen", agenda: "Drought relief funds; VA mental health access.", quirks: "Speaks softly but looks directly into eyes; calm demeanor.", cutout: "Earthy Kraft board; light grease/water stain along base." },
+  { id: 101, name: "Secretary-General Amira Zouari", role: "UN Global League Sec-Gen", category: "Multilateral Body", agenda: "Ceasefire enforcement; humanitarian corridor guarantees; protecting international law.", quirks: "Speaks in immaculate unhurried diplomatic English; taps fountain pen three times before ruling out of order.", cutout: "Archival cream museum board; crisp gold-foil seal stamped at base; faint crease at shoulder from travel storage." },
+  { id: 102, name: "Prime Minister Kaspar Lindqvist", role: "Nordic Energy Coalition Leader", category: "Western Ally", agenda: "Critical undersea cable protection; strict carbon cross-border duties; sovereign debt green bonds.", quirks: "Direct low-volume speech; takes brisk walks between sessions; never removes charcoal wool overcoat.", cutout: "Matte arctic-white cardstock; laser-die cut silhouette; tiny tear on bottom stand from tight packing." },
+  { id: 103, name: "President Mateo Cárdenas", role: "Andean Lithium Bloc Chairman", category: "Regional Power", agenda: "State-controlled lithium extraction cartels; renegotiating IMF sovereign loan terms.", quirks: "Smiles disarmingly while delivering hard non-negotiable trade ultimatums; rolls pencil between knuckles.", cutout: "Warm clay-toned craft card; slight water wrinkle near cuff from spilled mineral water." },
+  { id: 104, name: "Foreign Minister Leila Al-Ghamdi", role: "Gulf Energy & AI Envoy", category: "Middle Eastern Partner", agenda: "Sovereign wealth data center investments; guaranteed defense umbrellas; visa reciprocity.", quirks: "Glances toward security detail before answering high-stakes queries; impeccably calm and calculated.", cutout: "Heavy linen-textured card; metallic bronze edge trim; pristine rigid strut backing." },
+  { id: 105, name: "Prime Minister Declan MacIntyre", role: "Celtic Offshore Financial Hub", category: "Allied Trading Partner", agenda: "Protecting low corporate tax status; opposing multinational digital service taxes.", quirks: "Leans forward with affable charm; defuses heated sanctions talks with dry self-deprecating jokes.", cutout: "Standard double-ply card; faint coffee cup ring on lower coat lapel; sharp die-cut profile." },
+  { id: 106, name: "President Batbayar Erdene", role: "Central Asian Buffer State Leader", category: "Non-Aligned Bloc", agenda: "Balancing rival superpowers on border; secure rare-earth rail transport corridors.", quirks: "Listens with intense unblinking stillness; answers only in concise three-sentence statements.", cutout: "Dense industrial greyboard; fibrous coarse edging along shoulders; slight bow in midsection." },
+  { id: 107, name: "Ambassador Jean-Luc Mercier", role: "Chief Trade Negotiator", category: "Multilateral Body", agenda: "Intellectual property harmonisation; agricultural tariff protections for domestic farmers.", quirks: "Adjusts wire-rim tortoise glasses; pulls laminated annex charts from vintage leather portfolio.", cutout: "Semi-gloss presentation stock; visible CMYK color bar left intentionally on bottom tab; rigid cut." },
+  { id: 108, name: "President Kojo Mensah", role: "West African Economic Community Chair", category: "Regional Power", agenda: "Pan-African currency stabilization; ending Western mineral export restrictions.", quirks: "Booming rhythmic baritone; places both palms flat on the negotiating table to signal agreement.", cutout: "Heavy unbleached Kraft board; vibrant printed kente textile collar; scotch tape on rear support strut." },
+  { id: 109, name: "Premier Lin Hai-Rong", role: "Special Economic Envoy", category: "Rival Superpower", agenda: "Securing semiconductor supply chains; undermining maritime navigation sanctions.", quirks: "Maintains a mild polite poker face; relies strictly on pre-cleared red-folder brief cards.", cutout: "Pristine satin-finish poster board; high-density core; precision-cut razor edges with no scuffs." },
+  { id: 110, name: "President Vlatko Danilović", role: "Balkan Corridor Prime Minister", category: "Non-Aligned Bloc", agenda: "Playing Western infrastructure grants against Eastern pipeline loans; visa-free transit.", quirks: "Smokes e-cigarettes nervously in hallways; constantly consults dual flip phones.", cutout: "Cheap recycled news-card; dog-eared right elbow; visible fold crease where figure was stored flat." },
+  { id: 111, name: "High Commissioner Fiona Campbell", role: "Commonwealth Trade Emissary", category: "Diplomatic Corps", agenda: "Free-trade dispute arbitration; fishing zone quotas; climate damage compensation fund.", quirks: "Checks legal treaty text with yellow highlighter; never signs until third draft.", cutout: "Rigid pale-ivory cardstock; brass eyelet punched through header for identification lanyard." },
+  { id: 112, name: "Foreign Minister Santiago Beltrán", role: "Southern Cone Grain Power", category: "Regional Ally", agenda: "Emergency grain export waivers; fertilizer shipment protections; regional currency swaps.", quirks: "Stands hands-in-pockets during formal photos; delivers sharp impromptu press soundbites.", cutout: "Sturdy standard cardstock; slight paper peel along base where wood stand grips." },
+  { id: 113, name: "President Aruna Senanayake", role: "Island Maritime Chokepoint Leader", category: "Non-Aligned Bloc", agenda: "Deep-water port lease auctions; sovereign debt restructuring; naval port access parity.", quirks: "Polite quiet delivery; leverages naval basing rights against both Western and Eastern powers.", cutout: "Smooth bristol board; clean white cut; subtle fingerprint oil mark on lower hem." },
+  { id: 114, name: "Grand Duke Maximilian von Keller", role: "European Microstate Sovereign", category: "Western Ally", agenda: "Private banking privacy protections; diplomatic passport sovereignty; art asset storage.", quirks: "Speaks four languages interchangeably; looks mildly bored by standard protocol.", cutout: "Extra-thick gilded museum board; gold leaf along perimeter; perfectly pristine upright stance." },
+  { id: 115, name: "Ambassador Tariq Al-Jamil", role: "OPEC+ Strategy Spokesman", category: "Special Interest", agenda: "Oil production quotas; coordinating sudden crude price floors; petrochemical transition subsidies.", quirks: "Slow deliberate hand gestures; sips mint tea throughout tense closed-door plenaries.", cutout: "Heavy dark matte board; ultra-clean die-cut outline; minor scuffing on left cuff." },
+  { id: 116, name: "President Danuta Wiśniewska", role: "Eastern Borderland Frontier Leader", category: "Frontline Ally", agenda: "Forward missile battery deployments; permanent treaty bases; emergency grain embargoes.", quirks: "Unsmiling vigilant posture; speaks with rapid unvarnished bluntness; refuses small talk.", cutout: "Coarse military-grade cardstock; faint vertical stress fold across knees; olive backing." },
+  { id: 117, name: "Special Envoy Chenault Beau Vance", role: "Special Presidential Envoy for Hostages", category: "Executive Staff", agenda: "Discreet back-channel prisoner swaps; unfreezing restricted humanitarian funds.", quirks: "Travels under diplomatic cover; speaks in whispered hypotheticals over corridor water coolers.", cutout: "Weathered manila board; corners rounded from pocket travel; small staples visible on lapel." },
+  { id: 118, name: "Prime Minister Sione Tuipulotu", role: "Pacific Island Atoll Alliance Voice", category: "Civil Society", agenda: "Loss and damage climate reparations; sea-level refugee status; tuna territorial waters.", quirks: "Speaks with solemn quiet moral weight; holds a carved wooden ceremonial token during speeches.", cutout: "Eco-kraft pulp board; visible natural plant fibers; hand-trimmed scissor perimeter." },
+  { id: 119, name: "President General Hector Solano", role: "Trans-Isthmus Canal State Strongman", category: "Strategic Partner", agenda: "Canal toll hike sovereignty; military counter-cartel funding; unilateral border closures.", quirks: "Wears dress uniform with aviator glasses indoors; taps cigar cutter against microphone.", cutout: "Glossy coated chipboard; slight separation of laminated print layer at the left boot." },
+  { id: 120, name: "Director General Dr. Miriam Nygård", role: "World Health & Bio-Security Lead", category: "Multilateral Body", agenda: "Vaccine patent sharing mandates; global pathogen early-warning surveillance pacts.", quirks: "Tired eyes behind rimless spectacles; interrupts heads of state with statistical mortality charts.", cutout: "Clinical white cardboard; faint printer alignment target visible on bottom right foot." },
 ];
 
 const BY_NAME = new Map(ROSTER.map((p) => [p.name, p]));
@@ -158,5 +189,42 @@ export const ROSTER_CATEGORIES: RosterCategory[] = [
   "Media",
   "Civil Society",
   "Foreign Leader",
+  "Multilateral Body",
+  "Western Ally",
+  "Regional Power",
+  "Middle Eastern Partner",
+  "Allied Trading Partner",
+  "Non-Aligned Bloc",
+  "Rival Superpower",
+  "Diplomatic Corps",
+  "Regional Ally",
+  "Frontline Ally",
+  "Strategic Partner",
   "Citizen",
 ];
+
+/**
+ * Categories that name a foreign or international actor rather than
+ * someone on the domestic side of the fence — everyone `diplomacy.ts`
+ * treats as a world leader you can reach on the Secure Line. "Foreign
+ * Leader" was the original, single bucket for this; the rest split that
+ * same idea into the specific kind of relationship each one is (an ally,
+ * a rival, a multilateral body, a non-aligned power...).
+ */
+export const DIPLOMATIC_CATEGORIES: RosterCategory[] = [
+  "Foreign Leader",
+  "Multilateral Body",
+  "Western Ally",
+  "Regional Power",
+  "Middle Eastern Partner",
+  "Allied Trading Partner",
+  "Non-Aligned Bloc",
+  "Rival Superpower",
+  "Diplomatic Corps",
+  "Regional Ally",
+  "Frontline Ally",
+  "Strategic Partner",
+];
+
+/** Categories a person could plausibly be appointed to a cabinet office from. */
+export const CABINET_ELIGIBLE_CATEGORIES: RosterCategory[] = ["Cabinet", "Executive Staff"];

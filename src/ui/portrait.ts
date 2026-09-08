@@ -10,19 +10,18 @@ import type { GameState } from "../game/types.ts";
  * close-up.
  *
  * Three tiers, most specific first. Real painted art always wins if it
- * exists: `public/portraits/cast/<name-slug>.{png,jpg,webp}` for one of the
- * 100 people in the roster (`src/game/roster.ts`) by name, or
+ * exists: `public/portraits/cast/<name-slug>.{png,jpg,webp}` for anyone in
+ * the roster (`src/game/roster.ts`) by name, or
  * `public/portraits/<role>.{png,jpg,webp}` for the one fixed unnamed role
- * (the hostile correspondent). Below that, every one of the 100 pool names
- * already has a *generated* portrait — see
- * `scripts/render-cast-portraits.mjs`, which calls `buildPortraitSvg` below
- * once per pool name and rasterises it to `public/portraits/cast/`. That
- * generated art is a shape built from this person's actual traits (face
- * width, eyebrows, facial hair, glasses, hair colour and style), not a
- * painting — deliberately not pretending otherwise — but it is genuinely
- * theirs rather than a stand-in shared across the whole cast. Anyone
- * outside the pool (a one-off seed) falls back to `portraitUri` computing
- * the same shape live, for exactly the same reason.
+ * (the hostile correspondent). Below that, every roster person already has
+ * a *generated* portrait — see `src/tools/render-portraits.ts`, which calls
+ * `buildPortraitSvg` below once per roster person and rasterises it to
+ * `public/portraits/cast/`. That generated art is a shape built from this
+ * person's actual traits (face width, eyebrows, facial hair, glasses, hair
+ * colour and style), not a painting — deliberately not pretending otherwise
+ * — but it is genuinely theirs rather than a stand-in shared across the
+ * whole cast. Anyone outside the roster (a one-off seed) falls back to
+ * `portraitUri` computing the same shape live, for exactly the same reason.
  */
 
 /** Which cabinet office, if any, a fixed speaker label refers to — also the art's filename stem. */
