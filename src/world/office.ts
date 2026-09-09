@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { PALETTE, carpetMat, metal, place, plasterMat, standard, weaveMat, woodMat } from "./materials.ts";
+import { PALETTE, carpetMat, marbleMat, metal, place, plasterMat, standard, weaveMat, woodMat } from "./materials.ts";
 import { fire, mug, sconces } from "./roomkit.ts";
 import type { Door, RoomBuild, RoomId, StationAnchor } from "./roomkit.ts";
 import type { StationId } from "../game/types.ts";
@@ -164,7 +164,7 @@ function buildWindows(root: THREE.Group, sunGroup: THREE.Group): void {
 }
 
 function buildDoors(root: THREE.Group): void {
-  const wood = standard(PALETTE.walnut, 0.7);
+  const wood = woodMat(PALETTE.walnut, { repeat: 1, planks: 2 });
   const trim = standard(PALETTE.trim, 0.8);
   const spots: [number, number, number][] = [
     [-ROOM.rx + 0.1, 1.9, Math.PI / 2],
@@ -281,10 +281,12 @@ function buildFlags(root: THREE.Group): void {
     g.position.set(x, 0, z);
     place(g, new THREE.CylinderGeometry(0.035, 0.045, 3.0, 10), metal(PALETTE.brass, 0.5), 0, 1.5, 0);
     place(g, new THREE.SphereGeometry(0.09, 12, 12), metal(PALETTE.brass, 0.3), 0, 3.06, 0);
+    const clothMat = weaveMat(color, 1.6);
+    clothMat.side = THREE.DoubleSide;
     const cloth = place(
       g,
       new THREE.CylinderGeometry(0.1, 0.26, 1.5, 10, 1, true, 0, Math.PI * 1.5),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.9, side: THREE.DoubleSide }),
+      clothMat,
       0.1,
       2.1,
       0.06,
@@ -297,7 +299,9 @@ function buildFlags(root: THREE.Group): void {
 function buildFireplace(root: THREE.Group): { object: THREE.Object3D; update: (dt: number, t: number) => void } {
   const g = new THREE.Group();
   g.position.set(0.2, 0, ROOM.rz - 0.28);
-  const marble = standard(PALETTE.marble, 0.5);
+  // Real veined marble — the cabinet and study fireplaces already carry this;
+  // the Oval's was still the flat placeholder colour.
+  const marble = marbleMat(PALETTE.marble, 1.4);
   place(g, new THREE.BoxGeometry(2.0, 0.14, 0.42), marble, 0, 1.24, 0);
   for (const sx of [-0.85, 0.85]) place(g, new THREE.BoxGeometry(0.3, 1.2, 0.34), marble, sx, 0.6, 0);
   place(g, new THREE.BoxGeometry(2.0, 0.22, 0.34), marble, 0, 1.09, 0);
@@ -362,6 +366,8 @@ const OVAL_DOORS: { to: RoomId; label: string; t: number }[] = [
 
 function buildRoomDoors(root: THREE.Group): Door[] {
   const doors: Door[] = [];
+  const leafWood = woodMat(PALETTE.mahogany, { repeat: 1, planks: 2 });
+  const panelWood = woodMat(0x4a2f1c, { repeat: 1, planks: 1 });
   for (const spec of OVAL_DOORS) {
     const x = ROOM.rx * Math.cos(spec.t);
     const z = ROOM.rz * Math.sin(spec.t);
@@ -376,9 +382,9 @@ function buildRoomDoors(root: THREE.Group): Door[] {
     leaf.lookAt(x + inward.x, 0, z + inward.z);
     root.add(leaf);
     place(leaf, new THREE.BoxGeometry(1.24, 2.5, 0.1), standard(PALETTE.trim, 0.75), 0, 1.25, 0.02);
-    place(leaf, new THREE.BoxGeometry(1.04, 2.35, 0.06), standard(PALETTE.mahogany, 0.6), 0, 1.175, 0.08);
+    place(leaf, new THREE.BoxGeometry(1.04, 2.35, 0.06), leafWood, 0, 1.175, 0.08);
     for (const dy of [0.72, 1.62]) {
-      place(leaf, new THREE.BoxGeometry(0.78, 0.66, 0.02), standard(0x4a2f1c, 0.7), 0, dy, 0.12);
+      place(leaf, new THREE.BoxGeometry(0.78, 0.66, 0.02), panelWood, 0, dy, 0.12);
     }
     place(
       leaf,
