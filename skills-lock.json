@@ -37,6 +37,12 @@
       "skillPath": "tools/image/flux-image/SKILL.md",
       "computedHash": "844dd4bd2320b7944f69aaf0bbf10104f510a0c85c5b1876c0770952e1c0e6b8"
     },
+    "game-assets-enhancement": {
+      "source": "adamlyttleapps/claude-skill-game-assets-enhancer",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "8914541fbc7aa9658b40405bac3f8bbdd3d2b9d6e0ee69d950cc0cb153945ab1"
+    },
     "google-veo": {
       "source": "inference-sh/skills",
       "sourceType": "github",
