@@ -19,8 +19,6 @@ import type { RoomId } from "./roomkit.ts";
  *   - `enterRoom` is wrapped to apply the room's grade on entry.
  *   - `resize` is wrapped to keep PostFX sized.
  *   - `dropComposer` is wrapped to dispose PostFX.
- *   - `start`'s render call is redirected through PostFX.render so the grain
- *     animation advances.
  */
 
 const ROOM_GRADES: Record<RoomId, typeof OVAL_GRADE> = {
@@ -37,23 +35,13 @@ interface WorldInternals {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
-  composer: EffectComposerLike | null;
+  composer: { render: () => void; setSize: (w: number, h: number) => void; dispose: () => void } | null;
   gtao: unknown;
   bloom: unknown;
-  frameCost: number;
-  frameSamples: number;
   current: { id: RoomId };
-  horizontalFov: number;
   resize: () => void;
   enterRoom: (id: RoomId, arrivingFrom?: RoomId) => void;
   dropComposer: () => void;
-  measure: (ms: number) => void;
-}
-
-interface EffectComposerLike {
-  render: () => void;
-  setSize: (w: number, h: number) => void;
-  dispose: () => void;
 }
 
 // A per-instance handle to the PostFX, stored on a WeakMap so we never leak.
@@ -66,20 +54,13 @@ export function installRendererUpgrade(): void {
   if (patched) return;
   patched = true;
 
-  // We need the World class. It's imported lazily to avoid a circular import
-  // (scene.ts imports from roomkit.ts, which we don't touch, but scene.ts is
-  // the thing we're patching).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   void import("./scene.ts").then(({ World }) => {
     const proto = World.prototype as unknown as WorldInternals & {
       buildComposer: () => void;
-      start: () => void;
     };
 
     // --- Replace buildComposer with the PostFX chain.
-    const originalBuildComposer = proto.buildComposer;
     proto.buildComposer = function (this: WorldInternals) {
-      // Skip if already built or if the plain flag is set (checked by caller).
       if (this.composer) return;
 
       const w = window.innerWidth;
@@ -87,14 +68,16 @@ export function installRendererUpgrade(): void {
       const postfx = new PostFX(this.renderer, this.scene, this.camera, w, h);
       postfxByWorld.set(this, postfx);
 
-      // The World's render loop calls this.composer.render(). We redirect
-      // through PostFX.render so the grain animation advances each frame.
-      const originalRender = postfx.composer.render.bind(postfx.composer);
-      postfx.composer.render = () => {
-        postfx.render();
+      // The World's render loop calls this.composer.render(). We hand it a
+      // wrapper whose render() advances the PostFX grain and renders the
+      // chain — no circular reference, because the wrapper calls postfx.render()
+      // which internally calls the real composer.render().
+      const realComposer = postfx.composer;
+      this.composer = {
+        render: () => postfx.render(),
+        setSize: (ww: number, hh: number) => realComposer.setSize(ww, hh),
+        dispose: () => realComposer.dispose(),
       };
-
-      this.composer = postfx.composer as unknown as EffectComposerLike;
       this.gtao = null;
       this.bloom = null;
 
@@ -127,16 +110,6 @@ export function installRendererUpgrade(): void {
         postfxByWorld.delete(this);
       }
       originalDrop.call(this);
-    };
-
-    // --- Wrap start so the render path goes through PostFX.
-    const originalStart = proto.start;
-    proto.start = function (this: WorldInternals & { clock: THREE.Clock; player: unknown; sound: unknown; stations: unknown; doors: unknown; animator: unknown; camera: THREE.Camera }) {
-      // The original start() sets up its own requestAnimationFrame loop that
-      // calls this.composer.render() or this.renderer.render(). Since we've
-      // redirected composer.render through PostFX.render, the original loop
-      // already does the right thing. So we just call the original.
-      originalStart.call(this);
     };
   });
 }
