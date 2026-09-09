@@ -20,7 +20,11 @@ const MODEL_URL = "models/cutout_stand.obj";
 const MTL_URL = "models/cutout_stand.mtl";
 
 const MATERIALS: Record<string, () => THREE.MeshStandardMaterial> = {
-  CharacterPortrait: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 }),
+  // alphaTest cuts the flat board down to the person's die-cut silhouette
+  // (the portrait PNGs carry a transparent background) without the sorting
+  // headaches transparent blending would bring to a scene full of other
+  // standees and furniture.
+  CharacterPortrait: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, alphaTest: 0.5 }),
   CardboardRim: () => new THREE.MeshStandardMaterial({ color: 0xc2a97a, roughness: 0.92 }),
   StandWood: () => new THREE.MeshStandardMaterial({ color: 0xbf9e6e, roughness: 0.8 }),
 };
@@ -60,7 +64,10 @@ const textureCache = new Map<string, THREE.Texture>();
 function portraitTexture(name: string): THREE.Texture {
   const cached = textureCache.get(name);
   if (cached) return cached;
-  const tex = textureLoader.load(`portraits/cast/${slug(name)}.png`);
+  // The full-body cutout photo, not the small headshot `ui/portrait.ts` uses
+  // elsewhere — this is what actually fills the standee's board (see the
+  // OBJ comment above: the UVs map the whole 0.5x1.6m front face to it).
+  const tex = textureLoader.load(`portraits/cutouts/${slug(name)}.png`);
   tex.colorSpace = THREE.SRGBColorSpace;
   textureCache.set(name, tex);
   return tex;
