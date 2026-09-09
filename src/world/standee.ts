@@ -9,8 +9,8 @@ import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
  * same "cache the source, clone per placement" shape `assetLoader.ts` uses
  * for furniture.
  *
- * The template's three named materials (`CharacterPortrait`, `CardboardRim`,
- * `StandWood`) come back from MTLLoader as MeshPhongMaterial, which would
+ * The template's four named materials (`CharacterPortrait`, `CardboardRim`,
+ * `StandWood`, `KraftCardboard`) come back from MTLLoader as MeshPhongMaterial, which would
  * read flat next to the rest of the scene's MeshStandardMaterial — so only
  * the material *names* survive from the load; the actual materials used for
  * rendering are built fresh here, PBR to match everything else.
@@ -26,9 +26,12 @@ const MATERIALS: Record<string, () => THREE.MeshStandardMaterial> = {
   // standees and furniture.
   CharacterPortrait: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, alphaTest: 0.5 }),
   CardboardRim: () => new THREE.MeshStandardMaterial({ color: 0xc2a97a, roughness: 0.92 }),
-  // Pale unfinished pine, not the darker cardboard tan — the base and rear
-  // strut read as an actual A-frame photo stand rather than more packaging.
+  // Pale unfinished pine — the tripod legs read as an actual wooden foot
+  // rather than more packaging.
   StandWood: () => new THREE.MeshStandardMaterial({ color: 0xe8d3a3, roughness: 0.65 }),
+  // The rear kickstand strut is unbleached kraft cardboard, not wood — a
+  // separate, slightly rougher, more saturated tan from the tripod.
+  KraftCardboard: () => new THREE.MeshStandardMaterial({ color: 0xc7a06c, roughness: 0.95 }),
 };
 
 let basePromise: Promise<THREE.Object3D> | null = null;
