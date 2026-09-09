@@ -84,16 +84,18 @@ export function buildCabinetRoom(): RoomBuild {
   group.add(head);
   place(head, new THREE.BoxGeometry(0.52, 0.9, 0.08), standard(0x3a2a1e, 0.6), 0, 1.02, -0.22);
 
-  // Six secretaries, standing behind their chairs as real cardboard-cutout
+  // Six secretaries, sitting at their chairs as real cardboard-cutout
   // standees — their actual portrait on a board, not a sculpted body —
-  // spread down the table rather than bunched at one end.
+  // spread down the table rather than bunched at one end. Just in front of
+  // the chair's own seat, on the table side, so the chair back sits behind
+  // them like a real occupied seat instead of blocking the view of them.
   const order = [3, 9, 1, 11, 5, 13];
   order.forEach((seatIndex, i) => {
     const s = seats[seatIndex];
     cast.push({
       role: "cabinet",
       index: i,
-      position: new THREE.Vector3(s.x, 0, s.z + (s.ry === 0 ? -0.28 : 0.28)),
+      position: new THREE.Vector3(s.x, 0, s.z + (s.ry === 0 ? 0.28 : -0.28)),
       rotationY: s.ry,
       pose: "stand",
       standee: true,
