@@ -3,14 +3,11 @@ import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 
 /**
- * Real cardboard-cutout standees: a flat board — textured with a person's
- * actual portrait on the front face — sitting on a flat rounded-rectangle
- * kraft-cardboard base plate plus a triangular rear easel-back kickstand,
- * the classic shape a retail cutout uses. Board, base plate and kickstand
- * are all one self-authored `cutout_stand.{obj,mtl}` model: simple flat
- * cardboard geometry in the same low-poly, flat-material style as the rest
- * of the game's furniture, rather than a photoreal scan that would clash
- * with it. Loads once and gets cloned per person, the same
+ * Real cardboard-cutout standees: just the flat board — textured with a
+ * person's actual portrait on the front face — no base or stand under it.
+ * A self-authored `cutout_stand.{obj,mtl}` model: simple flat cardboard
+ * geometry in the same low-poly, flat-material style as the rest of the
+ * game's furniture. Loads once and gets cloned per person, the same
  * "cache the source, clone per placement" shape `assetLoader.ts` uses for
  * furniture.
  *
@@ -31,7 +28,6 @@ const MATERIALS: Record<string, () => THREE.MeshStandardMaterial> = {
   // standees and furniture.
   CharacterPortrait: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, alphaTest: 0.5 }),
   CardboardRim: () => new THREE.MeshStandardMaterial({ color: 0xc2a97a, roughness: 0.92 }),
-  KraftCardboard: () => new THREE.MeshStandardMaterial({ color: 0xc9a877, roughness: 0.92 }),
 };
 
 let basePromise: Promise<THREE.Object3D> | null = null;
@@ -78,7 +74,7 @@ function portraitTexture(name: string): THREE.Texture {
   return tex;
 }
 
-/** Rebuilds a material by name for the OBJ's three known materials. */
+/** Rebuilds a material by name for the OBJ's two known materials. */
 function rebuildMaterial(source: THREE.Material | undefined, name: string): THREE.Material {
   const build = source?.name ? MATERIALS[source.name] : undefined;
   if (!build) return source ?? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
