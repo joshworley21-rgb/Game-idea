@@ -306,7 +306,11 @@ function buildFireplace(root: THREE.Group): { object: THREE.Object3D; update: (d
   for (const sx of [-0.85, 0.85]) place(g, new THREE.BoxGeometry(0.3, 1.2, 0.34), marble, sx, 0.6, 0);
   place(g, new THREE.BoxGeometry(2.0, 0.22, 0.34), marble, 0, 1.09, 0);
   place(g, new THREE.BoxGeometry(1.4, 1.0, 0.16), standard(0x22201d, 0.95), 0, 0.5, -0.05);
-  const lit = fire(g, 0, 0.16, 0.02, 1.15);
+  // In front of the firebox's near face (z -0.13): the logs and flames were
+  // sitting behind it, so the opaque box hid the fire completely. Scaled to
+  // the same fire-height-to-opening-height ratio as the study and cabinet
+  // fireplaces (~1.5x) — the Oval's opening is the tallest of the three.
+  const lit = fire(g, 0, 0.16, -0.15, 1.5);
 
   // The portrait above the mantel is a model; see props.ts.
   root.add(g);
