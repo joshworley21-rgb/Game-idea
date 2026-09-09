@@ -15,9 +15,10 @@ import type { RoomId } from "./roomkit.ts";
  *
  * The patch is deliberately surgical:
  *   - `buildComposer` is replaced to construct the PostFX chain instead of
- *     the inline one.
+ *     the inline one, and to override the instance's `resize` so PostFX
+ *     stays sized (the original `resize` is an arrow-function property, so
+ *     it cannot be patched on the prototype).
  *   - `enterRoom` is wrapped to apply the room's grade on entry.
- *   - `resize` is wrapped to keep PostFX sized.
  *   - `dropComposer` is wrapped to dispose PostFX.
  */
 
@@ -83,6 +84,17 @@ export function installRendererUpgrade(): void {
 
       // Apply the current room's grade.
       postfx.setGrade(ROOM_GRADES[this.current.id]);
+
+      // The original `resize` is an arrow-function instance property, so it
+      // cannot be patched on the prototype. Override it here — buildComposer
+      // runs before the constructor calls this.resize() and registers the
+      // window listener, so both pick up the overridden version.
+      const world = this as unknown as { resize: () => void };
+      const originalResize = world.resize;
+      world.resize = () => {
+        originalResize();
+        postfx.setSize(window.innerWidth, window.innerHeight);
+      };
     };
 
     // --- Wrap enterRoom to apply the room's grade.
@@ -91,14 +103,6 @@ export function installRendererUpgrade(): void {
       originalEnterRoom.call(this, id, arrivingFrom);
       const postfx = postfxByWorld.get(this);
       if (postfx) postfx.setGrade(ROOM_GRADES[id]);
-    };
-
-    // --- Wrap resize to keep PostFX sized.
-    const originalResize = proto.resize;
-    proto.resize = function (this: WorldInternals) {
-      originalResize.call(this);
-      const postfx = postfxByWorld.get(this);
-      if (postfx) postfx.setSize(window.innerWidth, window.innerHeight);
     };
 
     // --- Wrap dropComposer to dispose PostFX.
