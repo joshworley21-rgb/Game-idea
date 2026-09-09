@@ -1,4 +1,10 @@
 /** Tiny DOM helpers so the panel code stays readable. */
+
+// The renderer upgrade auto-installs on import. Importing it here (early in
+// the module graph, since main.ts imports dom.ts first) ensures every World
+// instance gets the cinematic post chain before the first frame renders.
+import "../world/renderUpgrade.ts";
+
 type Attrs = Record<string, string | number | boolean | ((e: Event) => void)>;
 
 export function el<K extends keyof HTMLElementTagNameMap>(
