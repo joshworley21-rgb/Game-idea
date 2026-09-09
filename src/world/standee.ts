@@ -26,7 +26,9 @@ const MATERIALS: Record<string, () => THREE.MeshStandardMaterial> = {
   // standees and furniture.
   CharacterPortrait: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, alphaTest: 0.5 }),
   CardboardRim: () => new THREE.MeshStandardMaterial({ color: 0xc2a97a, roughness: 0.92 }),
-  StandWood: () => new THREE.MeshStandardMaterial({ color: 0xbf9e6e, roughness: 0.8 }),
+  // Pale unfinished pine, not the darker cardboard tan — the base and rear
+  // strut read as an actual A-frame photo stand rather than more packaging.
+  StandWood: () => new THREE.MeshStandardMaterial({ color: 0xe8d3a3, roughness: 0.65 }),
 };
 
 let basePromise: Promise<THREE.Object3D> | null = null;
