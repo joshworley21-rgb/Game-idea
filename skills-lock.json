@@ -1,11 +1,23 @@
 {
   "version": 1,
   "skills": {
+    "accessibility": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/design-ux/skills/accessibility/SKILL.md",
+      "computedHash": "fea5c969f456c35b1d84afc2dae595eb73946b5bcb9457312c463080d9d8efaa"
+    },
     "agent-device": {
       "source": "callstack/agent-device",
       "sourceType": "github",
       "skillPath": "skills/agent-device/SKILL.md",
       "computedHash": "0a673fe5ec24469f6ad35596cdf40f9d33076b78d0a929742d9e1de83f97d231"
+    },
+    "android-development": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/mobile-dev/skills/android-development/SKILL.md",
+      "computedHash": "119325b0416a64c1b42fa38dfaca4abcb1d59a2da404bb5665843c8e21b77aee"
     },
     "android-emulator": {
       "source": "callstack/agent-device",
@@ -19,11 +31,89 @@
       "skillPath": ".github/skills/testing_and_automation/android-emulator-skill/SKILL.md",
       "computedHash": "b553aee78c03df76cc50af99775a4c9981dbafe2bf52a4c3b7b5f9169e4185a9"
     },
+    "animation": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/animation/SKILL.md",
+      "computedHash": "38857f23fa2c219741cf4afcb181d678d2cf5a3754fe714ec88e26c934b1bff3"
+    },
+    "api-design": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/fullstack-dev/skills/api-design/SKILL.md",
+      "computedHash": "63da9fc1dc7f0085a6d6927439ced6d2abd54b5aba268f70e42085256343dca1"
+    },
+    "api-documentation": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/documentation/skills/api-documentation/SKILL.md",
+      "computedHash": "26046e50655124d0149008d58e556154998af3bbc67270abfe54ce806c2c25c8"
+    },
+    "asset-optimization": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/asset-optimization/SKILL.md",
+      "computedHash": "f4d303e6f2773463d7ee9826c56602711172ecd45b7c9a14da8c8b593049c4fd"
+    },
+    "blender": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/blender/SKILL.md",
+      "computedHash": "676d2db94e06ea998f28dbfca97256197d33f64fdd1b180d8bf8bf02e9631a32"
+    },
+    "ci-cd-pipelines": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/devops-cloud/skills/ci-cd-pipelines/SKILL.md",
+      "computedHash": "c9685dc01fbc398128e30d663c6e22d4fa47b382821dc5bf83deb7450c73a2da"
+    },
+    "cloud-platforms": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/devops-cloud/skills/cloud-platforms/SKILL.md",
+      "computedHash": "7268110a7168ba777ea353dc26efec3177f5e3c56036a214a7f5cac088c10410"
+    },
+    "compliance-frameworks": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/security/skills/compliance-frameworks/SKILL.md",
+      "computedHash": "1760a22697c4eea3c2aa2c847de3c2b7838128eafcd4718521d545c0d9c3406b"
+    },
+    "content-strategy": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/marketing-seo/skills/content-strategy/SKILL.md",
+      "computedHash": "dbb877603ec83a58e67ed9581f15b959df78ec7a0545ab761607ec43fa79744b"
+    },
     "create-toolset": {
       "source": "EpicGames/unreal-engine-skills-for-claude-code-plugin",
       "sourceType": "github",
       "skillPath": "skills/create-toolset/SKILL.md",
       "computedHash": "7c555bbd24d81ac588c61ef4988cd0127f27cc9cbaf3a8f25024e58675281e6e"
+    },
+    "cross-platform": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/mobile-dev/skills/cross-platform/SKILL.md",
+      "computedHash": "7192ced7ca097c536f1e4e1b2610e885491c5a24e3f235dd3eee30e44ea39de1"
+    },
+    "data-engineering": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/data-science/skills/data-engineering/SKILL.md",
+      "computedHash": "f776d75cb57438c8203c17aecf5d59161e0a22a192547ab023482888234d641f"
+    },
+    "design-systems": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/design-ux/skills/design-systems/SKILL.md",
+      "computedHash": "b22c0ee53cc84a7b8f5c6f0946eca130ace4cdb7f238f83f9bc59e73fd2a415e"
+    },
+    "documentation-tools": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/documentation/skills/documentation-tools/SKILL.md",
+      "computedHash": "e22297a5eaefa87a3abea0ebb7a49ed3ef707f0fbeb5a6a9159e362d1ba8baf6"
     },
     "dogfood": {
       "source": "callstack/agent-device",
@@ -31,11 +121,23 @@
       "skillPath": "skills/dogfood/SKILL.md",
       "computedHash": "8e6dfbff0633e355210ce7ae109cb39a3e1347946b6e92aaa607271154526b6b"
     },
+    "engine-patterns": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/engine-patterns/SKILL.md",
+      "computedHash": "a87cfb9a6fa910ab73537dad644f175d070af2528eea736aa2e48193ecf6c02a"
+    },
     "flux-image": {
       "source": "inference-sh/skills",
       "sourceType": "github",
       "skillPath": "tools/image/flux-image/SKILL.md",
       "computedHash": "844dd4bd2320b7944f69aaf0bbf10104f510a0c85c5b1876c0770952e1c0e6b8"
+    },
+    "fullstack-conventions": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/fullstack-dev/skills/fullstack-conventions/SKILL.md",
+      "computedHash": "880ff7f364055b017e01d08ebdb62e112f7d63663bbf60845a721d7b62433772"
     },
     "game-assets-enhancement": {
       "source": "adamlyttleapps/claude-skill-game-assets-enhancer",
@@ -43,11 +145,35 @@
       "skillPath": "SKILL.md",
       "computedHash": "8914541fbc7aa9658b40405bac3f8bbdd3d2b9d6e0ee69d950cc0cb153945ab1"
     },
+    "gamedev-conventions": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/gamedev-conventions/SKILL.md",
+      "computedHash": "b4012e01d5823f830bb231dcb7e26c4da60c442bb6a0b24b1263e85ab8a8b801"
+    },
+    "godot": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/godot/SKILL.md",
+      "computedHash": "04550de33c2dc720c4538a8666206d9b0b66fb53474d383da314f83bbddeef86"
+    },
     "google-veo": {
       "source": "inference-sh/skills",
       "sourceType": "github",
       "skillPath": "tools/video/google-veo/SKILL.md",
       "computedHash": "f407ca9539c34c382f72a5e37f13ed664645d0c2ada11c5d0dca6237022d75a7"
+    },
+    "infrastructure-as-code": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/devops-cloud/skills/infrastructure-as-code/SKILL.md",
+      "computedHash": "c6684ecb085fbe45e4bd49e7d43170acfa22282280b5f1a830b93134577607fb"
+    },
+    "ios-development": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/mobile-dev/skills/ios-development/SKILL.md",
+      "computedHash": "1e9a8687e8e0a4b15c3f753ea0e0905d4962e4311e4e65655d4097e412a57196"
     },
     "ios-simulator": {
       "source": "callstack/agent-device",
@@ -61,6 +187,144 @@
       "skillPath": "tools/llm/llm-models/SKILL.md",
       "computedHash": "a4fd7bba32dc3b229a9e7859b1b1129da93ac26f3fcb5a7d1b98741b51d1a34f"
     },
+    "marketing-conventions": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/marketing-seo/skills/marketing-conventions/SKILL.md",
+      "computedHash": "8ebfbe7f11867351e8b4b5a9df287da518db4ebdc92dc4a6ec7d8d8e9013c6b7"
+    },
+    "ml-best-practices": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/data-science/skills/ml-best-practices/SKILL.md",
+      "computedHash": "d7c26dea750f88502eb45bc1159942319f7966f62235016698d2afb36d40f153"
+    },
+    "mlops-pipelines": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/data-science/skills/mlops-pipelines/SKILL.md",
+      "computedHash": "61f8dfdc8f0f2907604030479f3f1264c5ab2397bc86aa333b25144d8812dec3"
+    },
+    "mobile-testing": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/mobile-dev/skills/mobile-testing/SKILL.md",
+      "computedHash": "19ce4f01c828b5a4ec459a53315c8a50cc4ef1b8dc4896635e8bbdc96494987e"
+    },
+    "modeling": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/modeling/SKILL.md",
+      "computedHash": "91be2b29780ddc641dc4c35b1137992614093d127fcba815813e98f6c13d3fb8"
+    },
+    "monitoring-observability": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/devops-cloud/skills/monitoring-observability/SKILL.md",
+      "computedHash": "ddab8d28525632b5f7fd39687218fc4fdf369c4e4793679ad3ca7d73c6aa4d69"
+    },
+    "omniverse": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/omniverse/SKILL.md",
+      "computedHash": "3f0da8e9f319db7b4810162e4e20465d4837c2d56231f49b8a7e6439d94240b0"
+    },
+    "orleans": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/orleans/SKILL.md",
+      "computedHash": "3a7df32c4e3a27842dcedd7c69f559777e4af1736a75474ccc9633a5972c7f5b"
+    },
+    "performance-testing": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/qa-testing/skills/performance-testing/SKILL.md",
+      "computedHash": "f04a4cb7350564a9d2448ed56431d8ba7aa0b9cfb06d6099f228ee023f8b4829"
+    },
+    "quality-metrics": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/qa-testing/skills/quality-metrics/SKILL.md",
+      "computedHash": "e62dcc1500a583571a76d0cfb9394aef626d48a41e5bc5c0b7b7e6e6322f7fa5"
+    },
+    "rigging": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/rigging/SKILL.md",
+      "computedHash": "90b7e76389ca06e428fe1af92a53479b0eea1a8cb2b13c248df00608a90c5aaa"
+    },
+    "secure-coding": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/security/skills/secure-coding/SKILL.md",
+      "computedHash": "cfa21c4e0ec72e7e7288451b5af46f7f362ed58f4f78f3e051e3e583f018fe29"
+    },
+    "seo-best-practices": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/marketing-seo/skills/seo-best-practices/SKILL.md",
+      "computedHash": "055c2d8f4a92234b1cdab96c02057cddc015352f081715f3d71ae6a2198323c3"
+    },
+    "social-platforms": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/marketing-seo/skills/social-platforms/SKILL.md",
+      "computedHash": "d7cc7f22637287ced850479d45a2f5f9c6df4a1f415007246d144b96a030d6e2"
+    },
+    "statistical-analysis": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/data-science/skills/statistical-analysis/SKILL.md",
+      "computedHash": "1614577eaeff7816517407c190dffcf8a4992d9859f5b4331c76787e8fdf72f3"
+    },
+    "technical-writing": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/documentation/skills/technical-writing/SKILL.md",
+      "computedHash": "aa555dbfe6aaf05f7b898a2c5af11621e440cecb22e49a8317fa747ba0ce1615"
+    },
+    "test-automation": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/qa-testing/skills/test-automation/SKILL.md",
+      "computedHash": "4a7acbd2434dea57a63b6d801a0433bd00f8139170476ccf1f22188c21e7a794"
+    },
+    "test-frameworks": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/qa-testing/skills/test-frameworks/SKILL.md",
+      "computedHash": "57b571747af494cc1379eb4f3ef43db6e71a98b44893e3b66a0eb840467ff74d"
+    },
+    "texturing": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/texturing/SKILL.md",
+      "computedHash": "affcb9561fabc4814b1c71f7a828ce54a320cd5e802125f37f6becbea4121e3f"
+    },
+    "threat-modeling": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/security/skills/threat-modeling/SKILL.md",
+      "computedHash": "e63426307ff2483a8b21b7abde425ddb65ba2830ec1c70168f73e47dc2b66d14"
+    },
+    "threejs": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/threejs/SKILL.md",
+      "computedHash": "17ab7249d7f83fa39c8dd341a5206cbeddfca9b6ded6da34ed1ceb77c50b1de7"
+    },
+    "unity": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/unity/SKILL.md",
+      "computedHash": "9140c392bcd9356de0438b5bd39745319a4e2f4fb8f69412c6a6ce2b5dc4123c"
+    },
+    "unreal": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/game-dev/skills/unreal/SKILL.md",
+      "computedHash": "1ebfb1f08d03b470a9f79b86eb72f7b137b083dcf1aaba79aa3f99ff1d735f2a"
+    },
     "unreal-mcp": {
       "source": "EpicGames/unreal-engine-skills-for-claude-code-plugin",
       "sourceType": "github",
@@ -73,11 +337,35 @@
       "skillPath": "skills/unreal-skill/SKILL.md",
       "computedHash": "bf49d05392fee755e0c94772ddf508cb56178d3672367054ccd7213ebb2736e2"
     },
+    "user-research": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/design-ux/skills/user-research/SKILL.md",
+      "computedHash": "03c56f5f0230a43d0d7bad75c0ba384f93b4c0b7d6b6e1b140ba0a5157de8b15"
+    },
+    "vroid": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/3d-design/skills/vroid/SKILL.md",
+      "computedHash": "b55bde9146b32875b93cea84053ea3eb04fe74749a956c6ee7e7b9b260764fa7"
+    },
+    "vulnerability-scanning": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/security/skills/vulnerability-scanning/SKILL.md",
+      "computedHash": "1620be9c195874c583ad09d9a7a26e6d6b54d072b20d198a5d23777df5245d98"
+    },
     "web-search": {
       "source": "inference-sh/skills",
       "sourceType": "github",
       "skillPath": "tools/llm/web-search/SKILL.md",
       "computedHash": "3eef0d8ed249bc1ac663edc3d3b3b821b4eb35cae5b53cd943747f0d8dd9550b"
+    },
+    "wireframing-prototyping": {
+      "source": "MonumentalSystems/Atlas-Agent-Teams",
+      "sourceType": "github",
+      "skillPath": "teams/design-ux/skills/wireframing-prototyping/SKILL.md",
+      "computedHash": "b42e0a22a3c0569de7d3d9f3bb645c0163297a9b2a6e7e0dd8fd3c2a028d1b33"
     }
   }
 }
