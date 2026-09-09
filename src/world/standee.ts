@@ -3,14 +3,16 @@ import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 
 /**
- * Real cardboard-cutout standees: a flat board on a triangular stand,
- * textured with a person's actual portrait on the front face. Loaded once
- * from `public/models/cutout_stand.{obj,mtl}` and cloned per person, the
- * same "cache the source, clone per placement" shape `assetLoader.ts` uses
- * for furniture.
+ * Real cardboard-cutout standees: a flat board on a flat cardboard easel-back
+ * stand — a rounded-rectangle base plate plus a triangular rear kickstand,
+ * the classic shape a real retail cutout uses — textured with a person's
+ * actual portrait on the front face. Loaded once from
+ * `public/models/cutout_stand.{obj,mtl}` and cloned per person, the same
+ * "cache the source, clone per placement" shape `assetLoader.ts` uses for
+ * furniture.
  *
- * The template's four named materials (`CharacterPortrait`, `CardboardRim`,
- * `StandWood`, `KraftCardboard`) come back from MTLLoader as MeshPhongMaterial, which would
+ * The template's three named materials (`CharacterPortrait`, `CardboardRim`,
+ * `KraftCardboard`) come back from MTLLoader as MeshPhongMaterial, which would
  * read flat next to the rest of the scene's MeshStandardMaterial — so only
  * the material *names* survive from the load; the actual materials used for
  * rendering are built fresh here, PBR to match everything else.
@@ -26,11 +28,8 @@ const MATERIALS: Record<string, () => THREE.MeshStandardMaterial> = {
   // standees and furniture.
   CharacterPortrait: () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, alphaTest: 0.5 }),
   CardboardRim: () => new THREE.MeshStandardMaterial({ color: 0xc2a97a, roughness: 0.92 }),
-  // Pale unfinished pine — the tripod legs read as an actual wooden foot
-  // rather than more packaging.
-  StandWood: () => new THREE.MeshStandardMaterial({ color: 0xe8d3a3, roughness: 0.65 }),
-  // The rear kickstand strut is unbleached kraft cardboard, not wood — a
-  // separate, slightly rougher, more saturated tan from the tripod.
+  // The base plate and rear kickstand: raw unbleached kraft cardboard, a
+  // touch more saturated than the board's own cardboard rim.
   KraftCardboard: () => new THREE.MeshStandardMaterial({ color: 0xc7a06c, roughness: 0.95 }),
 };
 

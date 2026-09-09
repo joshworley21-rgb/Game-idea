@@ -14,12 +14,6 @@ Kd 0.76 0.63 0.48
 Ks 0.05 0.05 0.05
 Ns 5
 
-newmtl StandWood
-Ka 0.95 0.87 0.68
-Kd 0.91 0.83 0.64
-Ks 0.1 0.1 0.1
-Ns 8
-
 newmtl KraftCardboard
 Ka 0.82 0.66 0.44
 Kd 0.78 0.63 0.42
