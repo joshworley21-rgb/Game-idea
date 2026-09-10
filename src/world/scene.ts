@@ -190,7 +190,7 @@ export class World {
   }
 
   /**
-   * Loads the full Oval Office GLB from the release URL, replaces the
+   * Loads the bundled Oval Office GLB from the release URL, replaces the
    * procedural Oval, and switches to orbit controls.
    */
   private async loadOvalOffice(url: string): Promise<void> {
