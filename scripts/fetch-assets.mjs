@@ -6,6 +6,10 @@
  * loads at runtime. Only the optimised .glb files are committed; assets-src/
  * is a cache you can delete freely.
  *
+ * Also pulls the full Oval Office model from its GitHub Release asset into
+ * public/models/ so it ships inside the APK instead of being fetched over the
+ * network at runtime. That keeps the app standalone and offline-capable.
+ *
  * Add an entry to MODELS and re-run `npm run assets` to pull another prop.
  */
 import { mkdir, writeFile, readdir, rm } from "node:fs/promises";
@@ -35,6 +39,16 @@ const MODELS = [
   { id: "potted_plant_01", texture: 256, error: 0.02 },
 ];
 
+/**
+ * The full Oval Office model, hosted as a GitHub Release asset. Fetched once
+ * into public/models/ so Vite bundles it into dist/ and Capacitor packs it
+ * into the APK — the game then loads it from the app package, no network.
+ */
+const OVAL_OFFICE = {
+  url: "https://github.com/joshworley21-rgb/Game-idea/releases/download/v0.1-assets/OvalOffice.glb",
+  file: "OvalOffice.glb",
+};
+
 const RESOLUTION = "1k";
 const SRC = "assets-src";
 const OUT = "public/models";
@@ -57,6 +71,25 @@ async function download(url, dest) {
 }
 
 await mkdir(OUT, { recursive: true });
+
+// The Oval Office first: it is the one asset the game cannot run without.
+{
+  const dest = path.join(OUT, OVAL_OFFICE.file);
+  process.stdout.write(`${OVAL_OFFICE.file.padEnd(30)}`);
+  try {
+    const bytes = await download(OVAL_OFFICE.url, dest);
+    if (bytes === 0) {
+      const { size } = await import("node:fs").then((fs) => fs.promises.stat(dest));
+      console.log(`cached (${(size / 1e6).toFixed(2)} MB)`);
+    } else {
+      console.log(`downloaded ${(bytes / 1e6).toFixed(2)} MB`);
+    }
+  } catch (err) {
+    console.log(`FAILED: ${err.message}`);
+    console.log("  The game will fall back to the procedural Oval Office room.");
+  }
+}
+
 const credits = [];
 let rawTotal = 0;
 let outTotal = 0;
@@ -109,6 +142,9 @@ await writeFile(
     "Every model here comes from [Poly Haven](https://polyhaven.com), released under",
     "[CC0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no",
     "attribution required. Credited anyway, because the people who made them deserve it.",
+    "",
+    "`OvalOffice.glb` is the full Oval Office model, pulled from the project's GitHub",
+    "Release assets by `npm run assets`.",
     "",
     "Rebuild or extend the set with `npm run assets`.",
     "",
