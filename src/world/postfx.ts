@@ -248,7 +248,7 @@ export class PostFX {
     this.composer = composer;
   }
 
-    /** Sets the colour grade for the current room. */
+  /** Sets the colour grade for the current room. */
   setGrade(grade: Grade): void {
     const u = this.gradePass.uniforms;
     u.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
@@ -276,5 +276,3 @@ export class PostFX {
     this.composer.dispose();
   }
 }
-  }
-
