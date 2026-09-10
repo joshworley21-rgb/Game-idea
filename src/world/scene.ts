@@ -6,6 +6,8 @@ import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildOffice } from "./office.ts";
 import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
@@ -46,6 +48,47 @@ const AO_SCALE = 0.5;
 
 /** The five factions, left to right across the chamber. */
 const FACTION_COLOURS = [0x5b7fb4, 0x6a8cbd, 0x87858c, 0xa8836d, 0xb26f68];
+
+/**
+ * The full Oval Office model, hosted as a GitHub Release asset.
+ * The procedural room remains the fallback if this download fails.
+ */
+const MODEL_URL =
+  "https://github.com/joshworley21-rgb/Game-idea/releases/download/v0.1-assets/OvalOffice.glb";
+
+/** Textures that are data maps, not colour maps, and must stay linear. */
+const DATA_TEXTURE_KEYS = new Set([
+  "normalMap",
+  "roughnessMap",
+  "metalnessMap",
+  "aoMap",
+  "displacementMap",
+  "bumpMap",
+  "alphaMap",
+  "clearcoatMap",
+  "clearcoatRoughnessMap",
+  "clearcoatNormalMap",
+  "sheenRoughnessMap",
+  "thicknessMap",
+  "transmissionMap",
+  "specularIntensityMap",
+  "iridescenceMap",
+  "iridescenceThicknessMap",
+]);
+
+/** Sets colour-space textures to sRGB while leaving data maps linear. */
+function applySRGB(mesh: THREE.Mesh): void {
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  for (const material of materials) {
+    if (!material) continue;
+    for (const [key, value] of Object.entries(material)) {
+      if (value instanceof THREE.Texture && !DATA_TEXTURE_KEYS.has(key)) {
+        value.colorSpace = THREE.SRGBColorSpace;
+        value.needsUpdate = true;
+      }
+    }
+  }
+}
 
 const ROOM_PRESENTATION: Record<RoomId, {
   horizontalFov: number;
@@ -90,6 +133,8 @@ export class World {
   private frameCost = 0;
   private frameSamples = 0;
   private horizontalFov = ROOM_PRESENTATION.oval.horizontalFov;
+  /** Orbit controls for the loaded Oval Office viewer path. */
+  private orbit: OrbitControls | null = null;
   readonly sound = new Sound();
   /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
   readonly touch: boolean;
@@ -104,15 +149,8 @@ export class World {
 
   constructor(canvas: HTMLCanvasElement) {
     this.touch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-    // The game only ships as an Android app now, on hardware at or above a
-    // Galaxy S22+: no browser fallback to keep light for, so the renderer
-    // asks for the full picture and leans on the frame-time watchdog below
-    // (see `measure`) rather than a device guess to catch anything that
-    // actually can't keep up.
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      // The composer's SMAA pass handles anti-aliasing; MSAA on top of that
-      // would just double the cost for no visible gain.
       antialias: false,
       powerPreference: "high-performance",
     });
@@ -131,9 +169,6 @@ export class World {
     this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.42);
     this.scene.add(this.hemisphere);
 
-    // The furniture models are physically based, and PBR materials go flat and
-    // dark without something to reflect. A generated room environment gives
-    // them that, and it costs one texture rather than a light rig.
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
     this.scene.environmentIntensity = 0.62;
@@ -147,34 +182,80 @@ export class World {
     this.player.onTap = ({ x, y }) => {
       const station = this.pickStation(x, y);
       if (station) this.onStationTap(station);
-      // A door has no hitbox of its own: standing at one and tapping
-      // anywhere is enough, the same way "E" is on a keyboard.
       else if (this.doors.nearest) this.onDoorTap();
       else this.player.lock();
     };
 
     this.enterRoom("oval");
-    // `?plain` turns the extra passes off, for local debugging.
     const plain = new URLSearchParams(location.search).has("plain");
     if (!plain) this.buildComposer();
     this.resize();
     window.addEventListener("resize", this.resize);
+
+    void this.loadOvalOffice(MODEL_URL);
   }
 
   /**
-   * Ambient occlusion is what stops furniture looking like it is hovering: the
-   * darkening where a chair leg meets the floor is doing more for the picture
-   * than another thousand polygons would. Every device gets the full chain;
-   * `measure` below is what actually catches hardware that cannot afford it.
+   * Loads the full Oval Office GLB from the release URL, replaces the
+   * procedural Oval, and switches to orbit controls.
    */
+  private async loadOvalOffice(url: string): Promise<void> {
+    const loader = new GLTFLoader();
+
+    loader.load(
+      url,
+      (gltf) => {
+        const model = gltf.scene;
+
+        model.traverse((obj) => {
+          if ((obj as THREE.Mesh).isMesh) {
+            const mesh = obj as THREE.Mesh;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            applySRGB(mesh);
+          }
+        });
+
+        if (this.current.id === "oval") this.current.group.visible = false;
+        this.scene.add(model);
+
+        this.camera.position.set(0, 1.6, 0);
+        this.camera.lookAt(0, 1.6, -3);
+
+        this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+        this.orbit.target.set(0, 1.6, -3);
+        this.orbit.enableDamping = true;
+        this.orbit.dampingFactor = 0.08;
+        this.orbit.update();
+
+        this.player.enabled = false;
+
+        console.log(`Oval Office model loaded (${model.children.length} root nodes)`);
+      },
+      (progress) => {
+        const loadedMB = progress.loaded / 1048576;
+        if (progress.total > 0) {
+          const totalMB = progress.total / 1048576;
+          const pct = (progress.loaded / progress.total) * 100;
+          console.log(
+            `Oval Office loading… ${pct.toFixed(1)}% (${loadedMB.toFixed(1)} MB / ${totalMB.toFixed(1)} MB)`,
+          );
+        } else {
+          console.log(`Oval Office loading… ${loadedMB.toFixed(1)} MB`);
+        }
+      },
+      (error) => {
+        console.error("Oval Office model failed to load — keeping the procedural room", error);
+      },
+    );
+  }
+
   private buildComposer(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const composer = new EffectComposer(this.renderer);
     composer.addPass(new RenderPass(this.scene, this.camera));
 
-    // Half resolution: occlusion is low-frequency, and the denoise pass is
-    // what actually sells it, so the extra pixels buy nothing.
     const gtao = new GTAOPass(this.scene, this.camera, w * AO_SCALE, h * AO_SCALE);
     gtao.output = GTAOPass.OUTPUT.Default;
     gtao.updateGtaoMaterial({
@@ -190,10 +271,6 @@ export class World {
     composer.addPass(gtao);
     this.gtao = gtao;
 
-    // A light bloom, so the windows, the fire and the chandeliers actually
-    // glow instead of just being a bright flat patch. Threshold is high and
-    // strength is low: this should only catch real highlights, not wash out
-    // the room.
     const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.4, 0.86);
     composer.addPass(bloom);
     this.bloom = bloom;
@@ -213,7 +290,6 @@ export class World {
     return ROOM_INFO[this.current.id].name;
   }
 
-  /** Builds a room the first time the president walks into it. */
   private roomOf(id: RoomId): RoomBuild {
     let room = this.rooms.get(id);
     if (!room) {
@@ -236,10 +312,6 @@ export class World {
     return room;
   }
 
-  /**
-   * Moves the president into a room: swaps the geometry, puts them at the door
-   * they came through, and rebuilds the markers and the people inside.
-   */
   enterRoom(id: RoomId, arrivingFrom?: RoomId): void {
     const room = this.roomOf(id);
     if (this.current) this.current.group.visible = false;
@@ -253,11 +325,9 @@ export class World {
       this.scene.fog.far = presentation.fogFar;
     }
 
-    // Arrive at the door you would have come through, if there is one.
     const back = arrivingFrom ? room.doors.find((d) => d.to === arrivingFrom) : undefined;
     const spawn = back ? back.position.clone() : room.spawn.clone();
     const look = back ? room.spawnLook.clone() : room.spawnLook.clone();
-    // Step away from the door rather than standing in it.
     if (back) {
       const inward = spawn.clone().sub(back.facing).setY(0).normalize().multiplyScalar(1.1);
       spawn.add(inward);
@@ -277,7 +347,6 @@ export class World {
     this.onRoomChange(id, ROOM_INFO[id].name);
   }
 
-  /** The room a station lives in, for the number-key shortcuts. */
   goToStation(station: StationId): void {
     const target = STATION_ROOM[station];
     if (target !== this.current.id) this.enterRoom(target);
@@ -286,11 +355,6 @@ export class World {
 
   // ------------------------------------------------------------------ people
 
-  /**
-   * Fills the current room with whoever belongs in it. Rebuilt whenever the
-   * cast could have changed — a secretary resigns, a child's mood moves — and
-   * skipped when nothing has.
-   */
   syncPeople(state: GameState | null): void {
     this.state = state;
     const key = this.castFingerprint(state);
@@ -301,7 +365,6 @@ export class World {
     this.animator.clear();
     if (!this.current.cast.length) return;
 
-    // Anonymous crowds are instanced; named people are built properly.
     const crowd: CrowdMember[] = [];
     for (const slot of this.current.cast) {
       if (slot.role === "member" || slot.role === "press") {
@@ -336,7 +399,6 @@ export class World {
     }
   }
 
-  /** Who a slot refers to in the current game state. */
   private namedFor(
     slot: CastSlot,
     state: GameState | null,
@@ -357,7 +419,6 @@ export class World {
     return { seed: `aide-${slot.index}`, dress: "suit" };
   }
 
-  /** Changes worth rebuilding the cast for. */
   private castFingerprint(state: GameState | null): string {
     if (!state) return `${this.current.id}:empty`;
     const cabinet = state.cabinet?.map((c) => c.name).join(",") ?? "";
@@ -367,7 +428,6 @@ export class World {
 
   // ------------------------------------------------------------------ setup
 
-  /** Fetches the furniture models, adds them, and makes them solid. */
   async loadAssets(onProgress?: (progress: LoadProgress) => void): Promise<number> {
     const propGroups = new Map<RoomId, THREE.Object3D>();
     const footprints = new Map<RoomId, Footprint[]>();
@@ -388,10 +448,6 @@ export class World {
     return count;
   }
 
-  /**
-   * Starts audio. Must be called from a user gesture: browsers refuse to open
-   * an AudioContext any other way.
-   */
   startAudio(): void {
     this.sound.start(this.listener);
     const room = this.current;
@@ -400,7 +456,6 @@ export class World {
     }
   }
 
-  /** Repaints the light for the month, 1-48. */
   setMonth(month: number): void {
     this.month = month;
     const season = SEASONS[Math.floor(((month - 1) % 12) / 3) % 4];
@@ -418,7 +473,6 @@ export class World {
     }
   }
 
-  /** The station under a screen point, for tap and click to open. */
   pickStation(clientX: number, clientY: number): StationId | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
@@ -434,12 +488,10 @@ export class World {
     if (target) this.player.lookAt(target);
   }
 
-  /** The door the player is standing at, if any. */
   get nearestDoor(): Door | null {
     return this.doors.nearest;
   }
 
-  /** Walks through the door the player is standing at. */
   useDoor(): boolean {
     const door = this.doors.nearest;
     if (!door) return false;
@@ -456,13 +508,10 @@ export class World {
     this.gtao?.setSize(w * AO_SCALE, h * AO_SCALE);
     this.bloom?.setSize(w, h);
     this.camera.aspect = w / h;
-    // three's fov is vertical, so a portrait phone would crush the horizontal
-    // view to a slot. Hold the horizontal field steady and derive the vertical.
     const targetHorizontal = (this.horizontalFov * Math.PI) / 180;
     const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
     this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
     this.camera.updateProjectionMatrix();
-    // World-space labels need to shrink on a small screen or they swamp it.
     this.stations.setLabelScale(w < 620 ? 0.66 : 1);
   };
 
@@ -470,9 +519,15 @@ export class World {
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, this.clock.getDelta());
-      this.player.update(dt);
-      this.sound.update(this.camera.position.distanceTo(this.lastPosition));
-      this.lastPosition.copy(this.camera.position);
+
+      if (this.orbit) {
+        this.orbit.update();
+      } else {
+        this.player.update(dt);
+        this.sound.update(this.camera.position.distanceTo(this.lastPosition));
+        this.lastPosition.copy(this.camera.position);
+      }
+
       const before = this.stations.nearest;
       const nearest = this.stations.update(dt, this.camera.position);
       if (nearest !== before) this.onNearestChange(nearest);
@@ -489,19 +544,10 @@ export class World {
     loop();
   }
 
-  /**
-   * Watches what the extra passes actually cost on this machine. Software
-   * renderers and weak integrated GPUs cannot afford ambient occlusion, and a
-   * beautiful eight-frames-a-second is worse than a plain thirty, so if the
-   * first second of rendering is slow the composer is dropped for good.
-   */
   private measure(ms: number): void {
     if (!this.composer) return;
-    // Skip the first few frames: shader compilation lands in those.
     this.frameSamples += 1;
     if (this.frameSamples < 8) return;
-    // A single catastrophic frame is enough: a software renderer does not need
-    // twenty more samples to prove it cannot afford this.
     if (ms > 120) {
       this.dropComposer();
       return;
@@ -511,12 +557,10 @@ export class World {
     if (this.frameSamples === 32 && this.frameCost / 24 > 22) this.dropComposer();
   }
 
-  /** Whether the extra passes are still running on this machine. */
   get composerActive(): boolean {
     return this.composer !== null;
   }
 
-  /** Falls back to rendering straight to the canvas, for good. */
   private dropComposer(): void {
     this.composer?.dispose();
     this.composer = null;
