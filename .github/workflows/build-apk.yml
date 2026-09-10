@@ -8,6 +8,7 @@ on:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +28,7 @@ jobs:
         run: npm ci
 
       - name: Fetch assets
+        timeout-minutes: 5
         run: npm run assets
 
       - name: Verify the Oval Office model is bundled
