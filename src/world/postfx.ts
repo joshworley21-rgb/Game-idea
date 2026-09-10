@@ -206,7 +206,6 @@ const GradeShader = {
 export class PostFX {
   readonly composer: EffectComposer;
   private gradePass: ShaderPass;
-  private grade: Grade = NEUTRAL_GRADE;
   private clock = new THREE.Clock();
 
   constructor(
@@ -249,9 +248,8 @@ export class PostFX {
     this.composer = composer;
   }
 
-  /** Sets the colour grade for the current room. */
+    /** Sets the colour grade for the current room. */
   setGrade(grade: Grade): void {
-    this.grade = grade;
     const u = this.gradePass.uniforms;
     u.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
     u.uGamma.value.set(grade.gamma[0], grade.gamma[1], grade.gamma[2]);
@@ -278,3 +276,5 @@ export class PostFX {
     this.composer.dispose();
   }
 }
+  }
+
