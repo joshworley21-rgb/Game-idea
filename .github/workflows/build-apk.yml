@@ -1,0 +1,3 @@
+npm run assets        # must print: OvalOffice.glb  downloaded 6.68 MB
+npm run typecheck     # isolate any TS error before the full build
+npm run android:apk   # build + cap sync + gradle assembleDebug
