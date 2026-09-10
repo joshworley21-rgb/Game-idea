@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { MODEL_URL } from "./modelUrl.ts";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -48,13 +49,6 @@ const AO_SCALE = 0.5;
 
 /** The five factions, left to right across the chamber. */
 const FACTION_COLOURS = [0x5b7fb4, 0x6a8cbd, 0x87858c, 0xa8836d, 0xb26f68];
-
-/**
- * The full Oval Office model, hosted as a GitHub Release asset.
- * The procedural room remains the fallback if this download fails.
- */
-const MODEL_URL =
-  "https://github.com/joshworley21-rgb/Game-idea/releases/download/v0.1-assets/OvalOffice.glb";
 
 /** Textures that are data maps, not colour maps, and must stay linear. */
 const DATA_TEXTURE_KEYS = new Set([
