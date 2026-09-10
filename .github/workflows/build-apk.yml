@@ -1,3 +1,57 @@
-npm run assets        # must print: OvalOffice.glb  downloaded 6.68 MB
-npm run typecheck     # isolate any TS error before the full build
-npm run android:apk   # build + cap sync + gradle assembleDebug
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch assets
+        run: npm run assets
+
+      - name: Verify the Oval Office model is bundled
+        run: |
+          test -f public/models/OvalOffice.glb || {
+            echo "::error::public/models/OvalOffice.glb is missing"
+            exit 1
+          }
+          ls -lh public/models/OvalOffice.glb
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
