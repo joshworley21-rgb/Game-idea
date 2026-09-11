@@ -1,8 +1,9 @@
 name: Process model
 
-# One-off. Downloads the embedded-textures source model from the v0.1-assets
-# release, compresses it with gltfpack, and uploads the result back to the
-# same release under the name `npm run assets` expects.
+# One-off. Downloads the 388 MB embedded-textures FBX from the v0.1-assets
+# release, converts it to glTF with FBX2glTF, compresses it with gltfpack,
+# and uploads the result back to the same release as OvalOffice.glb — the
+# name `npm run assets` hardcodes.
 #
 # Run it from the Actions tab: Actions -> Process model -> Run workflow.
 #
@@ -13,19 +14,14 @@ on:
   workflow_dispatch:
     inputs:
       source_asset:
-        description: "Source asset filename on the v0.1-assets release."
+        description: "Source FBX filename on the v0.1-assets release."
         required: false
-        default: "ImageToStl.com_OvalOffice_EmbededTextures.glb"
+        default: "OvalOffice_EmbededTextures.FBX"
         type: string
       output_asset:
         description: "Name to publish the result under. fetch-assets.mjs hardcodes OvalOffice.glb."
         required: false
         default: "OvalOffice.glb"
-        type: string
-      texture_quality:
-        description: "gltfpack -tc quality, 1-10. Lower is smaller."
-        required: false
-        default: "8"
         type: string
       simplify_ratio:
         description: "gltfpack -si ratio, 0-1. 1 disables simplification."
@@ -43,7 +39,9 @@ concurrency:
 jobs:
   process:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The source alone is 388 MB, and the intermediate uncompressed GLB will
+    # be larger still. Conversion and packing are both single-threaded.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -51,64 +49,85 @@ jobs:
         with:
           node-version: 22
 
-      - name: Download the source model
+      - name: Download the source FBX
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_ASSET: ${{ inputs.source_asset }}
         run: |
           set -euo pipefail
-          url="https://github.com/joshworley21-rgb/Game-idea/releases/download/v0.1-assets/${SOURCE_ASSET}"
-          echo "Downloading $url"
-          curl -fL --retry 3 --retry-delay 5 -o raw_model.glb "$url"
+          gh release download v0.1-assets \
+            --pattern "$SOURCE_ASSET" \
+            --output raw.fbx \
+            --clobber
 
-          test -s raw_model.glb || {
-            echo "::error::raw_model.glb is empty — the download was truncated."
+          test -s raw.fbx || {
+            echo "::error::raw.fbx is empty — the download was truncated."
             exit 1
           }
-          ls -lh raw_model.glb
+          ls -lh raw.fbx
 
-      # gltfpack ships as a prebuilt binary per platform. The npm package
-      # `gltfpack` is a thin wrapper that fetches the same binary, but it has
-      # no arm64 Linux build and its postinstall is unreliable on runners, so
-      # the release tarball is the dependable path.
+      - name: Install FBX2glTF
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 5 -o fbx2gltf.zip \
+            "https://github.com/godotengine/FBX2glTF/releases/latest/download/FBX2glTF-linux-x86_64.zip"
+          unzip -o fbx2gltf.zip
+          chmod +x FBX2glTF-linux-x86_64
+          ./FBX2glTF-linux-x86_64 --version 2>&1 | head -3 || true
+
       - name: Install gltfpack
         run: |
           set -euo pipefail
-          curl -fL --retry 3 -o gltfpack.tar.gz \
+          curl -fL --retry 3 -o gltfpack.zip \
             "https://github.com/zeux/meshoptimizer/releases/download/v0.22/gltfpack-linux.zip"
-          unzip -o gltfpack.tar.gz
+          unzip -o gltfpack.zip
           chmod +x gltfpack
           ./gltfpack -h 2>&1 | head -5 || true
-          echo "$PWD" >> "$GITHUB_PATH"
+
+      - name: Convert FBX to GLB
+        run: |
+          set -euo pipefail
+          ./FBX2glTF-linux-x86_64 \
+            --binary \
+            --input raw.fbx \
+            --output uncompressed.glb
+
+          test -s uncompressed.glb || {
+            echo "::error::FBX2glTF produced no output."
+            exit 1
+          }
+          ls -lh uncompressed.glb
 
       - name: Compress and optimise
+        id: pack
         env:
-          TEXTURE_QUALITY: ${{ inputs.texture_quality }}
           SIMPLIFY_RATIO: ${{ inputs.simplify_ratio }}
         run: |
           set -euo pipefail
 
-          # -tc  compress textures (WebP/ktx2 depending on build)
-          # -si  simplify to a ratio of the original triangle count
+          # -tc  compress textures
           # -cc  quantize attributes; three.js reads KHR_mesh_quantization
           #      natively, so no decoder ships with the game
-          gltfpack \
-            -i raw_model.glb \
+          # -si  simplify to a ratio of the original triangle count
+          ./gltfpack \
+            -i uncompressed.glb \
             -o OvalOffice.glb \
             -tc \
-            -si "$SIMPLIFY_RATIO" \
-            -cc
+            -cc \
+            -si "$SIMPLIFY_RATIO"
 
           test -s OvalOffice.glb || {
             echo "::error::gltfpack produced no output."
             exit 1
           }
 
-          raw=$(stat -c%s raw_model.glb)
+          raw=$(stat -c%s raw.fbx)
+          mid=$(stat -c%s uncompressed.glb)
           out=$(stat -c%s OvalOffice.glb)
-          echo "raw:    $((raw / 1000000)) MB"
-          echo "output: $((out / 1000000)) MB"
+          echo "fbx:        $((raw / 1000000)) MB"
+          echo "glb:        $((mid / 1000000)) MB"
+          echo "optimised:  $((out / 1000000)) MB"
           echo "size_mb=$((out / 1000000))" >> "$GITHUB_OUTPUT"
-        id: pack
 
       - name: Verify the result loads
         run: |
