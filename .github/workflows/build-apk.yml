@@ -50,17 +50,33 @@ jobs:
           restore-keys: |
             polyhaven-${{ runner.os }}-
 
+      # FORCE_ASSETS re-downloads OvalOffice.glb even though a copy is
+      # committed to the repo. Without it the committed file wins and a
+      # rebuilt APK ships the old model. The Poly Haven props are unaffected:
+      # they are cached in assets-src, which this does not touch.
       - name: Fetch assets
         timeout-minutes: 5
+        env:
+          FORCE_ASSETS: "1"
         run: npm run assets
 
+      # The model is tens of MB. A size floor catches the case where the
+      # download failed and the procedural fallback was bundled instead —
+      # a non-empty check passes on a placeholder.
       - name: Verify the Oval Office model is bundled
         run: |
-          test -s public/models/OvalOffice.glb || {
-            echo "::error::public/models/OvalOffice.glb is missing or empty"
+          set -euo pipefail
+          f=public/models/OvalOffice.glb
+          test -s "$f" || {
+            echo "::error::$f is missing or empty"
             exit 1
           }
-          ls -lh public/models/OvalOffice.glb
+          size=$(stat -c%s "$f")
+          echo "OvalOffice.glb: $((size / 1000000)) MB"
+          if [ "$size" -lt 1000000 ]; then
+            echo "::error::$f is only $((size / 1000)) KB — that is the procedural fallback, not the real model."
+            exit 1
+          fi
 
       - name: Typecheck
         run: npm run typecheck
