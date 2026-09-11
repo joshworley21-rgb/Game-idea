@@ -3,10 +3,10 @@ name: Process model
 on:
   workflow_dispatch:
     inputs:
-      simplify_ratio:
-        description: "gltfpack -si ratio, 0-1. 1 disables simplification."
+      simplify_error:
+        description: "gltf-transform simplify error (meters)"
         required: false
-        default: "0.5"
+        default: "0.003"
         type: string
   push:
     paths:
@@ -30,13 +30,13 @@ jobs:
         with:
           node-version: 22
 
-      - name: Download source FBX
+      - name: Download FBX
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           gh release download v0.1-assets --pattern "OvalOffice_EmbededTextures.FBX" --output raw.fbx --clobber
-          test -s raw.fbx || { echo "::error::raw.fbx is empty"; exit 1; }
+          test -s raw.fbx || { echo "::error::raw.fbx empty"; exit 1; }
           ls -lh raw.fbx
 
       - name: Install FBX2glTF
@@ -48,59 +48,35 @@ jobs:
           chmod +x "$bin"
           echo "FBX2GLTF=$PWD/$bin" >> "$GITHUB_ENV"
 
-      - name: Install gltfpack
-        run: |
-          set -euo pipefail
-          curl -fL --retry 3 --retry-delay 5 -o gltfpack.zip "https://github.com/zeux/meshoptimizer/releases/download/v1.2/gltfpack-ubuntu.zip"
-          unzip -o gltfpack.zip
-          bin=$(find . -maxdepth 3 -type f -name 'gltfpack' | head -1)
-          chmod +x "$bin"
-          echo "GLTFPACK=$PWD/$bin" >> "$GITHUB_ENV"
-
-      - name: Convert FBX to GLB
+      - name: Convert to GLB
         run: |
           set -euo pipefail
           "$FBX2GLTF" --binary --input raw.fbx --output uncompressed.glb
-          test -s uncompressed.glb || { echo "::error::no output from FBX2glTF"; exit 1; }
+          test -s uncompressed.glb || { echo "::error::no glb"; exit 1; }
           ls -lh uncompressed.glb
 
-      # Simplify only: deliberately no -tc. -tc writes KTX2/Basis textures
-      # (KHR_texture_basisu), which three.js cannot decode without a
-      # KTX2Loader the game does not register — so the model failed to load
-      # and the game silently fell back to the procedural room. Textures are
-      # converted to WebP in the next step instead.
-      - name: Simplify geometry
+      - name: Optimise (quantize + webp + simplify)
         run: |
           set -euo pipefail
-          ratio="${{ inputs.simplify_ratio || '0.5' }}"
-          "$GLTFPACK" -i uncompressed.glb -o simplified.glb -si "$ratio"
-          test -s simplified.glb || { echo "::error::no output from gltfpack"; exit 1; }
-
-      - name: Compress textures to WebP
-        run: |
-          set -euo pipefail
-          npx --yes @gltf-transform/cli@4.5.0 optimize simplified.glb OvalOffice.glb --texture-compress webp --texture-size 1024
-          test -s OvalOffice.glb || { echo "::error::no output from gltf-transform"; exit 1; }
+          npx --yes @gltf-transform/cli@4.5.0 optimize uncompressed.glb OvalOffice.glb --compress quantize --texture-compress webp --texture-size 1024 --simplify true --simplify-error "${{ inputs.simplify_error || '0.003' }}"
+          test -s OvalOffice.glb || { echo "::error::no output"; exit 1; }
           ls -lh OvalOffice.glb
 
-      - name: Verify no decoder is required
+      - name: Verify no decoder needed
         run: |
           set -euo pipefail
-          npm install --no-save @gltf-transform/core @gltf-transform/extensions
+          npm install --no-save @gltf-transform/core @gltf-transform/extensions meshoptimizer
           node --input-type=module -e '
           import { NodeIO } from "@gltf-transform/core";
           import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
-          const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+          import { MeshoptDecoder } from "meshoptimizer";
+          const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ "meshopt.decoder": MeshoptDecoder });
           const doc = await io.read("OvalOffice.glb");
           const root = doc.getRoot();
           const ext = root.listExtensionsUsed().map((e) => e.extensionName);
           console.log(`extensions: ${ext.join(", ") || "none"}`);
-          const blocking = ["EXT_meshopt_compression", "KHR_draco_mesh_compression", "KHR_texture_basisu"];
-          const bad = ext.filter((n) => blocking.includes(n));
-          if (bad.length) {
-            console.error(`::error::uses ${bad.join(", ")} — needs a decoder the game does not register.`);
-            process.exit(1);
-          }
+          const bad = ext.filter((n) => ["EXT_meshopt_compression","KHR_draco_mesh_compression","KHR_texture_basisu"].includes(n));
+          if (bad.length) { console.error(`::error::uses ${bad.join(", ")} — needs a decoder`); process.exit(1); }
           if (root.listMeshes().length === 0) { console.error("::error::no meshes"); process.exit(1); }
           console.log(`meshes: ${root.listMeshes().length}`);
           '
