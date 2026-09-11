@@ -100,11 +100,9 @@ const ROOM_PRESENTATION: Record<RoomId, {
 
 /**
  * The loaded Oval Office GLB contains the full White House exterior plus the
- * interior room. The model is not authored around the procedural room's origin,
- * so the old fixed spawn (0, 1.6, 0) landed on the South Lawn. These helpers
- * walk the model hierarchy at load time and choose the node whose bounds are
- * the Oval Office interior, then aim the camera at the Resolute Desk if the
- * desk is a named node in the same hierarchy.
+ * interior room. These helpers walk the model hierarchy at load time, locate
+ * the desk and the chair behind it, then seat the camera at eye height on the
+ * room side of the desk, looking out across the room.
  */
 type NamedBox = {
   node: THREE.Object3D;
@@ -156,9 +154,22 @@ function deskScore(candidate: NamedBox): number {
   const volume = size.x * size.y * size.z;
 
   let score = 0;
-  if (/resolute/.test(name)) score += 10;
+  if (/resolute/.test(name)) score += 12;
   if (/desk/.test(name)) score += 10;
   if (volume >= 0.2 && volume <= 30) score += 20;
+  return score;
+}
+
+function chairScore(candidate: NamedBox): number {
+  const name = candidate.name.toLowerCase();
+  if (!/chair|seat|stool/.test(name)) return Number.NEGATIVE_INFINITY;
+  const size = candidate.box.getSize(BOX_SIZE);
+  const volume = size.x * size.y * size.z;
+
+  let score = 0;
+  if (/chair/.test(name)) score += 12;
+  if (/seat|stool/.test(name)) score += 8;
+  if (volume >= 0.05 && volume <= 8) score += 20;
   return score;
 }
 
@@ -197,38 +208,116 @@ function pickDeskCandidate(candidates: NamedBox[]): NamedBox | null {
   return best && bestScore >= 0 ? best : null;
 }
 
-function findOvalOfficeView(model: THREE.Object3D): {
+/** Chooses the chair closest to the desk, rather than a couch across the room. */
+function pickChairNear(desk: NamedBox, candidates: NamedBox[]): NamedBox | null {
+  const deskCenter = desk.box.getCenter(new THREE.Vector3());
+  let best: NamedBox | null = null;
+  let bestDistance = Infinity;
+  for (const candidate of candidates) {
+    if (chairScore(candidate) < 0) continue;
+    const center = candidate.box.getCenter(new THREE.Vector3());
+    const distance = Math.hypot(center.x - deskCenter.x, center.z - deskCenter.z);
+    if (distance > 4) continue;
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function logDeskCandidates(model: THREE.Object3D): void {
+  model.traverse((child) => {
+    if (/desk|resolute|chair|table/i.test(child.name)) {
+      console.log(
+        "Found desk/chair candidate:",
+        child.name,
+        "local:",
+        child.position.toArray(),
+        "world:",
+        child.getWorldPosition(new THREE.Vector3()).toArray(),
+      );
+    }
+  });
+}
+
+function findSeatedOvalView(model: THREE.Object3D): {
   camera: THREE.Vector3;
   target: THREE.Vector3;
   roomName: string | null;
   deskName: string | null;
+  chairName: string | null;
 } {
   const candidates = collectNamedBoxes(model);
   const modelBox = new THREE.Box3().setFromObject(model);
   const room = pickRoomCandidate(model, candidates);
   const desk = pickDeskCandidate(candidates);
+  const chair = desk ? pickChairNear(desk, candidates) : null;
   const roomBox = room?.box ?? modelBox;
 
-  const target = new THREE.Vector3();
+  const deskCenter = new THREE.Vector3();
   if (desk) {
-    desk.box.getCenter(target);
-    target.y = THREE.MathUtils.clamp(target.y, 0.9, 1.35);
+    desk.box.getCenter(deskCenter);
+  } else if (room) {
+    room.box.getCenter(deskCenter);
   } else {
-    roomBox.getCenter(target);
-    target.y = THREE.MathUtils.clamp(target.y, 0.9, 1.4);
+    modelBox.getCenter(deskCenter);
   }
 
-  const roomSize = roomBox.getSize(BOX_SIZE);
-  const footprint = Math.max(roomSize.x, roomSize.z);
-  // Stand far enough back to see the desk, but never outside a normal room.
-  const standoff = THREE.MathUtils.clamp(footprint * 0.42, 2.4, 4.5);
-  const camera = new THREE.Vector3(target.x, 1.62, target.z + standoff);
+  const roomCenter = new THREE.Vector3();
+  if (room) room.box.getCenter(roomCenter);
+  else modelBox.getCenter(roomCenter);
 
-  console.log(`Oval Office interior view`, {
+  // The desk faces away from its chair. If no chair was found, the desk faces
+  // the room centre, which is the same relationship in an oval room.
+  const forward = new THREE.Vector3();
+  if (chair) {
+    chair.box.getCenter(forward);
+    forward.set(deskCenter.x - forward.x, 0, deskCenter.z - forward.z);
+  }
+  if (forward.lengthSq() < 0.01) {
+    forward.set(roomCenter.x - deskCenter.x, 0, roomCenter.z - deskCenter.z);
+  }
+  if (forward.lengthSq() < 0.01) forward.set(0, 0, 1);
+  forward.normalize();
+
+  const floorY = roomBox.min.y;
+  const seatedEye = 1.18;
+  const seatBack = 0.7;
+
+  const camera = new THREE.Vector3();
+  if (chair) {
+    chair.box.getCenter(camera);
+  } else {
+    camera.copy(deskCenter).addScaledVector(forward, -seatBack);
+  }
+  camera.y = floorY + seatedEye;
+
+  const target = new THREE.Vector3();
+  if (room) {
+    room.box.getCenter(target);
+    target.y = floorY + 1.05;
+  } else {
+    const roomSize = roomBox.getSize(BOX_SIZE);
+    const lookDistance = THREE.MathUtils.clamp(Math.max(roomSize.x, roomSize.z) * 0.38, 2.2, 5);
+    target.copy(deskCenter).addScaledVector(forward, lookDistance);
+    target.y = floorY + 1.05;
+  }
+
+  // If the room candidate centre somehow ended up behind the desk, look along
+  // the desk's forward axis instead.
+  const targetForward = new THREE.Vector3(target.x - deskCenter.x, 0, target.z - deskCenter.z);
+  if (targetForward.lengthSq() > 0.01 && targetForward.normalize().dot(forward) < 0) {
+    target.copy(deskCenter).addScaledVector(forward, 3.2);
+    target.y = floorY + 1.05;
+  }
+
+  console.log(`Oval Office seated view`, {
     room: room?.name ?? "model bounds",
     desk: desk?.name ?? null,
-    target: target.toArray(),
+    chair: chair?.name ?? null,
     camera: camera.toArray(),
+    target: target.toArray(),
   });
 
   return {
@@ -236,6 +325,7 @@ function findOvalOfficeView(model: THREE.Object3D): {
     target,
     roomName: room?.name ?? null,
     deskName: desk?.name ?? null,
+    chairName: chair?.name ?? null,
   };
 }
 
@@ -360,7 +450,8 @@ export class World {
         this.scene.add(model);
         model.updateMatrixWorld(true);
 
-        const view = findOvalOfficeView(model);
+        logDeskCandidates(model);
+        const view = findSeatedOvalView(model);
         this.camera.position.copy(view.camera);
         this.camera.lookAt(view.target);
 
@@ -375,7 +466,7 @@ export class World {
         this.player.enabled = false;
 
         console.log(
-          `Oval Office model loaded (${model.children.length} root nodes, room=${view.roomName ?? "model-bounds"}, desk=${view.deskName ?? "none"})`,
+          `Oval Office model loaded (${model.children.length} root nodes, room=${view.roomName ?? "model-bounds"}, desk=${view.deskName ?? "none"}, chair=${view.chairName ?? "none"})`,
         );
       },
       (progress) => {
