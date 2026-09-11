@@ -1,33 +1,16 @@
 name: Process model
 
-# One-off. Downloads the 388 MB embedded-textures FBX from the v0.1-assets
-# release, converts it to glTF with FBX2glTF, compresses it with gltfpack,
-# and uploads the result back to the same release as OvalOffice.glb — the
-# name `npm run assets` hardcodes.
-#
-# Run it from the Actions tab: Actions -> Process model -> Run workflow.
-#
-# Manual-only on purpose. It overwrites a release asset that every APK build
-# depends on, so it should never fire on a push.
-
 on:
   workflow_dispatch:
     inputs:
-      source_asset:
-        description: "Source FBX filename on the v0.1-assets release."
-        required: false
-        default: "OvalOffice_EmbededTextures.FBX"
-        type: string
-      output_asset:
-        description: "Name to publish the result under. fetch-assets.mjs hardcodes OvalOffice.glb."
-        required: false
-        default: "OvalOffice.glb"
-        type: string
       simplify_ratio:
         description: "gltfpack -si ratio, 0-1. 1 disables simplification."
         required: false
         default: "0.5"
         type: string
+  push:
+    paths:
+      - ".github/workflows/process-model.yml"
 
 permissions:
   contents: write
@@ -39,8 +22,6 @@ concurrency:
 jobs:
   process:
     runs-on: ubuntu-latest
-    # The source alone is 388 MB, and the intermediate uncompressed GLB will
-    # be larger still. Conversion and packing are both single-threaded.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -49,208 +30,90 @@ jobs:
         with:
           node-version: 22
 
-      - name: Download the source FBX
+      - name: Download source FBX
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOURCE_ASSET: ${{ inputs.source_asset }}
         run: |
           set -euo pipefail
-          gh release download v0.1-assets \
-            --pattern "$SOURCE_ASSET" \
-            --output raw.fbx \
-            --clobber
-
-          test -s raw.fbx || {
-            echo "::error::raw.fbx is empty — the download was truncated."
-            exit 1
-          }
+          gh release download v0.1-assets --pattern "OvalOffice_EmbededTextures.FBX" --output raw.fbx --clobber
+          test -s raw.fbx || { echo "::error::raw.fbx is empty"; exit 1; }
           ls -lh raw.fbx
 
-      # Pinned to v0.13.1 rather than latest: `latest` resolves at run time,
-      # so a future release with renamed assets would break this silently.
-      #
-      # The zip unpacks into a directory named after the archive, not a bare
-      # binary, so the executable is located rather than assumed.
       - name: Install FBX2glTF
         run: |
           set -euo pipefail
-          curl -fL --retry 3 --retry-delay 5 -o fbx2gltf.zip \
-            "https://github.com/godotengine/FBX2glTF/releases/download/v0.13.1/FBX2glTF-linux-x86_64.zip"
+          curl -fL --retry 3 --retry-delay 5 -o fbx2gltf.zip "https://github.com/godotengine/FBX2glTF/releases/download/v0.13.1/FBX2glTF-linux-x86_64.zip"
           unzip -o fbx2gltf.zip
-
-          echo "--- extracted ---"
-          find . -maxdepth 3 -name 'FBX2glTF*' -printf '%y %p\n'
-
           bin=$(find . -maxdepth 3 -type f -name 'FBX2glTF*' ! -name '*.zip' | head -1)
-          if [ -z "$bin" ]; then
-            echo "::error::No FBX2glTF executable found in the archive."
-            exit 1
-          fi
-
           chmod +x "$bin"
           echo "FBX2GLTF=$PWD/$bin" >> "$GITHUB_ENV"
-          echo "Using $bin"
-          "$bin" --version 2>&1 | head -3 || true
 
-      # The meshoptimizer release assets are named by distro, not by OS:
-      # gltfpack-ubuntu.zip, not gltfpack-linux.zip.
       - name: Install gltfpack
         run: |
           set -euo pipefail
-          curl -fL --retry 3 --retry-delay 5 -o gltfpack.zip \
-            "https://github.com/zeux/meshoptimizer/releases/download/v1.2/gltfpack-ubuntu.zip"
+          curl -fL --retry 3 --retry-delay 5 -o gltfpack.zip "https://github.com/zeux/meshoptimizer/releases/download/v1.2/gltfpack-ubuntu.zip"
           unzip -o gltfpack.zip
-
-          echo "--- extracted ---"
-          find . -maxdepth 3 -name 'gltfpack*' -printf '%y %p\n'
-
           bin=$(find . -maxdepth 3 -type f -name 'gltfpack' | head -1)
-          if [ -z "$bin" ]; then
-            echo "::error::No gltfpack executable found in the archive."
-            exit 1
-          fi
-
           chmod +x "$bin"
           echo "GLTFPACK=$PWD/$bin" >> "$GITHUB_ENV"
-          echo "Using $bin"
-          "$bin" -h 2>&1 | head -5 || true
 
       - name: Convert FBX to GLB
         run: |
           set -euo pipefail
-          "$FBX2GLTF" \
-            --binary \
-            --input raw.fbx \
-            --output uncompressed.glb
-
-          test -s uncompressed.glb || {
-            echo "::error::FBX2glTF produced no output."
-            exit 1
-          }
+          "$FBX2GLTF" --binary --input raw.fbx --output uncompressed.glb
+          test -s uncompressed.glb || { echo "::error::no output from FBX2glTF"; exit 1; }
           ls -lh uncompressed.glb
 
-      - name: Compress and optimise
-        id: pack
-        env:
-          SIMPLIFY_RATIO: ${{ inputs.simplify_ratio }}
+      # Simplify only: deliberately no -tc. -tc writes KTX2/Basis textures
+      # (KHR_texture_basisu), which three.js cannot decode without a
+      # KTX2Loader the game does not register — so the model failed to load
+      # and the game silently fell back to the procedural room. Textures are
+      # converted to WebP in the next step instead.
+      - name: Simplify geometry
         run: |
           set -euo pipefail
+          ratio="${{ inputs.simplify_ratio || '0.5' }}"
+          "$GLTFPACK" -i uncompressed.glb -o simplified.glb -si "$ratio"
+          test -s simplified.glb || { echo "::error::no output from gltfpack"; exit 1; }
 
-          # -tc  compress textures
-          # -si  simplify to a ratio of the original triangle count
-          #
-          # Deliberately no -cc. It writes EXT_meshopt_compression, which
-          # three.js cannot decode without GLTFLoader.setMeshoptDecoder()
-          # and the meshoptimizer package shipped in the app. The game's
-          # loader does not register it, so a -cc file would fail to load at
-          # runtime even though it is a valid GLB. Revisit once the decoder
-          # is wired up; until then the asset has to load with a plain
-          # GLTFLoader.
-          "$GLTFPACK" \
-            -i uncompressed.glb \
-            -o OvalOffice.glb \
-            -tc \
-            -si "$SIMPLIFY_RATIO"
-
-          test -s OvalOffice.glb || {
-            echo "::error::gltfpack produced no output."
-            exit 1
-          }
-
-          raw=$(stat -c%s raw.fbx)
-          mid=$(stat -c%s uncompressed.glb)
-          out=$(stat -c%s OvalOffice.glb)
-          echo "fbx:        $((raw / 1000000)) MB"
-          echo "glb:        $((mid / 1000000)) MB"
-          echo "optimised:  $((out / 1000000)) MB"
-          echo "size_mb=$((out / 1000000))" >> "$GITHUB_OUTPUT"
-
-      # Reads the file with a plain loader, the same way the game does, and
-      # fails if any extension in the output needs a decoder the app does not
-      # ship. That is the check that would have caught -cc before it reached
-      # a release.
-      - name: Verify the result loads
+      - name: Compress textures to WebP
         run: |
           set -euo pipefail
-          npm install --no-save \
-            @gltf-transform/core \
-            @gltf-transform/extensions
+          npx --yes @gltf-transform/cli@4.5.0 optimize simplified.glb OvalOffice.glb --texture-compress webp --texture-size 1024
+          test -s OvalOffice.glb || { echo "::error::no output from gltf-transform"; exit 1; }
+          ls -lh OvalOffice.glb
 
+      - name: Verify no decoder is required
+        run: |
+          set -euo pipefail
+          npm install --no-save @gltf-transform/core @gltf-transform/extensions
           node --input-type=module -e '
           import { NodeIO } from "@gltf-transform/core";
           import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
-
           const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
           const doc = await io.read("OvalOffice.glb");
           const root = doc.getRoot();
-
-          const meshes = root.listMeshes();
-          const textures = root.listTextures();
-          const materials = root.listMaterials();
-
-          let tris = 0;
-          for (const mesh of meshes) {
-            for (const prim of mesh.listPrimitives()) {
-              const indices = prim.getIndices();
-              const position = prim.getAttribute("POSITION");
-              tris += indices ? indices.getCount() / 3 : (position?.getCount() ?? 0) / 3;
-            }
-          }
-
-          console.log(`meshes:    ${meshes.length}`);
-          console.log(`materials: ${materials.length}`);
-          console.log(`textures:  ${textures.length}`);
-          console.log(`triangles: ${Math.round(tris).toLocaleString()}`);
-
           const ext = root.listExtensionsUsed().map((e) => e.extensionName);
           console.log(`extensions: ${ext.join(", ") || "none"}`);
-
-          // Extensions three.js needs a registered decoder for. If one of
-          // these appears, the game will fail to load the model.
-          const needsDecoder = [
-            "EXT_meshopt_compression",
-            "KHR_draco_mesh_compression",
-          ];
-          const blocking = ext.filter((name) => needsDecoder.includes(name));
-          if (blocking.length > 0) {
-            console.error(
-              `::error::Output uses ${blocking.join(", ")}, which needs a decoder the game does not register.`
-            );
+          const blocking = ["EXT_meshopt_compression", "KHR_draco_mesh_compression", "KHR_texture_basisu"];
+          const bad = ext.filter((n) => blocking.includes(n));
+          if (bad.length) {
+            console.error(`::error::uses ${bad.join(", ")} — needs a decoder the game does not register.`);
             process.exit(1);
           }
-
-          // A GLB with no meshes is a broken export, not a small one.
-          if (meshes.length === 0) {
-            console.error("::error::No meshes in the output — the export is empty.");
-            process.exit(1);
-          }
-          if (textures.length === 0) {
-            console.warn("::warning::No textures in the output. The source had embedded textures, so they were lost.");
-          }
+          if (root.listMeshes().length === 0) { console.error("::error::no meshes"); process.exit(1); }
+          console.log(`meshes: ${root.listMeshes().length}`);
           '
 
-      - name: Publish to the v0.1-assets release
+      - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUTPUT_ASSET: ${{ inputs.output_asset }}
         run: |
           set -euo pipefail
+          gh release upload v0.1-assets OvalOffice.glb --clobber
+          gh release view v0.1-assets --json assets --jq '.assets[] | "  \(.name)  \(.size / 1000000 | floor) MB"'
 
-          # Only rename when the requested name differs from what gltfpack
-          # wrote. `cp a a` is an error, and OvalOffice.glb is the default.
-          if [ "$OUTPUT_ASSET" != "OvalOffice.glb" ]; then
-            cp OvalOffice.glb "$OUTPUT_ASSET"
-          fi
-
-          # --clobber replaces the existing asset in place. Without it the
-          # upload fails on a name collision, which is the common case here.
-          gh release upload v0.1-assets "$OUTPUT_ASSET" --clobber
-
-          echo "Published $OUTPUT_ASSET (${{ steps.pack.outputs.size_mb }} MB)"
-          gh release view v0.1-assets --json assets \
-            --jq '.assets[] | "  \(.name)  \(.size / 1000000 | floor) MB"'
-
-      - name: Upload as a workflow artifact too
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: processed-model
