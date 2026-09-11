@@ -160,16 +160,30 @@ jobs:
           echo "optimised:  $((out / 1000000)) MB"
           echo "size_mb=$((out / 1000000))" >> "$GITHUB_OUTPUT"
 
+      # gltfpack -cc writes EXT_meshopt_compression, which gltf-transform
+      # cannot read without the meshopt decoder registered. Without it the
+      # read throws rather than returning a partial document.
       - name: Verify the result loads
         run: |
           set -euo pipefail
-          npm install --no-save @gltf-transform/core @gltf-transform/extensions
+          npm install --no-save \
+            @gltf-transform/core \
+            @gltf-transform/extensions \
+            meshoptimizer
 
           node --input-type=module -e '
           import { NodeIO } from "@gltf-transform/core";
-          import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
+          import { ALL_EXTENSIONS, EXTMeshoptCompression } from "@gltf-transform/extensions";
+          import { MeshoptDecoder } from "meshoptimizer";
 
-          const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+          await MeshoptDecoder.ready;
+
+          const io = new NodeIO()
+            .registerExtensions(ALL_EXTENSIONS)
+            .registerDependencies({
+              "meshopt.decoder": MeshoptDecoder,
+            });
+
           const doc = await io.read("OvalOffice.glb");
           const root = doc.getRoot();
 
@@ -190,6 +204,9 @@ jobs:
           console.log(`materials: ${materials.length}`);
           console.log(`textures:  ${textures.length}`);
           console.log(`triangles: ${Math.round(tris).toLocaleString()}`);
+
+          const ext = doc.getRoot().listExtensionsUsed().map((e) => e.extensionName);
+          console.log(`extensions: ${ext.join(", ") || "none"}`);
 
           // A GLB with no meshes is a broken export, not a small one.
           if (meshes.length === 0) {
