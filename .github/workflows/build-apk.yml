@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-apk-${{ github.ref }}
@@ -83,3 +83,27 @@ jobs:
           name: app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # Publishes to the rolling `latest` release, so there is one stable,
+      # public, non-expiring download URL:
+      #   https://github.com/joshworley21-rgb/Game-idea/releases/latest
+      # The tag is moved to each new build rather than accumulating a release
+      # per commit. `make_latest` keeps it the one the /latest redirect hits.
+      - name: Publish APK to release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: |
+            Debug-signed Android build of Oval, from commit ${{ github.sha }}.
+
+            Sideload it: download the APK, allow installs from your browser or
+            file manager when Android asks, and open it. Minimum Android 7.0
+            (API 24). The game runs entirely on-device — no network call after
+            install.
+
+            **Debug-signed.** Fine for sideloading and for passing round; not
+            fine for the Play Store, where a signature needs to mean something.
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          make_latest: true
