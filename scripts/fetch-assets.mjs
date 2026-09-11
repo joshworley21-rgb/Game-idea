@@ -12,7 +12,7 @@
  *
  * Add an entry to MODELS and re-run `npm run assets` to pull another prop.
  */
-import { mkdir, writeFile, readdir, rm } from "node:fs/promises";
+import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -43,10 +43,15 @@ const MODELS = [
  * The full Oval Office model, hosted as a GitHub Release asset. Fetched once
  * into public/models/ so Vite bundles it into dist/ and Capacitor packs it
  * into the APK — the game then loads it from the app package, no network.
+ *
+ * `minBytes` guards against a truncated or placeholder file being treated as
+ * a valid download. The real model is tens of MB; anything under a megabyte
+ * is a failed fetch, not a small asset.
  */
 const OVAL_OFFICE = {
   url: "https://github.com/joshworley21-rgb/Game-idea/releases/download/v0.1-assets/OvalOffice.glb",
   file: "OvalOffice.glb",
+  minBytes: 1_000_000,
 };
 
 const RESOLUTION = "1k";
@@ -54,17 +59,31 @@ const SRC = "assets-src";
 const OUT = "public/models";
 const API = "https://api.polyhaven.com";
 
+/**
+ * Set FORCE_ASSETS=1 to re-download everything, ignoring the on-disk cache.
+ * Needed whenever a release asset is replaced in place: the cache guard below
+ * would otherwise keep serving the copy committed to the repo.
+ */
+const FORCE = process.env.FORCE_ASSETS === "1";
+
 async function getJson(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
   return res.json();
 }
 
-async function download(url, dest) {
-  if (existsSync(dest)) return 0;
+async function download(url, dest, { minBytes = 0 } = {}) {
+  if (!FORCE && existsSync(dest)) {
+    const { size } = await stat(dest);
+    if (size >= minBytes) return 0;
+    console.log(`  cached copy is ${(size / 1e6).toFixed(2)} MB, below the ${(minBytes / 1e6).toFixed(1)} MB floor — refetching`);
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} for ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length < minBytes) {
+    throw new Error(`downloaded ${buf.length} bytes, expected at least ${minBytes}`);
+  }
   await mkdir(path.dirname(dest), { recursive: true });
   await writeFile(dest, buf);
   return buf.length;
@@ -77,9 +96,11 @@ await mkdir(OUT, { recursive: true });
   const dest = path.join(OUT, OVAL_OFFICE.file);
   process.stdout.write(`${OVAL_OFFICE.file.padEnd(30)}`);
   try {
-    const bytes = await download(OVAL_OFFICE.url, dest);
+    const bytes = await download(OVAL_OFFICE.url, dest, {
+      minBytes: OVAL_OFFICE.minBytes,
+    });
     if (bytes === 0) {
-      const { size } = await import("node:fs").then((fs) => fs.promises.stat(dest));
+      const { size } = await stat(dest);
       console.log(`cached (${(size / 1e6).toFixed(2)} MB)`);
     } else {
       console.log(`downloaded ${(bytes / 1e6).toFixed(2)} MB`);
@@ -87,6 +108,7 @@ await mkdir(OUT, { recursive: true });
   } catch (err) {
     console.log(`FAILED: ${err.message}`);
     console.log("  The game will fall back to the procedural Oval Office room.");
+    process.exitCode = 1;
   }
 }
 
@@ -122,7 +144,7 @@ for (const { id, texture = 512, error = 0.005 } of MODELS) {
       "--simplify-error", String(error),
     ]);
 
-    const { size } = await import("node:fs").then((fs) => fs.promises.stat(out));
+    const { size } = await stat(out);
     outTotal += size;
 
     const info = await getJson(`${API}/info/${id}`);
