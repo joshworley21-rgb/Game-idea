@@ -68,14 +68,29 @@ jobs:
 
       # Pinned to v0.13.1 rather than latest: `latest` resolves at run time,
       # so a future release with renamed assets would break this silently.
+      #
+      # The zip unpacks into a directory named after the archive, not a bare
+      # binary, so the executable is located rather than assumed.
       - name: Install FBX2glTF
         run: |
           set -euo pipefail
           curl -fL --retry 3 --retry-delay 5 -o fbx2gltf.zip \
             "https://github.com/godotengine/FBX2glTF/releases/download/v0.13.1/FBX2glTF-linux-x86_64.zip"
           unzip -o fbx2gltf.zip
-          chmod +x FBX2glTF-linux-x86_64
-          ./FBX2glTF-linux-x86_64 --version 2>&1 | head -3 || true
+
+          echo "--- extracted ---"
+          find . -maxdepth 3 -name 'FBX2glTF*' -printf '%y %p\n'
+
+          bin=$(find . -maxdepth 3 -type f -name 'FBX2glTF*' ! -name '*.zip' | head -1)
+          if [ -z "$bin" ]; then
+            echo "::error::No FBX2glTF executable found in the archive."
+            exit 1
+          fi
+
+          chmod +x "$bin"
+          echo "FBX2GLTF=$PWD/$bin" >> "$GITHUB_ENV"
+          echo "Using $bin"
+          "$bin" --version 2>&1 | head -3 || true
 
       # The meshoptimizer release assets are named by distro, not by OS:
       # gltfpack-ubuntu.zip, not gltfpack-linux.zip.
@@ -85,13 +100,25 @@ jobs:
           curl -fL --retry 3 --retry-delay 5 -o gltfpack.zip \
             "https://github.com/zeux/meshoptimizer/releases/download/v1.2/gltfpack-ubuntu.zip"
           unzip -o gltfpack.zip
-          chmod +x gltfpack
-          ./gltfpack -h 2>&1 | head -5 || true
+
+          echo "--- extracted ---"
+          find . -maxdepth 3 -name 'gltfpack*' -printf '%y %p\n'
+
+          bin=$(find . -maxdepth 3 -type f -name 'gltfpack' | head -1)
+          if [ -z "$bin" ]; then
+            echo "::error::No gltfpack executable found in the archive."
+            exit 1
+          fi
+
+          chmod +x "$bin"
+          echo "GLTFPACK=$PWD/$bin" >> "$GITHUB_ENV"
+          echo "Using $bin"
+          "$bin" -h 2>&1 | head -5 || true
 
       - name: Convert FBX to GLB
         run: |
           set -euo pipefail
-          ./FBX2glTF-linux-x86_64 \
+          "$FBX2GLTF" \
             --binary \
             --input raw.fbx \
             --output uncompressed.glb
@@ -113,7 +140,7 @@ jobs:
           # -cc  quantize attributes; three.js reads KHR_mesh_quantization
           #      natively, so no decoder ships with the game
           # -si  simplify to a ratio of the original triangle count
-          ./gltfpack \
+          "$GLTFPACK" \
             -i uncompressed.glb \
             -o OvalOffice.glb \
             -tc \
