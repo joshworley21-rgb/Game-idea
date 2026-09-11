@@ -5,6 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -24,8 +31,23 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # Caches the Gradle wrapper distribution (~200 MB) and the dependency
+      # cache. Without this the wrapper re-downloads gradle-8.14.3-all.zip on
+      # every run.
+      - uses: gradle/actions/setup-gradle@v4
+
       - name: Install dependencies
         run: npm ci
+
+      # fetch-assets.mjs skips any file that already exists, so a warm cache
+      # makes this a no-op. Cold, it pulls 11 props from Poly Haven plus the
+      # OvalOffice release asset.
+      - uses: actions/cache@v4
+        with:
+          path: assets-src
+          key: polyhaven-${{ runner.os }}-${{ hashFiles('scripts/fetch-assets.mjs') }}
+          restore-keys: |
+            polyhaven-${{ runner.os }}-
 
       - name: Fetch assets
         timeout-minutes: 5
@@ -33,14 +55,17 @@ jobs:
 
       - name: Verify the Oval Office model is bundled
         run: |
-          test -f public/models/OvalOffice.glb || {
-            echo "::error::public/models/OvalOffice.glb is missing"
+          test -s public/models/OvalOffice.glb || {
+            echo "::error::public/models/OvalOffice.glb is missing or empty"
             exit 1
           }
           ls -lh public/models/OvalOffice.glb
 
-      - name: Typecheck and build
-        run: npm run build
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npx vite build
 
       - name: Sync Capacitor
         run: npx cap sync android
