@@ -1,0 +1,25 @@
+name: Rebuild after model
+
+on:
+  workflow_run:
+    workflows: ["Process model"]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  trigger:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch the APK build
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "build-apk.yml",
+              ref: "main",
+            });
