@@ -137,14 +137,19 @@ jobs:
           set -euo pipefail
 
           # -tc  compress textures
-          # -cc  quantize attributes; three.js reads KHR_mesh_quantization
-          #      natively, so no decoder ships with the game
           # -si  simplify to a ratio of the original triangle count
+          #
+          # Deliberately no -cc. It writes EXT_meshopt_compression, which
+          # three.js cannot decode without GLTFLoader.setMeshoptDecoder()
+          # and the meshoptimizer package shipped in the app. The game's
+          # loader does not register it, so a -cc file would fail to load at
+          # runtime even though it is a valid GLB. Revisit once the decoder
+          # is wired up; until then the asset has to load with a plain
+          # GLTFLoader.
           "$GLTFPACK" \
             -i uncompressed.glb \
             -o OvalOffice.glb \
             -tc \
-            -cc \
             -si "$SIMPLIFY_RATIO"
 
           test -s OvalOffice.glb || {
@@ -160,30 +165,22 @@ jobs:
           echo "optimised:  $((out / 1000000)) MB"
           echo "size_mb=$((out / 1000000))" >> "$GITHUB_OUTPUT"
 
-      # gltfpack -cc writes EXT_meshopt_compression, which gltf-transform
-      # cannot read without the meshopt decoder registered. Without it the
-      # read throws rather than returning a partial document.
+      # Reads the file with a plain loader, the same way the game does, and
+      # fails if any extension in the output needs a decoder the app does not
+      # ship. That is the check that would have caught -cc before it reached
+      # a release.
       - name: Verify the result loads
         run: |
           set -euo pipefail
           npm install --no-save \
             @gltf-transform/core \
-            @gltf-transform/extensions \
-            meshoptimizer
+            @gltf-transform/extensions
 
           node --input-type=module -e '
           import { NodeIO } from "@gltf-transform/core";
-          import { ALL_EXTENSIONS, EXTMeshoptCompression } from "@gltf-transform/extensions";
-          import { MeshoptDecoder } from "meshoptimizer";
+          import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 
-          await MeshoptDecoder.ready;
-
-          const io = new NodeIO()
-            .registerExtensions(ALL_EXTENSIONS)
-            .registerDependencies({
-              "meshopt.decoder": MeshoptDecoder,
-            });
-
+          const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
           const doc = await io.read("OvalOffice.glb");
           const root = doc.getRoot();
 
@@ -205,8 +202,22 @@ jobs:
           console.log(`textures:  ${textures.length}`);
           console.log(`triangles: ${Math.round(tris).toLocaleString()}`);
 
-          const ext = doc.getRoot().listExtensionsUsed().map((e) => e.extensionName);
+          const ext = root.listExtensionsUsed().map((e) => e.extensionName);
           console.log(`extensions: ${ext.join(", ") || "none"}`);
+
+          // Extensions three.js needs a registered decoder for. If one of
+          // these appears, the game will fail to load the model.
+          const needsDecoder = [
+            "EXT_meshopt_compression",
+            "KHR_draco_mesh_compression",
+          ];
+          const blocking = ext.filter((name) => needsDecoder.includes(name));
+          if (blocking.length > 0) {
+            console.error(
+              `::error::Output uses ${blocking.join(", ")}, which needs a decoder the game does not register.`
+            );
+            process.exit(1);
+          }
 
           // A GLB with no meshes is a broken export, not a small one.
           if (meshes.length === 0) {
