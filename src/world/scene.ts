@@ -188,66 +188,7 @@ function pickRoomCandidate(model: THREE.Object3D, candidates: NamedBox[]): Named
     if (volume > modelVolume * 0.7) continue;
     const score = roomScore(candidate);
     if (score > bestScore) {
-      best = candidate;
-      bestScore = score;
-    }
-  }
-  return best && bestScore > 0 ? best : null;
-}
 
-function pickDeskCandidate(candidates: NamedBox[]): NamedBox | null {
-  let best: NamedBox | null = null;
-  let bestScore = Number.NEGATIVE_INFINITY;
-  for (const candidate of candidates) {
-    const score = deskScore(candidate);
-    if (score > bestScore) {
-      best = candidate;
-      bestScore = score;
-    }
-  }
-  return best && bestScore >= 0 ? best : null;
-}
-
-/** Chooses the chair closest to the desk, rather than a couch across the room. */
-function pickChairNear(desk: NamedBox, candidates: NamedBox[]): NamedBox | null {
-  const deskCenter = desk.box.getCenter(new THREE.Vector3());
-  let best: NamedBox | null = null;
-  let bestDistance = Infinity;
-  for (const candidate of candidates) {
-    if (chairScore(candidate) < 0) continue;
-    const center = candidate.box.getCenter(new THREE.Vector3());
-    const distance = Math.hypot(center.x - deskCenter.x, center.z - deskCenter.z);
-    if (distance > 4) continue;
-    if (distance < bestDistance) {
-      best = candidate;
-      bestDistance = distance;
-    }
-  }
-  return best;
-}
-
-function logDeskCandidates(model: THREE.Object3D): void {
-  model.traverse((child) => {
-    if (/desk|resolute|chair|table/i.test(child.name)) {
-      console.log(
-        "Found desk/chair candidate:",
-        child.name,
-        "local:",
-        child.position.toArray(),
-        "world:",
-        child.getWorldPosition(new THREE.Vector3()).toArray(),
-      );
-    }
-  });
-}
-
-function findSeatedOvalView(model: THREE.Object3D): {
-  camera: THREE.Vector3;
-  target: THREE.Vector3;
-  roomName: string | null;
-  deskName: string | null;
-  chairName: string | null;
-} {
   const candidates = collectNamedBoxes(model);
   const modelBox = new THREE.Box3().setFromObject(model);
   const room = pickRoomCandidate(model, candidates);
@@ -362,6 +303,8 @@ export class World {
   private horizontalFov = ROOM_PRESENTATION.oval.horizontalFov;
   /** Orbit controls for the loaded Oval Office viewer path. */
   private orbit: OrbitControls | null = null;
+  /** Fixed seats in the loaded Oval Office. Null until the model arrives. */
+  private rig: SeatRig | null = null;
   readonly sound = new Sound();
   /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
   readonly touch: boolean;
@@ -450,20 +393,30 @@ export class World {
         this.scene.add(model);
         model.updateMatrixWorld(true);
 
-        logDeskCandidates(model);
-        const view = findSeatedOvalView(model);
-        this.camera.position.copy(view.camera);
-        this.camera.lookAt(view.target);
+        logSeatCandidates(model);
+const seats = buildSeats(model);
 
-        this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
-        this.orbit.target.copy(view.target);
-        this.orbit.enableDamping = true;
-        this.orbit.dampingFactor = 0.08;
-        this.orbit.update();
+this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+this.orbit.enableDamping = true;
+this.orbit.dampingFactor = 0.08;
+// Look and zoom only. No panning, and no walking: the view moves
+// between fixed seats, and the dolly stays inside the room.
+this.orbit.enablePan = false;
+this.orbit.enableZoom = true;
+this.orbit.zoomSpeed = 0.6;
+this.orbit.minDistance = 0.9;
+this.orbit.maxDistance = 7.5;
+this.orbit.minPolarAngle = Math.PI * 0.28;
+this.orbit.maxPolarAngle = Math.PI * 0.62;
 
-        this.addModelKeyLight(view.target);
-        this.renderer.toneMappingExposure = 1.2;
-        this.player.enabled = false;
+this.rig = new SeatRig(this.camera, this.orbit, seats);
+this.addModelKeyLight(seats[0].target);
+this.renderer.toneMappingExposure = 1.2;
+this.player.enabled = false;
+
+console.log(
+  `Oval Office model loaded (${model.children.length} root nodes, ${seats.length} seats, at ${this.rig.currentId})`,
+);
 
         console.log(
           `Oval Office model loaded (${model.children.length} root nodes, room=${view.roomName ?? "model-bounds"}, desk=${view.deskName ?? "none"}, chair=${view.chairName ?? "none"})`,
