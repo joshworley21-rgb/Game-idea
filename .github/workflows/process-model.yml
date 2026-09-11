@@ -75,11 +75,14 @@ jobs:
           chmod +x FBX2glTF-linux-x86_64
           ./FBX2glTF-linux-x86_64 --version 2>&1 | head -3 || true
 
+      # The meshoptimizer release assets are named by distro, not by OS:
+      # gltfpack-ubuntu.zip, not gltfpack-linux.zip. Pinned to v1.2 rather
+      # than latest so a future release cannot change the flags underneath us.
       - name: Install gltfpack
         run: |
           set -euo pipefail
-          curl -fL --retry 3 -o gltfpack.zip \
-            "https://github.com/zeux/meshoptimizer/releases/download/v0.22/gltfpack-linux.zip"
+          curl -fL --retry 3 --retry-delay 5 -o gltfpack.zip \
+            "https://github.com/zeux/meshoptimizer/releases/download/v1.2/gltfpack-ubuntu.zip"
           unzip -o gltfpack.zip
           chmod +x gltfpack
           ./gltfpack -h 2>&1 | head -5 || true
