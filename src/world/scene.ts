@@ -90,13 +90,154 @@ const ROOM_PRESENTATION: Record<RoomId, {
   fogNear: number;
   fogFar: number;
 }> = {
-  oval: { horizontalFov: 82, exposure: 1.08, fogNear: 18, fogFar: 44 },
+  oval: { horizontalFov: 82, exposure: 1.2, fogNear: 18, fogFar: 44 },
   cabinet: { horizontalFov: 78, exposure: 1.02, fogNear: 16, fogFar: 38 },
   capitol: { horizontalFov: 92, exposure: 1.12, fogNear: 25, fogFar: 62 },
   press: { horizontalFov: 76, exposure: 0.98, fogNear: 14, fogFar: 34 },
   residence: { horizontalFov: 74, exposure: 1.12, fogNear: 13, fogFar: 32 },
   study: { horizontalFov: 70, exposure: 1.08, fogNear: 10, fogFar: 25 },
 };
+
+/**
+ * The loaded Oval Office GLB contains the full White House exterior plus the
+ * interior room. The model is not authored around the procedural room's origin,
+ * so the old fixed spawn (0, 1.6, 0) landed on the South Lawn. These helpers
+ * walk the model hierarchy at load time and choose the node whose bounds are
+ * the Oval Office interior, then aim the camera at the Resolute Desk if the
+ * desk is a named node in the same hierarchy.
+ */
+type NamedBox = {
+  node: THREE.Object3D;
+  box: THREE.Box3;
+  name: string;
+};
+
+const BOX_SIZE = new THREE.Vector3();
+
+function collectNamedBoxes(root: THREE.Object3D): NamedBox[] {
+  const boxes: NamedBox[] = [];
+  root.traverse((obj) => {
+    const name = obj.name.trim();
+    if (!name) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(BOX_SIZE);
+    if (box.isEmpty() || size.x <= 0 || size.y <= 0 || size.z <= 0) return;
+    boxes.push({ node: obj, box, name });
+  });
+  return boxes;
+}
+
+function roomScore(candidate: NamedBox): number {
+  const name = candidate.name.toLowerCase();
+  const size = candidate.box.getSize(BOX_SIZE);
+  const volume = size.x * size.y * size.z;
+  const footprint = Math.max(size.x, size.z);
+
+  let score = 0;
+  if (/oval/.test(name)) score += 120;
+  if (/office/.test(name)) score += 100;
+  if (/interior/.test(name)) score += 70;
+  if (/room/.test(name)) score += 35;
+  if (/desk|resolute/.test(name)) score -= 40;
+  if (/lawn|grass|exterior|landscape|facade|roof|terrain/.test(name)) score -= 80;
+
+  if (size.y >= 2.2 && size.y <= 7.5) score += 25;
+  if (footprint >= 5 && footprint <= 26) score += 25;
+  if (volume >= 40 && volume <= 2600) score += 30;
+  if (volume < 10) score -= 25;
+
+  return score;
+}
+
+function deskScore(candidate: NamedBox): number {
+  const name = candidate.name.toLowerCase();
+  if (!/desk|resolute/.test(name)) return Number.NEGATIVE_INFINITY;
+  const size = candidate.box.getSize(BOX_SIZE);
+  const volume = size.x * size.y * size.z;
+
+  let score = 0;
+  if (/resolute/.test(name)) score += 10;
+  if (/desk/.test(name)) score += 10;
+  if (volume >= 0.2 && volume <= 30) score += 20;
+  return score;
+}
+
+function pickRoomCandidate(model: THREE.Object3D, candidates: NamedBox[]): NamedBox | null {
+  const modelBox = new THREE.Box3().setFromObject(model);
+  const modelSize = modelBox.getSize(BOX_SIZE);
+  const modelVolume = modelSize.x * modelSize.y * modelSize.z;
+
+  let best: NamedBox | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const candidate of candidates) {
+    const size = candidate.box.getSize(BOX_SIZE);
+    const volume = size.x * size.y * size.z;
+    // The GLB root (and any exterior "everything" group) spans the whole
+    // scene, including the lawn, so it is never the interior room.
+    if (volume > modelVolume * 0.7) continue;
+    const score = roomScore(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best && bestScore > 0 ? best : null;
+}
+
+function pickDeskCandidate(candidates: NamedBox[]): NamedBox | null {
+  let best: NamedBox | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const candidate of candidates) {
+    const score = deskScore(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best && bestScore >= 0 ? best : null;
+}
+
+function findOvalOfficeView(model: THREE.Object3D): {
+  camera: THREE.Vector3;
+  target: THREE.Vector3;
+  roomName: string | null;
+  deskName: string | null;
+} {
+  const candidates = collectNamedBoxes(model);
+  const modelBox = new THREE.Box3().setFromObject(model);
+  const room = pickRoomCandidate(model, candidates);
+  const desk = pickDeskCandidate(candidates);
+  const roomBox = room?.box ?? modelBox;
+
+  const target = new THREE.Vector3();
+  if (desk) {
+    desk.box.getCenter(target);
+    target.y = THREE.MathUtils.clamp(target.y, 0.9, 1.35);
+  } else {
+    roomBox.getCenter(target);
+    target.y = THREE.MathUtils.clamp(target.y, 0.9, 1.4);
+  }
+
+  const roomSize = roomBox.getSize(BOX_SIZE);
+  const footprint = Math.max(roomSize.x, roomSize.z);
+  // Stand far enough back to see the desk, but never outside a normal room.
+  const standoff = THREE.MathUtils.clamp(footprint * 0.42, 2.4, 4.5);
+  const camera = new THREE.Vector3(target.x, 1.62, target.z + standoff);
+
+  console.log(`Oval Office interior view`, {
+    room: room?.name ?? "model bounds",
+    desk: desk?.name ?? null,
+    target: target.toArray(),
+    camera: camera.toArray(),
+  });
+
+  return {
+    camera,
+    target,
+    roomName: room?.name ?? null,
+    deskName: desk?.name ?? null,
+  };
+}
 
 export class World {
   readonly renderer: THREE.WebGLRenderer;
@@ -112,7 +253,9 @@ export class World {
   private animator = new CharacterAnimator();
   private castKey = "";
   private clock = new THREE.Clock();
+  private ambient: THREE.AmbientLight;
   private hemisphere: THREE.HemisphereLight;
+  private modelKey: THREE.DirectionalLight | null = null;
   private raf = 0;
   private raycaster = new THREE.Raycaster();
   private listener = new THREE.AudioListener();
@@ -152,7 +295,7 @@ export class World {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.2;
 
     this.scene.background = new THREE.Color(0x0b0d12);
     this.scene.fog = new THREE.Fog(0x1a1712, 18, 46);
@@ -160,12 +303,15 @@ export class World {
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 100);
     this.scene.add(this.people);
 
-    this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.42);
+    this.ambient = new THREE.AmbientLight(0xfff3e0, 1.6);
+    this.scene.add(this.ambient);
+
+    this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.9);
     this.scene.add(this.hemisphere);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
-    this.scene.environmentIntensity = 0.62;
+    this.scene.environmentIntensity = 0.8;
     pmrem.dispose();
 
     this.camera.add(this.listener);
@@ -212,19 +358,25 @@ export class World {
 
         if (this.current.id === "oval") this.current.group.visible = false;
         this.scene.add(model);
+        model.updateMatrixWorld(true);
 
-        this.camera.position.set(0, 1.6, 0);
-        this.camera.lookAt(0, 1.6, -3);
+        const view = findOvalOfficeView(model);
+        this.camera.position.copy(view.camera);
+        this.camera.lookAt(view.target);
 
         this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
-        this.orbit.target.set(0, 1.6, -3);
+        this.orbit.target.copy(view.target);
         this.orbit.enableDamping = true;
         this.orbit.dampingFactor = 0.08;
         this.orbit.update();
 
+        this.addModelKeyLight(view.target);
+        this.renderer.toneMappingExposure = 1.2;
         this.player.enabled = false;
 
-        console.log(`Oval Office model loaded (${model.children.length} root nodes)`);
+        console.log(
+          `Oval Office model loaded (${model.children.length} root nodes, room=${view.roomName ?? "model-bounds"}, desk=${view.deskName ?? "none"})`,
+        );
       },
       (progress) => {
         const loadedMB = progress.loaded / 1048576;
@@ -242,6 +394,18 @@ export class World {
         console.error("Oval Office model failed to load — keeping the procedural room", error);
       },
     );
+  }
+
+  /** Adds a diffuse key light anchored to the discovered interior viewpoint. */
+  private addModelKeyLight(target: THREE.Vector3): void {
+    if (this.modelKey) return;
+    const key = new THREE.DirectionalLight(0xfff2dc, 2.25);
+    key.position.set(target.x + 4.5, target.y + 7.5, target.z + 6);
+    key.target.position.copy(target);
+    key.castShadow = false;
+    this.scene.add(key);
+    this.scene.add(key.target);
+    this.modelKey = key;
   }
 
   private buildComposer(): void {
