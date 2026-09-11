@@ -93,24 +93,44 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      # A short, unique, human-readable build id. The short SHA is what the
+      # release body and the APK filename both use, so the file on the phone
+      # can be matched to a commit without opening anything.
+      - name: Compute build id
+        id: build
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Rename APK to include the build id
+        run: |
+          set -euo pipefail
+          src=android/app/build/outputs/apk/debug/app-debug.apk
+          dst="android/app/build/outputs/apk/debug/oval-${{ steps.build.outputs.short }}.apk"
+          mv "$src" "$dst"
+          echo "APK: $dst ($(( $(stat -c%s "$dst") / 1000000 )) MB)"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: oval-${{ steps.build.outputs.short }}
+          path: android/app/build/outputs/apk/debug/oval-${{ steps.build.outputs.short }}.apk
           if-no-files-found: error
 
-      # Publishes to the rolling `latest` release, so there is one stable,
-      # public, non-expiring download URL:
-      #   https://github.com/joshworley21-rgb/Game-idea/releases/latest
-      # The tag is moved to each new build rather than accumulating a release
-      # per commit. `make_latest` keeps it the one the /latest redirect hits.
-      - name: Publish APK to release
+      # One release per commit, tagged build-<short sha>, with the APK named
+      # after the same commit. The rolling `latest` tag is still moved to the
+      # newest build so /releases/latest keeps working, but it is no longer
+      # the only way to get a build.
+      #
+      # Why per-commit releases: the old workflow reused the tag `latest` and
+      # overwrote app-debug.apk in place. The download URL never changed, so
+      # browsers and Android served the previously downloaded file from cache
+      # and a new build was indistinguishable from the old one. A unique tag
+      # and a unique filename make every build a distinct download.
+      - name: Publish APK to a per-commit release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Latest build
+          tag_name: build-${{ steps.build.outputs.short }}
+          name: Build ${{ steps.build.outputs.short }}
           body: |
             Debug-signed Android build of Oval, from commit ${{ github.sha }}.
 
@@ -121,5 +141,5 @@ jobs:
 
             **Debug-signed.** Fine for sideloading and for passing round; not
             fine for the Play Store, where a signature needs to mean something.
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/debug/oval-${{ steps.build.outputs.short }}.apk
           make_latest: true
