@@ -1,0 +1,284 @@
+name: Process model
+
+# One-off. Converts a source FBX/GLB into a single self-contained, optimised
+# GLB and attaches it to the v0.1-assets release, where `npm run assets` picks
+# it up.
+#
+# Run it from the Actions tab: Actions -> Process model -> Run workflow.
+# Give it either a URL to download, or leave the URL blank to use a file you
+# committed under assets-src/.
+#
+# This is deliberately manual-only. It rewrites a release asset that every
+# APK build depends on, so it should never fire on a push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: "URL of the source .fbx or .glb. Blank = use assets-src/<source_file>."
+        required: false
+        type: string
+      source_file:
+        description: "Filename to look for in assets-src/ when no URL is given."
+        required: false
+        default: "OvalOffice.glb"
+        type: string
+      asset_name:
+        description: "Name to publish the result under on the release."
+        required: false
+        default: "OvalOffice.glb"
+        type: string
+      texture_size:
+        description: "Max texture edge in pixels."
+        required: false
+        default: "1024"
+        type: string
+      simplify_error:
+        description: "Simplification budget, 0 disables. 0.005 is gentle, 0.02 is aggressive."
+        required: false
+        default: "0.01"
+        type: string
+      strip_exterior:
+        description: "Delete meshes whose name matches the strip pattern below."
+        required: false
+        default: false
+        type: boolean
+      strip_pattern:
+        description: "Case-insensitive regex of mesh names to delete when stripping."
+        required: false
+        default: "exterior|facade|outside|shell|roof|terrain|ground|landscape"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: process-model
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve the source file
+        id: src
+        env:
+          SOURCE_URL: ${{ inputs.source_url }}
+          SOURCE_FILE: ${{ inputs.source_file }}
+        run: |
+          set -euo pipefail
+          mkdir -p work
+
+          if [ -n "$SOURCE_URL" ]; then
+            echo "Downloading $SOURCE_URL"
+            curl -fL --retry 3 --retry-delay 5 -o "work/$SOURCE_FILE" "$SOURCE_URL"
+          else
+            if [ ! -f "assets-src/$SOURCE_FILE" ]; then
+              echo "::error::No URL given and assets-src/$SOURCE_FILE does not exist."
+              echo "Either pass a source_url, or commit the file to assets-src/ first."
+              exit 1
+            fi
+            cp "assets-src/$SOURCE_FILE" "work/$SOURCE_FILE"
+          fi
+
+          test -s "work/$SOURCE_FILE" || {
+            echo "::error::work/$SOURCE_FILE is empty — the download was truncated."
+            exit 1
+          }
+          ls -lh "work/$SOURCE_FILE"
+
+          ext="${SOURCE_FILE##*.}"
+          echo "ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      # gltf-transform reads glTF/GLB only. FBX has to go through Blender,
+      # which is the one FBX importer that is actually maintained and has a
+      # working headless Linux build. fbx2gltf is unmaintained and its output
+      # would need this same pass anyway.
+      - name: Convert FBX to GLB
+        if: steps.src.outputs.ext == 'fbx'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq blender
+
+          blender --background --factory-startup --python-expr "
+          import bpy, sys
+          bpy.ops.wm.read_factory_settings(use_empty=True)
+          bpy.ops.import_scene.fbx(filepath='work/${{ inputs.source_file }}')
+          bpy.ops.export_scene.gltf(
+              filepath='work/converted.glb',
+              export_format='GLB',
+              export_apply=True,
+              export_yup=True,
+          )
+          " 2>&1 | tail -40
+
+          test -s work/converted.glb || {
+            echo "::error::Blender produced no output. Check the import log above."
+            exit 1
+          }
+          ls -lh work/converted.glb
+
+      - name: Pick the input for gltf-transform
+        id: pick
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.src.outputs.ext }}" = "fbx" ]; then
+            echo "input=work/converted.glb" >> "$GITHUB_OUTPUT"
+          else
+            echo "input=work/${{ inputs.source_file }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Strip runs as its own pass so the log says plainly how many meshes went,
+      # rather than burying it in the optimise output.
+      - name: Strip exterior meshes
+        if: inputs.strip_exterior
+        env:
+          STRIP_PATTERN: ${{ inputs.strip_pattern }}
+        run: |
+          set -euo pipefail
+          npx gltf-transform prune "${{ steps.pick.outputs.input }}" work/stripped.glb
+
+          node --input-type=module -e '
+          import { NodeIO } from "@gltf-transform/core";
+          import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
+
+          const pattern = new RegExp(process.env.STRIP_PATTERN, "i");
+          const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+          const doc = await io.read("work/stripped.glb");
+
+          let removed = 0;
+          for (const node of doc.getRoot().listNodes()) {
+            const mesh = node.getMesh();
+            if (!mesh) continue;
+            const name = `${node.getName()} ${mesh.getName()}`;
+            if (pattern.test(name)) {
+              console.log(`  removing: ${name.trim()}`);
+              node.dispose();
+              removed++;
+            }
+          }
+
+          if (removed === 0) {
+            console.log("  no meshes matched — nothing stripped");
+          } else {
+            console.log(`  removed ${removed} node(s)`);
+          }
+
+          await io.write("work/stripped.glb", doc);
+          '
+
+          echo "input=work/stripped.glb" >> "$GITHUB_OUTPUT"
+        id: strip
+
+      - name: Optimise
+        id: opt
+        env:
+          INPUT: ${{ inputs.strip_exterior && 'work/stripped.glb' || steps.pick.outputs.input }}
+          TEXTURE_SIZE: ${{ inputs.texture_size }}
+          SIMPLIFY_ERROR: ${{ inputs.simplify_error }}
+        run: |
+          set -euo pipefail
+
+          args=(
+            optimize "$INPUT" work/optimised.glb
+            --compress quantize
+            --texture-compress webp
+            --texture-size "$TEXTURE_SIZE"
+          )
+
+          # A simplify error of 0 means "leave the geometry alone", which is
+          # what you want for a model whose silhouette is the whole point.
+          if [ "$SIMPLIFY_ERROR" != "0" ]; then
+            args+=(--simplify true --simplify-error "$SIMPLIFY_ERROR")
+          fi
+
+          echo "gltf-transform ${args[*]}"
+          npx gltf-transform "${args[@]}"
+
+          test -s work/optimised.glb || {
+            echo "::error::gltf-transform produced no output."
+            exit 1
+          }
+
+          bytes=$(stat -c%s work/optimised.glb)
+          mb=$((bytes / 1000000))
+          echo "size_mb=$mb" >> "$GITHUB_OUTPUT"
+          echo "Result: $((bytes / 1000000)).$(( (bytes % 1000000) / 100000 )) MB"
+
+          if [ "$mb" -gt 25 ]; then
+            echo "::warning::Output is ${mb} MB, above the 25 MB target. Lower texture_size or raise simplify_error."
+          fi
+
+      - name: Verify the result loads
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+          import { NodeIO } from "@gltf-transform/core";
+          import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
+
+          const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+          const doc = await io.read("work/optimised.glb");
+          const root = doc.getRoot();
+
+          const meshes = root.listMeshes();
+          const textures = root.listTextures();
+          const materials = root.listMaterials();
+
+          let tris = 0;
+          for (const mesh of meshes) {
+            for (const prim of mesh.listPrimitives()) {
+              const indices = prim.getIndices();
+              const position = prim.getAttribute("POSITION");
+              tris += indices ? indices.getCount() / 3 : (position?.getCount() ?? 0) / 3;
+            }
+          }
+
+          console.log(`meshes:    ${meshes.length}`);
+          console.log(`materials: ${materials.length}`);
+          console.log(`textures:  ${textures.length}`);
+          console.log(`triangles: ${Math.round(tris).toLocaleString()}`);
+
+          // A GLB with no meshes is a broken export, not a small one.
+          if (meshes.length === 0) {
+            console.error("::error::No meshes in the output — the export is empty.");
+            process.exit(1);
+          }
+          if (textures.length === 0) {
+            console.warn("::warning::No textures in the output. If the source had embedded textures, they were lost.");
+          }
+          '
+
+      - name: Publish to the v0.1-assets release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_NAME: ${{ inputs.asset_name }}
+        run: |
+          set -euo pipefail
+          cp work/optimised.glb "work/$ASSET_NAME"
+
+          # --clobber replaces the existing asset in place. Without it the
+          # upload fails on a name collision, which is the common case here.
+          gh release upload v0.1-assets "work/$ASSET_NAME" --clobber
+
+          echo "Published $ASSET_NAME (${{ steps.opt.outputs.size_mb }} MB)"
+          gh release view v0.1-assets --json assets \
+            --jq '.assets[] | "  \(.name)  \(.size / 1000000 | floor) MB"'
+
+      - name: Upload as a workflow artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-model
+          path: work/optimised.glb
+          if-no-files-found: error
