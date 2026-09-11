@@ -19,9 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Capacitor 8 requires Node >= 22; the CLI hard-fails on 20.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - uses: actions/setup-java@v4
@@ -74,7 +75,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
