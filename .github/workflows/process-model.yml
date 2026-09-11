@@ -235,7 +235,12 @@ jobs:
           OUTPUT_ASSET: ${{ inputs.output_asset }}
         run: |
           set -euo pipefail
-          cp OvalOffice.glb "$OUTPUT_ASSET"
+
+          # Only rename when the requested name differs from what gltfpack
+          # wrote. `cp a a` is an error, and OvalOffice.glb is the default.
+          if [ "$OUTPUT_ASSET" != "OvalOffice.glb" ]; then
+            cp OvalOffice.glb "$OUTPUT_ASSET"
+          fi
 
           # --clobber replaces the existing asset in place. Without it the
           # upload fails on a name collision, which is the common case here.
