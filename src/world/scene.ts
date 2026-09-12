@@ -240,17 +240,9 @@ export class World {
         this.orbit.minPolarAngle = Math.PI * 0.12;
         this.orbit.maxPolarAngle = Math.PI * 0.88;
         // Touch: one finger looks around, two fingers pinch to zoom
-        this.orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        this.orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
         this.rig = new SeatRig(this.camera, this.orbit, seats);
-
-        // Pivot straight ahead at eye level, so drags pivot around the room
-        this.orbit.target.set(
-          this.camera.position.x,
-          this.camera.position.y,
-          this.camera.position.z - 2,
-        );
-        this.orbit.update();
 
         this.addModelKeyLight(seats[0].target);
         this.renderer.toneMappingExposure = 1.2;
