@@ -8,7 +8,6 @@ import { CRISES } from "./crises.ts";
 import { CONVERSATIONS, conversationById } from "./conversations.ts";
 import type { CampaignDeltas } from "./campaign.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
-import { buildEnding, checkFailState, isTermOver } from "./endings.ts";
 import { generateNews, pushNews } from "./news.ts";
 import { createSimContext } from "./sim.ts";
 import type { MonthReport, SimContext } from "./sim.ts";
