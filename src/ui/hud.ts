@@ -7,10 +7,27 @@ import { band, bandLow, statLine } from "./panels/host.ts";
 /**
  * The always-on overlay: date, action points, the nation, and you.
  *
- * The band helpers and `statLine` live in `panels/host.ts` and are imported
- * rather than duplicated — they were copy-pasted here, which meant a change
- * to how a stat is coloured had to be made in two places.
+ * The nation and self panels are collapsible drawers that slide in from the
+ * screen edges, so the 3D scene is not permanently framed by two columns of
+ * numbers. The station buttons and end-of-month actions live in one scrollable
+ * dock at the bottom instead of two bulky clusters in the corners.
  */
+
+/** Icon glyphs for the two edge tabs. Drawn inline so there is no icon font. */
+const NATION_GLYPH = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 19v-5M10 19V8M15 19v-7M20 19V5"/></svg>`;
+const SELF_GLYPH = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="7.5" r="3.4"/><path d="M5.5 20c1.4-3.6 3.7-5.1 6.5-5.1s5.1 1.5 6.5 5.1"/></svg>`;
+
+function edgeTab(side: "left" | "right", glyph: string, label: string): HTMLButtonElement {
+  return el("button", {
+    class: `edge-tab edge-tab-${side}`,
+    type: "button",
+    title: label,
+    "aria-label": label,
+    "aria-expanded": "false",
+    html: glyph,
+  }) as HTMLButtonElement;
+}
+
 export class Hud {
   readonly root: HTMLElement;
   private readonly touch = matchMedia("(pointer: coarse)").matches;
@@ -21,14 +38,21 @@ export class Hud {
   private self = el("div", { class: "hud-card", id: "hud-self" });
   private prompt = el("div", { id: "prompt" });
   private crosshair = el("div", { id: "crosshair" });
-  private actions = el("div", { class: "hud-card", id: "hud-actions" });
+  private actions = el("div", { class: "dock-actions", id: "hud-actions" });
   private endButton: HTMLButtonElement;
-  private legend = el("div", { class: "hud-card", id: "hud-legend" });
+  private legend = el("div", { class: "dock-stations", id: "hud-legend" });
   /** Situations currently running; hidden when the country is calm. */
   private situations = el("div", { class: "hud-card", id: "hud-situations" });
   private roomReveal = el("div", { id: "room-reveal", "aria-live": "polite" });
   private roomRevealTimer = 0;
   private muteButton: HTMLButtonElement;
+
+  /** The slide-out homes of the two stat cards. */
+  private nationDrawer = el("div", { class: "drawer drawer-left", id: "drawer-nation" });
+  private selfDrawer = el("div", { class: "drawer drawer-right", id: "drawer-self" });
+  private nationTab: HTMLButtonElement;
+  private selfTab: HTMLButtonElement;
+  private dock = el("nav", { class: "dock", "aria-label": "Quick actions" });
 
   constructor(
     onEndMonth: () => void,
@@ -77,17 +101,34 @@ export class Hud {
       );
     });
 
+    // The two stat cards slide out from their edge tabs.
+    this.nationDrawer.append(this.nation);
+    this.selfDrawer.append(this.self);
+    this.nationTab = edgeTab("left", NATION_GLYPH, "The Nation");
+    this.selfTab = edgeTab("right", SELF_GLYPH, "You");
+    this.nationTab.addEventListener("click", () => this.toggleDrawer(this.nationDrawer, this.nationTab));
+    this.selfTab.addEventListener("click", () => this.toggleDrawer(this.selfDrawer, this.selfTab));
+
+    this.dock.append(this.legend, this.actions);
+
     this.root = el("div", { id: "hud" }, [
       this.date,
       this.power,
-      this.nation,
-      this.self,
-      this.actions,
-      this.legend,
       this.situations,
       this.roomReveal,
+      this.nationDrawer,
+      this.selfDrawer,
+      this.nationTab,
+      this.selfTab,
+      this.dock,
     ]);
     document.body.append(this.crosshair, this.prompt);
+  }
+
+  private toggleDrawer(drawer: HTMLElement, tab: HTMLButtonElement): void {
+    const open = drawer.classList.toggle("open");
+    tab.classList.toggle("active", open);
+    tab.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   /** Reflects the stored preference once audio starts. */
