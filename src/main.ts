@@ -38,10 +38,14 @@ class Game {
   private queue: Modal[] = [];
   private nearest: StationId | null = null;
   private ended = false;
+  /** True once the Oval model is on screen. */
+  private ready = false;
+  private readyWaiters: (() => void)[] = [];
 
   constructor(engine: Engine) {
     this.engine = engine;
     this.world = new World(canvas);
+    this.world.onReady = () => this.onWorldReady();
     this.hud = new Hud(
       () => this.endMonth(),
       () => this.open(() => dashboardPanel(this.engine, this.host)),
@@ -133,6 +137,19 @@ class Game {
 
   /** Returns true when the press was handled and should not exit the app. */
   onBack: () => boolean = () => false;
+
+  /** Fires when the Oval is on screen. Releases the cutscene if it is waiting. */
+  private onWorldReady(): void {
+    this.ready = true;
+    for (const fn of this.readyWaiters) fn();
+    this.readyWaiters.length = 0;
+  }
+
+  /** Resolves once the Oval is visible, or immediately if it already is. */
+  whenReady(): Promise<void> {
+    if (this.ready) return Promise.resolve();
+    return new Promise((resolve) => this.readyWaiters.push(resolve));
+  }
 
   /**
    * Pulls in the furniture models. The room renders immediately and fills in
@@ -320,7 +337,10 @@ function titleScreen(): void {
         })()
       : new Engine({ name: nameInput.value.trim() || "President Reyes", party });
     if (!state && campaign) engine.applyCampaignResult(campaign.deltas, campaign.summary);
-    openingCutscene(() => new Game(engine));
+    // The world is built behind the cutscene, and the cutscene holds until
+    // the Oval model is actually on screen.
+    const game = new Game(engine);
+    openingCutscene(game.whenReady());
   };
 
   const saved = hasSave() ? loadGame() : null;
@@ -443,7 +463,7 @@ function campaignScreen(
     el("div", { class: "title-card" }, [
       el("div", { class: "title-mark" }, ["Before the oath"]),
       el("div", { class: "title-tag" }, [CAMPAIGN_INTRO]),
-      el("div", { class: "title-actions" }, [
+            el("div", { class: "title-actions" }, [
         el("button", { class: "btn primary", onclick: () => renderBeat(CAMPAIGN_START) }, ["Begin"]),
       ]),
     ]),
@@ -454,10 +474,10 @@ function campaignScreen(
 
 /**
  * The opening crawl. It plays over a black screen while the Oval model
- * downloads, and only hands over once the world says it is ready — so the
+ * downloads, and holds on the last line until `ready` resolves — so the
  * procedural stand-in is never visible.
  */
-function openingCutscene(onDone: () => void): void {
+function openingCutscene(ready: Promise<void>): void {
   const lines = [
     "January. The first month.",
     "The Oval is yours now. The desk, the phone, the door to the study.",
@@ -467,41 +487,67 @@ function openingCutscene(onDone: () => void): void {
 
   const overlay = el("div", { class: "cutscene" });
   const text = el("div", { class: "cutscene-line" });
-  overlay.append(text);
+  const hint = el("div", { class: "cutscene-hint" }, ["Tap to continue"]);
+  overlay.append(text, hint);
   document.body.append(overlay);
 
   let index = 0;
   let timer = 0;
+  let worldReady = false;
+  let dismissed = false;
+
+  ready.then(() => {
+    worldReady = true;
+  });
 
   const finish = () => {
+    if (dismissed) return;
+    dismissed = true;
     clearTimeout(timer);
     overlay.classList.add("cutscene-out");
-    setTimeout(() => {
-      overlay.remove();
-      onDone();
-    }, 700);
+    setTimeout(() => overlay.remove(), 700);
   };
 
-  const advance = () => {
-    if (index >= lines.length) {
-      finish();
-      return;
-    }
+  const showLine = () => {
     text.textContent = lines[index];
     text.classList.remove("cutscene-in");
     // Force a reflow so the animation restarts on each line.
     void text.offsetWidth;
     text.classList.add("cutscene-in");
+  };
+
+  const advance = () => {
+    clearTimeout(timer);
     index += 1;
-    timer = window.setTimeout(advance, 2600);
+    if (index < lines.length) {
+      showLine();
+      timer = window.setTimeout(advance, 2600);
+      return;
+    }
+    // Past the last line: hold here until the Oval is on screen.
+    text.textContent = lines[lines.length - 1];
+    hint.classList.add("visible");
+    if (worldReady) {
+      finish();
+      return;
+    }
+    // Poll rather than await, so a tap can still skip ahead.
+    timer = window.setTimeout(() => {
+      if (worldReady) finish();
+      else advance();
+    }, 400);
   };
 
   overlay.addEventListener("pointerdown", () => {
-    clearTimeout(timer);
+    if (index >= lines.length - 1 && worldReady) {
+      finish();
+      return;
+    }
     advance();
   });
 
-  advance();
+  showLine();
+  timer = window.setTimeout(advance, 2600);
 }
 
 titleScreen();
