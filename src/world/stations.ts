@@ -3,8 +3,6 @@ import { STATION_INFO } from "../game/actions.ts";
 import type { StationId } from "../game/types.ts";
 import type { StationAnchor } from "./roomkit.ts";
 
-const REACH = 1.9;
-
 function labelTexture(title: string, hint: string, active: boolean): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -63,7 +61,7 @@ export class Stations {
     this.rebuild(anchors);
   }
 
-  /** Replaces every marker, for when the president walks into another room. */
+  /** Replaces every marker, for when the president switches rooms or viewpoints. */
   rebuild(anchors: StationAnchor[]): void {
     for (const v of this.visuals) {
       v.ring.geometry.dispose();
@@ -93,7 +91,7 @@ export class Stations {
       const info = STATION_INFO[anchor.id];
       const sprite = new THREE.Sprite(
         new THREE.SpriteMaterial({
-          map: labelTexture(info.name, this.touch ? "tap to open" : "walk closer", false),
+          map: labelTexture(info.name, "tap to open", false),
           transparent: true,
           depthTest: false,
         }),
@@ -127,51 +125,23 @@ export class Stations {
 
   private refreshLabel(v: StationVisual): void {
     const info = STATION_INFO[v.anchor.id];
-    const hint = v.badge > 0
-      ? "NEEDS YOU NOW"
-      : this.touch
-        ? "tap to open"
-        : v.active
-          ? "press E to open"
-          : "walk closer";
+    const hint = v.badge > 0 ? "NEEDS YOU NOW" : "tap to open";
     v.sprite.material.map?.dispose();
-    v.sprite.material.map = labelTexture(info.name, hint, v.active || v.badge > 0);
+    v.sprite.material.map = labelTexture(info.name, hint, v.badge > 0);
     v.sprite.material.needsUpdate = true;
   }
 
-  update(dt: number, playerPosition: THREE.Vector3): StationId | null {
+  update(dt: number): void {
     this.clock += dt;
-    let best: StationVisual | null = null;
-    let bestDist = REACH;
-
     for (const v of this.visuals) {
-      const dist = v.anchor.position.distanceTo(
-        new THREE.Vector3(playerPosition.x, 0, playerPosition.z),
-      );
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = v;
-      }
-    }
-
-    for (const v of this.visuals) {
-      const active = v === best;
-      if (active !== v.active) {
-        v.active = active;
-        this.refreshLabel(v);
-      }
       const urgent = v.badge > 0;
       const pulse = 0.5 + 0.5 * Math.sin(this.clock * (urgent ? 5 : 2) + v.anchor.position.x);
-      v.ring.material.opacity = (active ? 0.55 : urgent ? 0.4 : 0.18) + pulse * (urgent ? 0.35 : 0.14);
+      v.ring.material.opacity = (urgent ? 0.4 : 0.18) + pulse * (urgent ? 0.35 : 0.14);
       v.ring.material.color.setHex(urgent ? 0xe06a4a : 0xe2c16e);
-      const scale = active ? 1.12 : 1;
-      v.ring.scale.setScalar(scale + pulse * 0.03);
+      v.ring.scale.setScalar(1 + pulse * 0.03);
       v.sprite.position.y = 1.62 + Math.sin(this.clock * 1.4 + v.anchor.position.z) * 0.03;
-      v.sprite.material.opacity = active ? 1 : urgent ? 0.95 : 0.6;
+      v.sprite.material.opacity = urgent ? 0.95 : 0.6;
     }
-
-    this.nearest = best?.anchor.id ?? null;
-    return this.nearest;
   }
 
   /** Shrinks the floating labels on small screens. */
