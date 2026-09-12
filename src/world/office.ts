@@ -6,6 +6,16 @@ import type { StationId } from "../game/types.ts";
 /** Interior half-axes of the oval room, in metres. */
 export const ROOM = { rx: 5.45, rz: 4.4, height: 4.3, wallThickness: 0.35 };
 
+/**
+ * Camera pose measured in the loaded Oval Office GLB with the in-game freecam.
+ * The GLB is authored at a different origin and scale than the procedural room,
+ * so this pose only applies to the loaded model, never the procedural fallback.
+ */
+export const OVAL_MODEL_POSE = {
+  position: new THREE.Vector3(69.03, -7.09, 28.42),
+  target: new THREE.Vector3(69.09, -7.1, 28.86),
+};
+
 /** The point on the inside face of the wall directly behind a given x. */
 function wallPointNorth(x: number): number {
   const t = Math.min(0.999, Math.abs(x) / ROOM.rx);
