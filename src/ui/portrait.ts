@@ -68,9 +68,6 @@ class PortraitRenderer {
   private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
-  private key: THREE.DirectionalLight | null = null;
-  private fill: THREE.DirectionalLight | null = null;
-  private rim: THREE.DirectionalLight | null = null;
   private current: Character | null = null;
   /** Set once a context has failed, so we stop trying and fall back to initials. */
   private broken = false;
@@ -97,7 +94,9 @@ class PortraitRenderer {
       camera.position.set(0, 1.62, 1.05);
       camera.lookAt(0, 1.6, 0);
 
-      // Three-point lighting, matching the warm interior the rooms use.
+      // Three-point lighting, matching the warm interior the rooms use. The
+      // lights are added to the scene and never touched again, so they are
+      // locals rather than fields.
       const key = new THREE.DirectionalLight(0xfff2dd, 2.1);
       key.position.set(0.7, 1.9, 1.5);
       const fill = new THREE.DirectionalLight(0xbfd0e8, 0.7);
@@ -109,9 +108,6 @@ class PortraitRenderer {
       this.renderer = renderer;
       this.scene = scene;
       this.camera = camera;
-      this.key = key;
-      this.fill = fill;
-      this.rim = rim;
       return true;
     } catch {
       this.broken = true;
