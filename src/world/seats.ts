@@ -33,6 +33,14 @@ const SEATED_EYE = 1.42;
 /** Standing eye height, for the door seat. */
 const STANDING_EYE = 1.66;
 
+/** Field of view bounds for pinch/wheel zooming while seated. */
+const MIN_FOV = 35;
+const MAX_FOV = 75;
+
+/** Limits on how far up and down the player can crane their neck. */
+const MIN_PITCH = -Math.PI * 0.38;
+const MAX_PITCH = Math.PI * 0.38;
+
 /**
  * The GLB contains the whole White House and its grounds, so the model's own
  * bounding box floor is the lawn, several metres below the Oval Office carpet.
@@ -227,30 +235,54 @@ export function buildSeats(model: THREE.Object3D): Seat[] {
 }
 
 /**
- * Holds the camera at one seat and glides between them. There is no walking:
- * the only way the view changes is `goTo`, which eases position and target
- * together over a fixed duration.
- *
- * While seated, the player can look around and zoom freely, but cannot pan:
- * the camera stays anchored in the chair.
+ * Keeps the camera in the seat and pivots in place.
+ * Translates purely between authored seats; drags rotate the head,
+ * and pinch changes field of view rather than dolly distance.
+ * OrbitControls is kept idle as a dummy so scene.ts doesn't break.
  */
 export class SeatRig {
   readonly seats: Seat[];
   private camera: THREE.PerspectiveCamera;
   private controls: OrbitControls;
+  private dom: HTMLElement;
   private fromPosition = new THREE.Vector3();
   private fromTarget = new THREE.Vector3();
   private toPosition = new THREE.Vector3();
   private toTarget = new THREE.Vector3();
+  private look = new THREE.Vector3();
   private elapsed = GLIDE_SECONDS;
   private current: Seat;
 
-  constructor(camera: THREE.PerspectiveCamera, controls: OrbitControls, seats: Seat[]) {
+  // Head rotation in radians. Yaw is horizontal, pitch is vertical.
+  private yaw = 0;
+  private pitch = 0;
+
+  // Touch tracking for look and pinch-zoom
+  private pointers = new Map<number, { x: number; y: number }>();
+  private lookPointer: number | null = null;
+  private pinchDistance = 0;
+
+  constructor(
+    camera: THREE.PerspectiveCamera,
+    controls: OrbitControls,
+    seats: Seat[],
+    dom: HTMLElement,
+  ) {
     this.camera = camera;
     this.controls = controls;
     this.seats = seats;
+    this.dom = dom;
     this.current = seats[0];
+
+    // Disable orbit so it doesn't fight the head-turn
+    this.controls.enabled = false;
+
     this.snapTo(seats[0]);
+    this.dom.addEventListener("pointerdown", this.onPointerDown);
+    window.addEventListener("pointermove", this.onPointerMove);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
+    this.dom.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
   get currentId(): string {
@@ -265,13 +297,12 @@ export class SeatRig {
   snapTo(seat: Seat): void {
     this.current = seat;
     this.camera.position.copy(seat.position);
-    this.controls.target.copy(seat.target);
-    this.controls.update();
     this.fromPosition.copy(seat.position);
     this.fromTarget.copy(seat.target);
     this.toPosition.copy(seat.position);
     this.toTarget.copy(seat.target);
     this.elapsed = GLIDE_SECONDS;
+    this.aimAt(seat.target);
   }
 
   /** Eases to a seat by id. Unknown ids are ignored. */
@@ -280,22 +311,125 @@ export class SeatRig {
     if (!seat || seat === this.current) return false;
     this.current = seat;
     this.fromPosition.copy(this.camera.position);
-    this.fromTarget.copy(this.controls.target);
+    this.fromTarget.copy(this.current.target);
     this.toPosition.copy(seat.position);
     this.toTarget.copy(seat.target);
     this.elapsed = 0;
     return true;
   }
 
-  /** Advances the glide. Called once per frame from the render loop. */
+  /** Advances the glide. Called once per frame. */
   update(dt: number): void {
     if (this.elapsed >= GLIDE_SECONDS) return;
     this.elapsed = Math.min(GLIDE_SECONDS, this.elapsed + dt);
     const t = this.elapsed / GLIDE_SECONDS;
-    // Smoothstep, so the move settles rather than stopping dead.
     const k = t * t * (3 - 2 * t);
     this.camera.position.lerpVectors(this.fromPosition, this.toPosition, k);
-    this.controls.target.lerpVectors(this.fromTarget, this.toTarget, k);
-    this.controls.update();
+    this.look.lerpVectors(this.fromTarget, this.toTarget, k);
+    this.aimAt(this.look);
+  }
+
+  /** Points the head at a world-position target. */
+  private aimAt(target: THREE.Vector3): void {
+    const dx = target.x - this.camera.position.x;
+    const dy = target.y - this.camera.position.y;
+    const dz = target.z - this.camera.position.z;
+    this.yaw = Math.atan2(-dx, -dz);
+    this.pitch = THREE.MathUtils.clamp(
+      Math.atan2(dy, Math.hypot(dx, dz)),
+      MIN_PITCH,
+      MAX_PITCH,
+    );
+    this.applyRotation();
+  }
+
+  private applyRotation(): void {
+    this.camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
+  }
+
+  dispose(): void {
+    this.dom.removeEventListener("pointerdown", this.onPointerDown);
+    window.removeEventListener("pointermove", this.onPointerMove);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerUp);
+    this.dom.removeEventListener("wheel", this.onWheel);
+  }
+
+  private onPointerDown = (e: PointerEvent): void => {
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pointers.size === 1) {
+      this.lookPointer = e.pointerId;
+      return;
+    }
+    if (this.pointers.size === 2) {
+      this.lookPointer = null;
+      this.pinchDistance = this.getDistance();
+    }
+  };
+
+  private onPointerMove = (e: PointerEvent): void => {
+    const tracked = this.pointers.get(e.pointerId);
+    if (!tracked) return;
+    const dx = e.clientX - tracked.x;
+    const dy = e.clientY - tracked.y;
+    tracked.x = e.clientX;
+    tracked.y = e.clientY;
+
+    if (this.pointers.size >= 2) {
+      const dist = this.getDistance();
+      if (this.pinchDistance > 0) {
+        const delta = dist - this.pinchDistance;
+        this.camera.fov = THREE.MathUtils.clamp(
+          this.camera.fov - delta * 0.1,
+          MIN_FOV,
+          MAX_FOV,
+        );
+        this.camera.updateProjectionMatrix();
+      }
+      this.pinchDistance = dist;
+      return;
+    }
+
+    if (e.pointerId === this.lookPointer) {
+      const sens = e.pointerType === "touch" ? 0.0032 : 0.0022;
+      this.yaw -= dx * sens;
+      this.pitch = THREE.MathUtils.clamp(
+        this.pitch - dy * sens,
+        MIN_PITCH,
+        MAX_PITCH,
+      );
+      this.applyRotation();
+    }
+  };
+
+  private onPointerUp = (e: PointerEvent): void => {
+    this.pointers.delete(e.pointerId);
+    if (e.pointerId === this.lookPointer) {
+      this.lookPointer = null;
+      // If one finger remains, promote it to lookPointer
+      if (this.pointers.size === 1) {
+        this.lookPointer = this.pointers.keys().next().value ?? null;
+      }
+    }
+    if (this.pointers.size < 2) {
+      this.pinchDistance = 0;
+    }
+  };
+
+  private onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    this.camera.fov = THREE.MathUtils.clamp(
+      this.camera.fov + e.deltaY * 0.04,
+      MIN_FOV,
+      MAX_FOV,
+    );
+    this.camera.updateProjectionMatrix();
+  };
+
+  private getDistance(): number {
+    if (this.pointers.size < 2) return 0;
+    const [a, b] = Array.from(this.pointers.values());
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 }
+
