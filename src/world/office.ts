@@ -417,8 +417,10 @@ export function buildOffice(): RoomBuild {
     group,
     anchors,
     doors,
-    spawn: new THREE.Vector3(0, 0, 1.6),
-    spawnLook: new THREE.Vector3(0, 1.0, -2.75),
+    // Start the player in the chair behind the Resolute desk, looking out over
+    // it into the room. Spawn seats are not lifted by the rig, so y is set here.
+    spawn: new THREE.Vector3(0, 1.42, -3.6),
+    spawnLook: new THREE.Vector3(0, 1.0, 0.35),
     colliders: [{ minX: -1.25, maxX: 1.25, minZ: -3.5, maxZ: -2.1 }],
     cast: [],
     clamp: (p) => clampToRoom(p),
