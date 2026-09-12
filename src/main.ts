@@ -1,4 +1,5 @@
 import "./ui/style.css";
+import "./ui/consoleBanner.ts";
 import { Engine } from "./game/engine.ts";
 import type { Outcome } from "./game/engine.ts";
 import { clearSave, hasSave, loadGame, saveGame } from "./game/save.ts";
