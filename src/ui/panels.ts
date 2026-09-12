@@ -1,264 +1,267 @@
-// ------------------------------------------------------------------ budget
+// --------------------------------------------------------------- dashboard
 
-export function budgetPanel(engine: Engine, host: PanelHost): HTMLElement {
+export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
   const s = engine.state;
-  const due = engine.budgetPending();
-  const draft: Record<BudgetKey, number> = { ...s.enacted };
-  let taxRate = s.nation.taxRate;
+  const legacy = scoreLegacy(s);
+  const history = s.history;
 
-  const ledger = el("div", { class: "ledger" });
-  const rows = el("div", {});
+  const n = s.nation;
+  const left = el("div", {}, [
+    el("div", { class: "section-title" }, ["The nation"]),
+    statLine("Growth", `${one(n.growth)}%`, band(n.growth, 2, 0.8)),
+    statLine("Unemployment", `${one(n.unemployment)}%`, bandLow(n.unemployment, 5, 6.8)),
+    statLine("Inflation", `${one(n.inflation)}%`, bandLow(n.inflation, 3, 4.5)),
+    statLine("Debt / GDP", `${Math.round(n.debtToGdp)}%`, bandLow(n.debtToGdp, 105, 125)),
+    ...(s.threads.length
+      ? [
+          el("div", { class: "section-title" }, ["Situations running"]),
+          ...s.threads.map((t) =>
+            el("div", { class: "option", style: "margin-bottom:9px" }, [
+              el("div", { class: "option-top" }, [
+                el("span", { class: "option-label" }, [t.label]),
+                el("span", { class: "option-cost" }, [
+                  `${Math.round(t.intensity)} · ${t.drift > 0 ? "worsening" : "easing"} · month ${t.age + 1}`,
+                ]),
+              ]),
+              el("div", { class: "option-detail" }, [t.detail]),
+              el("div", { class: "meter-track", style: "margin-top:8px" }, [
+                el("div", {
+                  class: `meter-fill ${t.intensity > 60 ? "bad" : t.intensity > 30 ? "warn" : "ok"}`,
+                  style: `width:${t.intensity}%`,
+                }),
+              ]),
+            ]),
+          ),
+        ]
+      : []),
+    el("div", { class: "section-title" }, ["Public services"]),
+    ...BUDGET_KEYS.map((k) => meter(BUDGET_LABELS[k], s.nation.sectors[k])),
+    el("div", { class: "section-title" }, ["Upstairs"]),
+    ...familyRoster(s),
+    el("div", { class: "section-title" }, ["Your cabinet"]),
+    ...(s.cabinet ?? []).map((person) => {
+      const def = FACTION_BY_KEY.get(person.faction);
+      const loyalTone = person.loyalty >= 55 ? "ok" : person.loyalty >= 35 ? "warn" : "bad";
+      // A secretary who has stopped believing in you looks it.
+      const mood = person.loyalty < 35 ? "guarded" : person.loyalty < 55 ? "concerned" : "neutral";
+      return personRow({
+        seed: person.name,
+        name: person.name,
+        role: person.title,
+        mood,
+        meta: `${def?.short ?? "unaligned"} · ${person.months} months in post`,
+        bars: [
+          { label: "Competence", value: person.competence, tone: "ok" },
+          { label: "Loyalty", value: person.loyalty, tone: loyalTone },
+        ],
+      });
+    }),
+    el("div", { class: "section-title" }, ["Conditions"]),
+    meter("Security", s.nation.security),
+    meter("Global standing", s.nation.standing),
+    meter("Civil unrest", s.nation.unrest, true),
+    meter("Press relations", s.politics.media),
+    meter("Party backing", s.politics.party),
+    meter("Scandal exposure", s.politics.scandal, true),
+  ]);
 
-  const refresh = () => {
-    clear(ledger);
-    const revenue = (s.nation.gdp * taxRate) / 100;
-    const discretionary = totalDiscretionary(draft);
-    const interest = debtService(s);
-    const laws = legislatedSpending(s);
-    const deficit = discretionary + laws + interest - revenue;
-    const line = (k: string, v: string, tone = "") =>
-      el("div", { class: "stat-line" }, [
-        el("span", { class: "k" }, [k]),
-        el("span", { class: `v ${tone}` }, [v]),
-      ]);
-    ledger.append(
-      line("Revenue", money(revenue)),
-      line("Agency spending", money(-discretionary)),
-      laws ? line("Spending mandated by law", money(-laws)) : el("div", {}),
-      line("Interest on the debt", money(-interest)),
-      el("div", { class: "stat-line ledger-total" }, [
-        el("span", { class: "k" }, [deficit > 0 ? "Deficit" : "Surplus"]),
-        el("span", { class: `v ${deficit > 0 ? (deficit > revenue * 0.25 ? "bad" : "warn") : "ok"}` }, [
-          money(Math.abs(deficit)),
+  const right = el("div", {});
+
+  // The coalition board: approval broken into the people it is made of.
+  right.append(el("div", { class: "section-title" }, ["Your coalition"]));
+  const ranked = [...BLOCS].sort((a, b) => (s.blocs[b.key] ?? 50) - (s.blocs[a.key] ?? 50));
+  for (const def of ranked) {
+    const support = s.blocs[def.key] ?? 50;
+    const tone = support >= 55 ? "ok" : support >= 45 ? "warn" : "bad";
+    right.append(
+      el("div", { class: "bloc-row", title: def.cares }, [
+        el("div", { class: "bloc-head" }, [
+          el("span", {}, [def.short]),
+          el("span", { class: "bloc-share" }, [`${Math.round(def.weight * 100)}% of voters`]),
+          el("span", { class: `v ${tone}` }, [Math.round(support).toString()]),
         ]),
-      ]),
-      el("div", { class: "option-detail" }, [
-        `That is ${one((deficit / s.nation.gdp) * 100)}% of GDP. Debt stands at ${Math.round(s.nation.debtToGdp)}% and moves with the gap.`,
+        el("div", { class: "meter-track" }, [
+          el("div", { class: `meter-fill ${tone}`, style: `width:${support}%` }),
+        ]),
       ]),
     );
-  };
-
-  for (const key of BUDGET_KEYS) {
-    const need = SECTOR_NEED[key];
-    const amount = el("span", { class: "budget-amount" });
-    const slider = el("input", {
-      type: "range",
-      min: "0",
-      max: String(Math.round(need * 1.9)),
-      step: "5",
-      value: String(Math.round(draft[key])),
-      disabled: !due,
-    }) as HTMLInputElement;
-
-    const paint = () => {
-      const ratio = draft[key] / need;
-      clear(amount);
-      amount.append(
-        document.createTextNode(money(draft[key])),
-        el("span", { class: "budget-note" }, [
-          ratio >= 1.12 ? "well funded" : ratio >= 0.95 ? "holding" : ratio >= 0.8 ? "squeezed" : "starved",
+  }
+  // Congress, faction by faction: who holds the seats and how they feel today.
+  right.append(el("div", { class: "section-title" }, ["The floor"]));
+  for (const key of Object.keys(s.factions) as (keyof typeof s.factions)[]) {
+    const faction = s.factions[key];
+    const def = FACTION_BY_KEY.get(key);
+    if (!faction || !def) continue;
+    const tone = faction.mood >= 55 ? "ok" : faction.mood >= 45 ? "warn" : "bad";
+    right.append(
+      el("div", { class: "bloc-row", title: def.blurb }, [
+        el("div", { class: "bloc-head" }, [
+          el("span", {}, [def.short]),
+          el("span", { class: "bloc-share" }, [`${Math.round(faction.seats)} seats`]),
+          el("span", { class: `v ${tone}` }, [Math.round(faction.mood).toString()]),
         ]),
-      );
-    };
-    slider.addEventListener("input", () => {
-      draft[key] = Number(slider.value);
-      paint();
-      refresh();
-    });
-    paint();
-
-    rows.append(
-      el("div", { class: "budget-row" }, [
-        el("div", { class: "budget-name" }, [
-          BUDGET_LABELS[key],
-          el("small", {}, [`quality ${Math.round(s.nation.sectors[key])} · holds at ${money(need)}`]),
+        el("div", { class: "meter-track" }, [
+          el("div", { class: `meter-fill ${tone}`, style: `width:${faction.mood}%` }),
         ]),
-        slider,
-        amount,
       ]),
     );
   }
 
-  const taxValue = el("span", { class: "budget-amount" });
-  const taxSlider = el("input", {
-    type: "range",
-    min: "8",
-    max: "32",
-    step: "0.1",
-    value: String(taxRate),
-    disabled: !due,
-  }) as HTMLInputElement;
-  const paintTax = () => {
-    clear(taxValue);
-    taxValue.append(
-      document.createTextNode(`${one(taxRate)}%`),
-      el("span", { class: "budget-note" }, [`${one(taxRate - s.nation.taxRate)} vs today`]),
-    );
-  };
-  taxSlider.addEventListener("input", () => {
-    taxRate = Number(taxSlider.value);
-    paintTax();
-    refresh();
-  });
-  paintTax();
-  refresh();
+  const margin = electionMargin(s);
+  right.append(
+    el("div", { class: "option-detail", style: "margin-top:10px" }, [
+      margin > 0
+        ? `On these numbers you win re-election by about ${Math.round(margin)} points.`
+        : `On these numbers you lose re-election by about ${Math.round(-margin)} points.`,
+    ]),
+  );
 
-  const body = el("div", {}, [
-    el("div", { class: "section-title" }, ["Agency appropriations"]),
-    rows,
-    el("div", { class: "section-title" }, ["Federal tax take"]),
-    el("div", { class: "budget-row" }, [
-      el("div", { class: "budget-name" }, [
-        "Effective tax rate",
-        el("small", {}, ["Raising it funds the state and costs you at the polls."]),
+  if (history.length > 1) {
+    right.append(el("div", { class: "section-title" }, ["Since the inauguration"]));
+    const series: [string, number[], number, number, string][] = [
+      ["Approval", history.map((h) => h.approval), 20, 80, "#e2c16e"],
+      ["Growth", history.map((h) => h.growth), -3, 6, "#7fc294"],
+      ["Unrest", history.map((h) => h.unrest), 0, 100, "#e07a68"],
+      ["Your health", history.map((h) => h.health), 0, 100, "#8fb6e0"],
+    ];
+    for (const [label, values, min, max, tone] of series) {
+      right.append(
+        el("div", { style: "margin-bottom:14px" }, [
+          el("div", { class: "stat-line" }, [
+            el("span", { class: "k" }, [label]),
+            el("span", { class: "v" }, [one(values[values.length - 1])]),
+          ]),
+          sparkline(values, min, max, tone),
+        ]),
+      );
+    }
+  }
+
+  right.append(
+    el("div", { class: "section-title" }, ["Legacy so far"]),
+    el(
+      "div",
+      { class: "legacy-grid" },
+      [
+        ["Economy", legacy.economy],
+        ["Society", legacy.society],
+        ["World", legacy.standing],
+        ["Politics", legacy.politics],
+        ["Personal", legacy.personal],
+      ].map(([label, value]) =>
+        el("div", { class: "delta" }, [
+          el("div", { class: "k" }, [String(label)]),
+          el("div", { class: "v" }, [Math.round(Number(value)).toString()]),
+        ]),
+      ),
+    ),
+    el("div", { class: "option-detail" }, [
+      `Projected grade if the term ended today: ${gradeFor(legacy.total)} (${Math.round(legacy.total)}/100).`,
+    ]),
+    el("div", { class: "section-title" }, ["Recent headlines"]),
+    ...s.news.slice(0, 6).map((n) =>
+      el("div", { class: `headline ${n.tone}` }, [
+        el("div", { class: "headline-text" }, [n.headline]),
+        el("div", { class: "headline-meta" }, [`${n.source} · month ${n.month}`]),
       ]),
-      taxSlider,
-      taxValue,
-    ]),
-    el("div", { class: "section-title" }, ["The books"]),
-    ledger,
-  ]);
+    ),
+    el("div", { class: "section-title" }, ["Your record"]),
+    ...s.log.slice(0, 8).map((entry) =>
+      el("div", { class: "stat-line" }, [
+        el("span", { class: "k" }, [`M${entry.month}`]),
+        el("span", { class: "v" }, [entry.text]),
+      ]),
+    ),
+  );
 
-  const signButton = el("button", {
-    class: "btn primary",
-    disabled: !due || s.ap < 1,
-    onclick: () => {
-      if (engine.signBudget(draft, taxRate)) host.close();
-    },
-  }, [due ? "Sign the budget (1 action)" : "Not due until the fiscal year turns"]);
-
-  const foot = el("div", { class: "panel-foot" }, [
-    el("span", { class: due && s.ap < 1 ? "reason" : "option-detail" }, [
-      due && s.ap < 1
-        ? "No action points left. End the month and the government runs on a stopgap instead."
-        : due
-          ? "Leave it unsigned and the government runs on a stopgap, which costs you standing."
-          : `Next budget due in ${12 - ((s.month - 1) % 12)} months.`,
-    ]),
-    signButton,
-  ]);
-
+  const body = el("div", { class: "two-col" }, [left, right]);
   return panel(
-    "The Cabinet Table",
-    `Year ${calendar(s.month).year} Budget`,
-    "Every agency degrades toward the money you give it. The cost of standing still rises a little every month.",
+    "Situation Room",
+    "The State of Play",
+    `${s.presidentName} · ${s.counters.billsPassed ?? 0} laws passed, ${s.counters.crisesHandled ?? 0} crises handled.`,
     body,
-    foot,
+    undefined,
     { onClose: () => host.close() },
   );
 }
 
-// ------------------------------------------------------------------ crisis
+// --------------------------------------------------------------- decisions
 
-export function crisisPanel(engine: Engine, crisis: Crisis, host: PanelHost): HTMLElement {
-  // If a running situation produced this, say so: the player should be able to
-  // trace trouble back to the decision that caused it.
-  const from = engine.state.threads.filter((t) => t.feeds?.includes(crisis.id));
+export function reelectionPanel(engine: Engine, host: PanelHost): HTMLElement {
   const body = el("div", {}, [
-    from.length
-      ? el("div", { class: "crisis-origin" }, [`This follows from: ${from.map((t) => t.label).join(", ")}`])
-      : null,
     el("div", { class: "crisis-brief" }, [
-      typeof crisis.brief === "function" ? crisis.brief(engine.state) : crisis.brief,
+      "Your political director wants an answer she can act on. Filing deadlines are coming, the donors want to know, and half the cabinet is quietly deciding whether to start looking for other work.",
     ]),
-  ]);
-  const grid = el("div", { class: "option-grid" });
-
-  for (const choice of crisis.choices) {
-    const affordable = engine.affordable(crisis, choice);
-    grid.append(
+    el("div", { class: "option-grid" }, [
       el(
         "button",
         {
           class: "option",
-          disabled: !affordable,
           onclick: () => {
-            if (engine.resolveCrisis(crisis.id, choice.id)) host.release();
+            engine.setReelection(true);
+            host.release();
           },
         },
         [
           el("div", { class: "option-top" }, [
-            el("span", { class: "option-label" }, [choice.label]),
-            choice.capitalCost
-              ? el("span", { class: "option-cost" }, [`${choice.capitalCost} capital`])
-              : null,
+            el("span", { class: "option-label" }, ["Run again"]),
           ]),
-          el("div", { class: "option-detail" }, [choice.detail]),
-          chips(describeEffects(choice.effects)),
-          choice.risk
-            ? el("div", { class: "risk-note" }, [
-                `Roughly a ${Math.round(choice.risk * 100)}% chance this goes wrong.`,
-              ])
-            : null,
-          !affordable
-            ? el("div", { class: "reason" }, ["Not enough political capital for this one."])
-            : (choice.capitalCost ?? 0) > engine.state.politics.capital
-              ? el("div", { class: "risk-note" }, [
-                  "You do not have the capital for this. Taking it anyway spends everything you have.",
-                ])
-              : null,
+          el("div", { class: "option-detail" }, [
+            "Everything from here is measured against November. The party falls in line and the schedule doubles.",
+          ]),
         ],
       ),
-    );
-  }
-  body.append(grid);
-
-  return panel(crisis.source, crisis.title, "This does not wait for next month.", body);
+      el(
+        "button",
+        {
+          class: "option",
+          onclick: () => {
+            engine.setReelection(false);
+            host.release();
+          },
+        },
+        [
+          el("div", { class: "option-top" }, [
+            el("span", { class: "option-label" }, ["One term is enough"]),
+          ]),
+          el("div", { class: "option-detail" }, [
+            "You stop spending your life raising money and start spending it governing. Your party will drift toward whoever comes next.",
+          ]),
+          chips(describeEffects({ "politics.capital": 10, "personal.stress": -8, "politics.party": -10 })),
+        ],
+      ),
+    ]),
+  ]);
+  return panel("Political Director", "Do you run again?", "", body);
 }
 
-// ------------------------------------------------------------------ report
-
-export function reportPanel(engine: Engine, report: MonthReport, host: PanelHost): HTMLElement {
-  const s = engine.state;
-  const body = el("div", {});
-
-  if (report.deltas.length) {
-    body.append(el("div", { class: "section-title" }, ["What moved"]));
-    const grid = el("div", { class: "delta-grid" });
-    for (const d of report.deltas) {
-      const change = d.to - d.from;
-      grid.append(
-        el("div", { class: "delta" }, [
-          el("div", { class: "k" }, [d.label]),
-          el("div", { class: `v ${d.good ? "up" : "down"}` }, [
-            `${change > 0 ? "+" : ""}${change.toFixed(1)}`,
+export function endingPanel(state: GameState, ending: Ending, onRestart: () => void): HTMLElement {
+  const legacy = scoreLegacy(state);
+  return el("div", { class: "overlay" }, [
+    el("div", { class: "ending-card" }, [
+      el("div", { class: "ending-grade" }, [ending.grade]),
+      el("div", { class: "ending-title" }, [ending.title]),
+      el("div", { class: "ending-body" }, [ending.blurb]),
+      el(
+        "div",
+        { class: "legacy-grid" },
+        [
+          ["Economy", legacy.economy],
+          ["Society", legacy.society],
+          ["World", legacy.standing],
+          ["Politics", legacy.politics],
+          ["Personal", legacy.personal],
+          ["Legacy", ending.legacy],
+        ].map(([label, value]) =>
+          el("div", { class: "delta" }, [
+            el("div", { class: "k" }, [String(label)]),
+            el("div", { class: "v" }, [Math.round(Number(value)).toString()]),
           ]),
-        ]),
-      );
-    }
-    body.append(grid);
-  }
-
-  if (report.notes.length) {
-    body.append(el("div", { class: "section-title" }, ["On your mind"]));
-    for (const note of report.notes) body.append(el("div", { class: "note" }, [note]));
-  }
-
-  const headlines = s.news.filter((n) => n.month >= report.month);
-  if (headlines.length) {
-    body.append(el("div", { class: "section-title" }, ["The press"]));
-    for (const item of headlines.slice(0, 5)) {
-      body.append(
-        el("div", { class: `headline ${item.tone}` }, [
-          el("div", { class: "headline-text" }, [item.headline]),
-          el("div", { class: "headline-meta" }, [item.source]),
-        ]),
-      );
-    }
-  }
-
-  const foot = el("div", { class: "panel-foot" }, [
-    el("span", { class: "option-detail" }, [
-      `${s.ap} action${s.ap === 1 ? "" : "s"} available in ${calendar(s.month).label}.`,
+        ),
+      ),
+      el("div", { style: "text-align:center" }, [
+        el("button", { class: "btn primary", onclick: onRestart }, ["Run again from the beginning"]),
+      ]),
     ]),
-    el("button", { class: "btn primary", onclick: () => host.close() }, ["Get to work"]),
   ]);
-
-  return panel(
-    "Monthly Brief",
-    calendar(report.month).label,
-    `The month closed with the deficit running at ${money(report.deficit)} a year.`,
-    body,
-    foot,
-  );
 }
