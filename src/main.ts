@@ -461,4 +461,48 @@ function openingCutscene(onDone: () => void): void {
   const lines = [
     "January. The first month.",
     "The Oval is yours now. The desk, the phone, the door to the study.",
-    "Everyone
+    "Everyone in this building wants an hour you do not have.",
+    "Four years. Forty-eight months. Begin.",
+  ];
+
+  const overlay = el("div", { class: "cutscene" });
+  const text = el("div", { class: "cutscene-line" });
+  overlay.append(text);
+  document.body.append(overlay);
+
+  let index = 0;
+  let timer = 0;
+
+  const finish = () => {
+    clearTimeout(timer);
+    overlay.classList.add("cutscene-out");
+    setTimeout(() => {
+      overlay.remove();
+      onDone();
+    }, 700);
+  };
+
+  const advance = () => {
+    if (index >= lines.length) {
+      finish();
+      return;
+    }
+    text.textContent = lines[index];
+    text.classList.remove("cutscene-in");
+    // Force a reflow so the animation restarts on each line.
+    void text.offsetWidth;
+    text.classList.add("cutscene-in");
+    index += 1;
+    timer = window.setTimeout(advance, 2600);
+  };
+
+  overlay.addEventListener("pointerdown", () => {
+    clearTimeout(timer);
+    advance();
+  });
+
+  advance();
+}
+
+titleScreen();
+void wireHardwareBack();
