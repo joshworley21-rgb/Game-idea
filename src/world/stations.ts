@@ -48,14 +48,12 @@ export class Stations {
   private visuals: StationVisual[] = [];
   private clock = 0;
   private labelScale = 1;
-  private touch: boolean;
   nearest: StationId | null = null;
 
   private scene: THREE.Scene;
   private group = new THREE.Group();
 
-  constructor(scene: THREE.Scene, anchors: StationAnchor[], touch = false) {
-    this.touch = touch;
+  constructor(scene: THREE.Scene, anchors: StationAnchor[]) {
     this.scene = scene;
     this.scene.add(this.group);
     this.rebuild(anchors);
