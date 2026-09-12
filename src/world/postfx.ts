@@ -218,19 +218,23 @@ export class PostFX {
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
 
-    // Half-resolution GTAO: occlusion is low-frequency, the denoise sells it.
+    // Half-resolution GTAO with more samples and less blend than the stock
+    // settings: occlusion is low-frequency, so the half-res denoise is fine,
+    // but the stock 8 samples read as smeared noise and the stock blend
+    // muddied the midtones. More samples, a gentler blend, and the AO reads
+    // as contact shadow rather than a grey wash over the room.
     const gtao = new GTAOPass(scene, camera, width * 0.5, height * 0.5);
     gtao.output = GTAOPass.OUTPUT.Default;
     gtao.updateGtaoMaterial({
-      radius: 0.3,
-      distanceExponent: 1.4,
-      thickness: 0.6,
-      scale: 1.05,
-      samples: 8,
+      radius: 0.32,
+      distanceExponent: 1.35,
+      thickness: 0.55,
+      scale: 1.0,
+      samples: 12,
       distanceFallOff: 1,
       screenSpaceRadius: false,
     });
-    gtao.blendIntensity = 0.85;
+    gtao.blendIntensity = 0.72;
     composer.addPass(gtao);
 
     // Bloom: windows, fire and chandeliers glow, not the whole room.
