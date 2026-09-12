@@ -24,7 +24,7 @@ const DESK_PATTERNS = [/desk/i, /resolute/i, /table/i];
 export function findDeskPose(model: THREE.Object3D): DeskPose | null {
   model.updateMatrixWorld(true);
 
-  const desk = findByName(model, DESK_PATTERNS);
+  const desk = findDesk(model);
   if (!desk) {
     console.warn("[oval] no desk node found in model", nodeNames(model));
     return null;
@@ -55,13 +55,26 @@ export function findDeskPose(model: THREE.Object3D): DeskPose | null {
   return { position, target, nodeName: desk.name || "(unnamed)" };
 }
 
-function findByName(root: THREE.Object3D, patterns: RegExp[]): THREE.Object3D | null {
-  for (const pattern of patterns) {
-    let found: THREE.Object3D | null = null;
+/**
+ * Picks the largest matching node rather than the first one the traversal
+ * happens to hit. A scene can contain several tables; the Resolute desk is
+ * the one with the biggest footprint.
+ */
+function findDesk(root: THREE.Object3D): THREE.Object3D | null {
+  for (const pattern of DESK_PATTERNS) {
+    let best: THREE.Object3D | null = null;
+    let bestArea = -1;
     root.traverse((obj) => {
-      if (!found && pattern.test(obj.name)) found = obj;
+      if (!pattern.test(obj.name)) return;
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = box.getSize(new THREE.Vector3());
+      const area = size.x * size.z;
+      if (area > bestArea) {
+        bestArea = area;
+        best = obj;
+      }
     });
-    if (found) return found;
+    if (best) return best;
   }
   return null;
 }
