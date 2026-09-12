@@ -28,10 +28,18 @@ const BOX_SIZE = new THREE.Vector3();
 const GLIDE_SECONDS = 0.85;
 
 /** Seated eye height above the room floor. */
-const SEATED_EYE = 1.18;
+const SEATED_EYE = 1.42;
 
 /** Standing eye height, for the door seat. */
-const STANDING_EYE = 1.62;
+const STANDING_EYE = 1.66;
+
+/**
+ * The GLB contains the whole White House and its grounds, so the model's own
+ * bounding box floor is the lawn, several metres below the Oval Office carpet.
+ * The interior floor is found instead from the desk: the desk sits on the
+ * carpet, so its base is the floor, give or take its own thickness.
+ */
+const DESK_BASE_LIFT = 0.02;
 
 interface NamedBox {
   node: THREE.Object3D;
@@ -78,6 +86,28 @@ function bestMatch(
   return best;
 }
 
+/**
+ * Finds the interior floor height. The desk is the anchor: it stands on the
+ * carpet, so its base is the floor. Falls back to the tallest furniture we can
+ * find, then to the model floor only as a last resort.
+ */
+function findFloorY(
+  modelBox: THREE.Box3,
+  desk: NamedBox | null,
+  chair: NamedBox | null,
+  sofa: NamedBox | null,
+): number {
+  const anchors = [desk, chair, sofa].filter((b): b is NamedBox => b !== null);
+  if (anchors.length) {
+    // The highest base among the furniture is the one standing on the carpet;
+    // anything lower is a rug, a step, or part of the exterior.
+    let floor = Number.NEGATIVE_INFINITY;
+    for (const anchor of anchors) floor = Math.max(floor, anchor.box.min.y);
+    return floor + DESK_BASE_LIFT;
+  }
+  return modelBox.min.y;
+}
+
 /** Logs every node whose name suggests furniture we might want to sit at. */
 export function logSeatCandidates(model: THREE.Object3D): void {
   model.traverse((child) => {
@@ -102,11 +132,12 @@ export function logSeatCandidates(model: THREE.Object3D): void {
 export function buildSeats(model: THREE.Object3D): Seat[] {
   const candidates = collectNamedBoxes(model);
   const modelBox = new THREE.Box3().setFromObject(model);
-  const floorY = modelBox.min.y;
 
   const desk = bestMatch(candidates, /desk|resolute/, null, 0.2, 40);
   const chair = bestMatch(candidates, /chair|seat|stool/, /armchair|sofa/, 0.05, 8);
   const sofa = bestMatch(candidates, /sofa|couch|settee/, null, 0.3, 30);
+
+  const floorY = findFloorY(modelBox, desk, chair, sofa);
 
   const roomCenter = modelBox.getCenter(new THREE.Vector3());
   const roomSize = modelBox.getSize(BOX_SIZE);
@@ -114,7 +145,7 @@ export function buildSeats(model: THREE.Object3D): Seat[] {
 
   const deskCenter = new THREE.Vector3();
   if (desk) desk.box.getCenter(deskCenter);
-  else roomCenter.clone().setY(floorY);
+  else deskCenter.copy(roomCenter).setY(floorY);
 
   // The desk faces away from its chair. Without a chair, it faces the room.
   const forward = new THREE.Vector3();
@@ -151,11 +182,10 @@ export function buildSeats(model: THREE.Object3D): Seat[] {
   if (sofa) {
     const sofaCenter = sofa.box.getCenter(new THREE.Vector3());
     sofaSeat.copy(sofaCenter).addScaledVector(forward, -0.55);
-    sofaSeat.y = floorY + SEATED_EYE;
   } else {
     sofaSeat.copy(deskCenter).addScaledVector(forward, 2.6);
-    sofaSeat.y = floorY + SEATED_EYE;
   }
+  sofaSeat.y = floorY + SEATED_EYE;
   const sofaLook = new THREE.Vector3(deskCenter.x, floorY + 1.05, deskCenter.z);
   seats.push({ id: "seating", label: "The seating group", position: sofaSeat, target: sofaLook });
 
@@ -184,6 +214,7 @@ export function buildSeats(model: THREE.Object3D): Seat[] {
     desk: desk?.name ?? null,
     chair: chair?.name ?? null,
     sofa: sofa?.name ?? null,
+    modelFloorY: modelBox.min.y,
     floorY,
     seats: seats.map((s) => ({
       id: s.id,
@@ -199,6 +230,9 @@ export function buildSeats(model: THREE.Object3D): Seat[] {
  * Holds the camera at one seat and glides between them. There is no walking:
  * the only way the view changes is `goTo`, which eases position and target
  * together over a fixed duration.
+ *
+ * While seated, the player can look around and zoom freely, but cannot pan:
+ * the camera stays anchored in the chair.
  */
 export class SeatRig {
   readonly seats: Seat[];
