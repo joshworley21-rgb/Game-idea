@@ -49,8 +49,9 @@ export function findDeskPose(model: THREE.Object3D): DeskPose | null {
   const position = deskCenter.clone().addScaledVector(away, depth * 0.72);
   position.y = deskBox.max.y + depth * 0.55;
 
+  // Look across the desk rather than straight down at it.
   const target = deskCenter.clone();
-  target.y = deskBox.max.y + depth * 0.12;
+  target.y = deskBox.max.y + depth * 0.35;
 
   return { position, target, nodeName: desk.name || "(unnamed)" };
 }
