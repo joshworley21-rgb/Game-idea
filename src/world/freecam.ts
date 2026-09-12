@@ -6,9 +6,10 @@ const fmt = (v: number): string => v.toFixed(2);
 /**
  * Developer free-roam camera.
  *
- * Enabled with `?freecam`. One-finger drag orbits, two-finger pinch/pan moves,
- * and the wheel zooms. The current camera position and orbit target are shown
- * on screen and can be copied as a JSON pose for pasting into office.ts.
+ * Enabled with `?freecam`, or toggled from the HUD. One-finger drag orbits,
+ * two-finger pinch/pan moves, and the wheel zooms. The current camera position
+ * and orbit target are shown on screen and can be copied as a JSON pose for
+ * pasting into office.ts.
  */
 export class Freecam {
   readonly controls: OrbitControls;
@@ -30,8 +31,9 @@ export class Freecam {
     this.panel.id = "freecam-panel";
     this.panel.style.cssText = [
       "position:fixed",
-      "left:8px",
-      "bottom:8px",
+      "top:12px",
+      "left:50%",
+      "transform:translateX(-50%)",
       "z-index:9999",
       "padding:10px 12px",
       "border-radius:10px",
@@ -41,6 +43,7 @@ export class Freecam {
       "border:1px solid rgba(255,255,255,0.12)",
       "box-shadow:0 6px 24px rgba(0,0,0,0.5)",
       "pointer-events:auto",
+      "max-width:calc(100vw - 16px)",
     ].join(";");
 
     this.posLine = document.createElement("div");
