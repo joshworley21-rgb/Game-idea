@@ -20,8 +20,8 @@ const FOV_MIN = 35;
 const FOV_MAX = 70;
 
 /**
- * Builds the seat list for a procedural room: the spawn, then one seat per
- * station, then one per door. Every seat looks at the thing it is for.
+ * Builds the seat list for a room: the spawn, then one seat per station, then
+ * one per door. Every seat looks at the thing it is for.
  */
 export function seatsForRoom(room: RoomBuild): Seat[] {
   const seats: Seat[] = [
@@ -109,15 +109,15 @@ export class SeatRig {
 
   /** Eases to a seat by id. Unknown ids are ignored. */
   goTo(id: string): boolean {
-  const seat = this.seats.find((s) => s.id === id);
-  if (!seat || seat === this.current) return false;
-  this.fromPosition.copy(this.camera.position);
-  this.fromTarget.copy(this.current.target);        // ← reads the OLD seat
-  this.current = seat;                              // ← moved down
-  this.toPosition.copy(seat.position);
-  this.toTarget.copy(seat.target);
-  this.elapsed = 0;
-  return true;
+    const seat = this.seats.find((s) => s.id === id);
+    if (!seat || seat === this.current) return false;
+    this.fromPosition.copy(this.camera.position);
+    this.fromTarget.copy(this.current.target);
+    this.current = seat;
+    this.toPosition.copy(seat.position);
+    this.toTarget.copy(seat.target);
+    this.elapsed = 0;
+    return true;
   }
 
   /** Advances the glide. Called once per frame from the render loop. */
