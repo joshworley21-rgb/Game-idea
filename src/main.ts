@@ -23,6 +23,7 @@ import {
 } from "./ui/panels.ts";
 import { clear, el } from "./ui/dom.ts";
 import { STATION_ROOM, World } from "./world/scene.ts";
+import type { Door } from "./world/roomkit.ts";
 
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
 
