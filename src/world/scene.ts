@@ -228,20 +228,35 @@ export class World {
         this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
         this.orbit.enableDamping = true;
         this.orbit.dampingFactor = 0.08;
-        // Look and zoom only. No panning, and no walking: the view moves
-        // between fixed seats, and the dolly stays inside the room.
+        // Anchored in the chair: look around and zoom.
+        // Player cannot slide out of the seat or walk through walls.
         this.orbit.enablePan = false;
+        this.orbit.enableRotate = true;
         this.orbit.enableZoom = true;
-        this.orbit.zoomSpeed = 0.6;
-        this.orbit.minDistance = 0.9;
-        this.orbit.maxDistance = 7.5;
-        this.orbit.minPolarAngle = Math.PI * 0.28;
-        this.orbit.maxPolarAngle = Math.PI * 0.62;
+        this.orbit.rotateSpeed = this.touch ? 0.65 : 0.85;
+        this.orbit.zoomSpeed = this.touch ? 0.7 : 1.0;
+        this.orbit.minDistance = 0.5;
+        this.orbit.maxDistance = 5;
+        this.orbit.minPolarAngle = Math.PI * 0.12;
+        this.orbit.maxPolarAngle = Math.PI * 0.88;
+        // Touch: one finger looks around, two fingers pinch to zoom
+        this.orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
         this.rig = new SeatRig(this.camera, this.orbit, seats);
+
+        // Pivot straight ahead at eye level, so drags pivot around the room
+        this.orbit.target.set(
+          this.camera.position.x,
+          this.camera.position.y,
+          this.camera.position.z - 2,
+        );
+        this.orbit.update();
+
         this.addModelKeyLight(seats[0].target);
         this.renderer.toneMappingExposure = 1.2;
-        this.player.enabled = false;
+
+        // Disable walker and release pointer/touch locks to OrbitControls
+        this.player.setOrbitMode(true);
 
         console.log(
           `Oval Office model loaded (${model.children.length} root nodes, ${seats.length} seats, at ${this.rig.currentId})`,
@@ -615,4 +630,5 @@ export class World {
     cancelAnimationFrame(this.raf);
   }
 }
+
 
