@@ -298,14 +298,24 @@ function buildStationFurniture(root: THREE.Group): StationAnchor[] {
   place(globe, new THREE.SphereGeometry(0.3, 24, 18), standard(0x2f6d8c, 0.75), 0, 1.05, 0);
   root.add(globe);
 
-  const anchor = (id: StationId, x: number, z: number, fx: number, fz: number): StationAnchor => ({
+  const anchor = (
+    id: StationId,
+    x: number,
+    z: number,
+    fx: number,
+    fz: number,
+    camera?: THREE.Vector3,
+  ): StationAnchor => ({
     id,
     position: new THREE.Vector3(x, 0, z),
     focus: new THREE.Vector3(fx, 1.1, fz),
+    camera,
   });
 
   return [
-    anchor("desk", 0, -1.85, 0, -2.75),
+    // The marker stays in front of the desk, but the camera sits in the chair
+    // behind it, looking out over the desk into the room.
+    anchor("desk", 0, -1.85, 0, 0.35, new THREE.Vector3(0, 0, -3.6)),
     anchor("phone", 2.95, -1.35, 4.15, -1.55),
   ];
 }
