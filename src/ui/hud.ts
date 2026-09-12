@@ -41,6 +41,7 @@ export class Hud {
     onDashboard: () => void,
     onStation: (station: StationId) => void,
     onToggleMute: () => boolean,
+    onFreecam?: () => boolean,
   ) {
     this.endButton = el("button", { class: "btn primary", onclick: onEndMonth }, [
       "End the month",
@@ -61,6 +62,15 @@ export class Hud {
       ]),
       this.muteButton,
     );
+
+    if (onFreecam) {
+      const camButton = el("button", { class: "btn ghost small" }, ["Free camera"]) as HTMLButtonElement;
+      camButton.addEventListener("click", () => {
+        const active = onFreecam();
+        camButton.textContent = active ? "Exit camera" : "Free camera";
+      });
+      this.actions.append(camButton);
+    }
 
     // On a phone the number keys do not exist, so the legend is just a row of
     // tappable stations. On desktop the key hints are kept for keyboard play.
