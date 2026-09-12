@@ -47,6 +47,13 @@ export class PlayerController {
   enabled = true;
   /** True while a fixed-seat rig owns the camera; the walker goes quiet. */
   private orbitMode = false;
+  /** True while the browser has granted pointer lock. */
+  private locked = false;
+
+  /** Called whenever pointer lock is gained or lost. */
+  onLockChange: (locked: boolean) => void = () => {};
+  /** A tap or click that was not a drag. */
+  onTap: (event: TapEvent) => void = () => {};
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
@@ -83,25 +90,25 @@ export class PlayerController {
   }
 
   unlock(): void {
-  if (document.pointerLockElement === this.dom) document.exitPointerLock();
-}
+    if (document.pointerLockElement === this.dom) document.exitPointerLock();
+  }
 
-/**
- * Hands the camera to a fixed-seat rig, or takes it back. While seated the
- * walker ignores all pointer input, so OrbitControls gets every drag, and
- * the joystick is zeroed so the player cannot walk out of the chair.
- */
+  /**
+   * Hands the camera to a fixed-seat rig, or takes it back. While seated the
+   * walker ignores all pointer input, so OrbitControls gets every drag, and
+   * the joystick is zeroed so the player cannot walk out of the chair.
+   */
   setOrbitMode(on: boolean): void {
-   this.orbitMode = on;
-   this.enabled = !on;
-   if (!on) return;
-   this.keys.clear();
-   this.moveInput = { x: 0, y: 0 };
-   this.velocity.set(0, 0, 0);
-   this.lookPointer = null;
-   this.unlock();
-}
-  
+    this.orbitMode = on;
+    this.enabled = !on;
+    if (!on) return;
+    this.keys.clear();
+    this.moveInput = { x: 0, y: 0 };
+    this.velocity.set(0, 0, 0);
+    this.lookPointer = null;
+    this.unlock();
+  }
+
   private release = (): void => {
     this.keys.clear();
     this.lookPointer = null;
@@ -133,7 +140,7 @@ export class PlayerController {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (!this.enabled) return;
+    if (!this.enabled || this.orbitMode) return;
     const dragging = this.lookPointer === e.pointerId;
     if (!this.locked && !dragging) return;
 
@@ -174,7 +181,6 @@ export class PlayerController {
     this.camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
   }
 
-  /** Turns the camera to face a point. */
   /** Drops the player at a spot, killing any momentum they had. */
   teleport(position: THREE.Vector3): void {
     this.camera.position.set(position.x, EYE_HEIGHT, position.z);
@@ -189,9 +195,11 @@ export class PlayerController {
   }
 
   update(dt: number): void {
-    const keyForward = Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
+    const keyForward =
+      Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
       Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
-    const keyStrafe = Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
+    const keyStrafe =
+      Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
       Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
 
     const forward = keyForward + this.moveInput.y;
@@ -217,3 +225,4 @@ export class PlayerController {
     this.camera.position.y = EYE_HEIGHT + Math.sin(this.bob * 2) * Math.min(0.035, speed * 0.012);
   }
 }
+
