@@ -17,6 +17,7 @@ import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
 import { loadOvalOffice } from "./ovalLoader.ts";
 import { findDeskPose } from "./deskPose.ts";
+import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
 import { applyViewport, measureViewport } from "./viewport.ts";
 import { OVAL_GRADE, CABINET_GRADE, CAPITOL_GRADE, PRESS_GRADE, RESIDENCE_GRADE, STUDY_GRADE } from "./postfx.ts";
@@ -84,6 +85,9 @@ export class World {
   private loop: RenderLoop | null = null;
   /** Fixed seat rig controlling camera position and head rotation. */
   private rig: SeatRig | null = null;
+  /** Developer free-roam camera, enabled with `?freecam`. */
+  private readonly freecamMode = new URLSearchParams(location.search).has("freecam");
+  private freecam: Freecam | null = null;
   private canvas: HTMLCanvasElement;
   private tapStart = { x: 0, y: 0, t: 0 };
   /** True until the Oval GLB has replaced the procedural stand-in. */
@@ -137,10 +141,16 @@ export class World {
     this.stations = new Stations(this.scene, []);
     this.doors = new Doors(this.scene);
 
-    canvas.addEventListener("pointerdown", (e) => {
-      this.tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
-    });
-    canvas.addEventListener("pointerup", this.onCanvasTap);
+    if (!this.freecamMode) {
+      canvas.addEventListener("pointerdown", (e) => {
+        this.tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+      });
+      canvas.addEventListener("pointerup", this.onCanvasTap);
+    }
+
+    if (this.freecamMode) {
+      this.freecam = new Freecam(this.camera, this.canvas);
+    }
 
     // The Oval is built but stays hidden until its model arrives, so the
     // procedural stand-in is never on screen.
@@ -164,6 +174,7 @@ export class World {
   /** One frame of simulation, before the frame is drawn. */
   private tick(dt: number): void {
     this.rig?.update(dt);
+    this.freecam?.update();
     this.stations.update(dt);
     this.doors.update(dt, this.camera);
     this.animator.update(dt, this.camera.position);
@@ -190,22 +201,28 @@ export class World {
         this.scene.add(model);
         model.updateMatrixWorld(true);
 
-        // The model is scenery, but it is also the only source of truth for
-        // where the real desk actually is. Measure it and put the camera in
-        // the chair behind it, falling back to the procedural seat if the
-        // node cannot be found.
         this.ovalPending = false;
         this.current.group.visible = false;
-        this.rig?.dispose();
 
         const deskPose = findDeskPose(model);
-        const overrides = deskPose
-          ? {
-              spawn: { id: "spawn", label: "oval", position: deskPose.position, target: deskPose.target },
-              desk: { id: "desk", label: "desk", position: deskPose.position, target: deskPose.target },
-            }
-          : {};
-        this.rig = new SeatRig(this.camera, seatsForRoom(this.current, overrides), this.canvas);
+
+        if (this.freecamMode) {
+          const start = deskPose
+            ? { position: deskPose.position, target: deskPose.target }
+            : { position: this.current.spawn, target: this.current.spawnLook };
+          this.camera.position.copy(start.position);
+          this.freecam?.setTarget(start.target);
+        } else {
+          this.rig?.dispose();
+          const overrides = deskPose
+            ? {
+                spawn: { id: "spawn", label: "oval", position: deskPose.position, target: deskPose.target },
+                desk: { id: "desk", label: "desk", position: deskPose.position, target: deskPose.target },
+              }
+            : {};
+          this.rig = new SeatRig(this.camera, seatsForRoom(this.current, overrides), this.canvas);
+        }
+
         if (deskPose) {
           const p = deskPose.position;
           console.log(`[oval] desk "${deskPose.nodeName}" — camera ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`);
@@ -220,7 +237,7 @@ export class World {
         this.onReady();
 
         console.log(
-          `Oval Office model loaded (${model.children.length} root nodes, ${this.rig.seats.length} seats, at ${this.rig.currentId})`,
+          `Oval Office model loaded (${model.children.length} root nodes${this.rig ? `, ${this.rig.seats.length} seats` : ""}, at ${this.rig ? this.rig.currentId : "freecam"})`,
         );
       },
       onError: (error) => {
@@ -280,8 +297,13 @@ export class World {
       this.scene.fog.far = presentation.fogFar;
     }
 
-    this.rig?.dispose();
-    this.rig = new SeatRig(this.camera, seatsForRoom(room), this.canvas);
+    if (this.freecamMode) {
+      this.camera.position.copy(room.spawn);
+      this.freecam?.setTarget(room.spawnLook);
+    } else {
+      this.rig?.dispose();
+      this.rig = new SeatRig(this.camera, seatsForRoom(room), this.canvas);
+    }
 
     this.resize();
     this.stations.rebuild(room.anchors);
