@@ -1,173 +1,215 @@
-/* ------------------------------------------------------------- portraits */
-
-/*
- * A portrait is a rendered face with initials behind it. The initials are what
- * shows if WebGL is unavailable, so the panel still reads as a person rather
- * than a broken image.
- */
-.portrait {
-  position: relative;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  overflow: hidden;
-  background: radial-gradient(circle at 50% 35%, #2a2f3c, #14171f 70%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.55);
+:root {
+  --ink: #e9e4d8;
+  --ink-dim: #a49c8c;
+  --panel: rgba(14, 16, 22, 0.94);
+  --panel-edge: rgba(255, 255, 255, 0.09);
+  --gold: #c9a961;
+  --good: #6fbf8b;
+  --bad: #d2705f;
+  --warn: #d8b45f;
+  --blue: #6f93c9;
+  --red: #c96f6f;
 }
 
-.portrait img {
-  position: absolute;
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #05060a;
+  color: var(--ink);
+  font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#scene {
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  /* The render is framed head-and-shoulders; this pulls the face up into the
-     circle rather than centring on the collarbone. */
-  object-position: 50% 22%;
   display: block;
+  touch-action: none;
 }
 
-.portrait-initials {
-  position: absolute;
+/* ------------------------------------------------------------------- hud */
+
+#hud {
+  position: fixed;
   inset: 0;
+  z-index: 50;
+  pointer-events: none;
   display: grid;
-  place-items: center;
-  font: 600 0.42em/1 Georgia, "Times New Roman", serif;
-  letter-spacing: 0.04em;
-  color: var(--ink-dim);
+  grid-template-columns: minmax(170px, 1fr) minmax(260px, 1.4fr) minmax(170px, 1fr);
+  grid-template-rows: auto auto 1fr auto;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 12px calc(10px + env(safe-area-inset-bottom));
 }
 
-/* The speaker block: who is talking, above what they said. */
-.speaker {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.speaker-text {
+.hud-card {
   min-width: 0;
-}
-
-.speaker-name {
-  font: 600 15px/1.2 Georgia, "Times New Roman", serif;
+  background: linear-gradient(180deg, rgba(17, 19, 27, 0.82), rgba(9, 11, 16, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
   color: var(--ink);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: hud-in 0.45s ease both;
 }
 
-.speaker-title {
-  font-size: 11px;
-  letter-spacing: 0.1em;
+@keyframes hud-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+#hud-date { grid-area: 1 / 1; justify-self: start; align-self: start; width: min(230px, 100%); }
+#hud-power { grid-area: 1 / 3; justify-self: end; align-self: start; width: min(240px, 100%); }
+#hud-situations { grid-area: 1 / 2; justify-self: center; align-self: start; width: min(420px, 100%); }
+#hud-nation { grid-area: 2 / 1; justify-self: start; align-self: start; width: min(230px, 100%); }
+#hud-self { grid-area: 2 / 3; justify-self: end; align-self: start; width: min(240px, 100%); }
+#hud-actions { grid-area: 4 / 3; justify-self: end; align-self: end; pointer-events: auto; }
+#hud-legend { grid-area: 4 / 1; justify-self: start; align-self: end; pointer-events: auto; }
+#room-reveal { grid-area: 3 / 2; justify-self: center; align-self: end; }
+
+.hud-title {
+  font-size: 10px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--gold);
-  margin-top: 3px;
+  margin-bottom: 7px;
 }
 
-/* The mood tints the edge of the block, so a hostile beat reads as one. */
-.speaker.mood-hostile .portrait { border-color: rgba(210, 112, 95, 0.55); }
-.speaker.mood-concerned .portrait { border-color: rgba(216, 180, 95, 0.5); }
-.speaker.mood-warm .portrait { border-color: rgba(111, 191, 139, 0.5); }
-.speaker.mood-tired .portrait { border-color: rgba(140, 140, 160, 0.45); }
-.speaker.mood-guarded .portrait { border-color: rgba(160, 160, 180, 0.45); }
-.speaker.mood-amused .portrait { border-color: rgba(201, 169, 97, 0.55); }
+/* Date */
+.date-line { font: 600 14px/1.25 Georgia, "Times New Roman", serif; }
+.date-sub { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+.date-room { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); margin-top: 7px; }
+.term-track { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin-top: 8px; overflow: hidden; }
+.term-fill { height: 100%; background: var(--gold); }
 
-/* What they said, set as speech rather than as a brief. */
-.speaker-line {
-  font: 400 15px/1.6 Georgia, "Times New Roman", serif;
-  color: var(--ink);
-  border-left: 2px solid rgba(201, 169, 97, 0.35);
-  padding-left: 14px;
-}
+/* Power */
+.power-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 7px; }
+.power-row:first-child { margin-top: 0; }
+.power-label { font-size: 11px; color: var(--ink-dim); }
+.power-value { font-size: 13px; font-weight: 600; }
+.ap-pips { display: flex; gap: 3px; }
+.pip { width: 11px; height: 11px; border-radius: 50%; background: rgba(255, 255, 255, 0.1); }
+.pip.on { background: var(--gold); box-shadow: 0 0 8px rgba(201, 169, 97, 0.55); }
 
-/* A stage direction — the room, not a person. */
-.speaker-stage {
-  font-size: 13px;
-  font-style: italic;
-  color: var(--ink-dim);
-  margin-bottom: 12px;
-}
+/* Nation */
+.stat-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 12px; }
+.stat-line .k { color: var(--ink-dim); }
+.stat-line .v { font-weight: 600; color: var(--ink); }
 
-/* The cabinet and family rosters, now with faces. */
-.person-row {
+.v.ok, .meter-value.ok { color: var(--good); }
+.v.warn, .meter-value.warn { color: var(--warn); }
+.v.bad, .meter-value.bad { color: var(--bad); }
+
+/* Running situations */
+#hud-situations { display: none; }
+.situation { margin-bottom: 9px; }
+.situation:last-child { margin-bottom: 0; }
+.situation-head { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.situation-head .v { font-weight: 600; }
+.situation .meter-track { margin-top: 5px; height: 4px; }
+
+/* You */
+#hud-self .meter { margin-bottom: 9px; }
+#hud-self .meter:last-child { margin-bottom: 0; }
+
+/* Action and legend cards */
+#hud-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+#hud-legend { display: flex; flex-wrap: wrap; gap: 6px; max-width: 420px; }
+
+.legend-row {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.person-row:last-child {
-  border-bottom: none;
-}
-
-.person-body {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.person-name {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.person-name .person-role {
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-}
-
-.person-name .person-value {
-  margin-left: auto;
-  font-weight: 600;
-}
-
-.person-meta {
-  font-size: 12px;
-  color: var(--ink-dim);
-  margin-top: 3px;
-}
-
-.person-bars {
-  display: grid;
-  grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 4px 10px;
-  margin-top: 8px;
-  font-size: 11px;
+  gap: 6px;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--ink-dim);
+  font: 500 11px/1 inherit;
+  padding: 5px 9px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
-.person-bars .meter-track {
-  height: 4px;
+.legend-row:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.14); }
+.legend-row kbd {
+  font: 600 10px/1 inherit;
+  color: var(--gold);
+  background: rgba(201, 169, 97, 0.12);
+  border: 1px solid rgba(201, 169, 97, 0.25);
+  border-radius: 5px;
+  padding: 2px 5px;
 }
 
-/* A strain is the loudest thing on the row, so it gets the colour. */
-.person-strain {
-  margin-top: 8px;
+/* Room reveal */
+#room-reveal {
+  font: 600 15px/1 Georgia, "Times New Roman", serif;
+  color: var(--ink);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+}
+
+#room-reveal.show { opacity: 1; transform: none; }
+
+/* Crosshair and prompt */
+#crosshair {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(201, 169, 97, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 55;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#crosshair.hot { opacity: 0.95; transform: scale(1.35); }
+
+#prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 56;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(14, 16, 22, 0.92);
+  border: 1px solid var(--panel-edge);
   font-size: 12px;
-  color: var(--warn);
-  border-left: 2px solid rgba(216, 180, 95, 0.4);
-  padding-left: 10px;
+  color: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
 }
 
-.person-strain.severe {
-  color: var(--bad);
-  border-left-color: rgba(210, 112, 95, 0.5);
-}
-
-/* The meeting panel is a conversation, so it gets a wider, quieter frame. */
-.panel.meeting {
-  width: min(720px, 100%);
-}
-
-.panel.meeting .panel-body {
-  padding-top: 20px;
-}
-
-@media (max-width: 900px), (pointer: coarse) {
-  .speaker-line { font-size: 14px; }
+#prompt.show { opacity: 1; }
+#prompt kbd {
+  font: 600 11px/1 inherit;
+  color: #1a1408;
+  background: var(--gold);
+  border-radius: 5px;
+  padding: 3px 7px;
 }
