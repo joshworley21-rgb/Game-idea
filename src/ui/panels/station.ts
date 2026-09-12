@@ -55,6 +55,11 @@ export function stationPanel(
   onOpenBills: () => void,
   onOpenBudget: () => void,
   onOpenConversation: (id: string) => void,
+  /**
+   * Told the id of whatever the player just did, so the Chief of Staff can
+   * react to it. Optional, because a panel built in a test has no chief.
+   */
+  onDid?: (id: string) => void,
 ): HTMLElement {
   const s = engine.state;
   const info = STATION_INFO[station];
@@ -180,7 +185,10 @@ export function stationPanel(
             class: "option",
             disabled,
             onclick: () => {
-              if (engine.performAction(action.id)) host.close();
+              if (engine.performAction(action.id)) {
+                host.close();
+                onDid?.(action.id);
+              }
             },
           },
           [
