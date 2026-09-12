@@ -125,15 +125,20 @@ export class World {
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 100);
     this.scene.add(this.people);
 
-    this.ambient = new THREE.AmbientLight(0xfff3e0, 1.6);
+    // The ambient light is a fill, not the room. A strong ambient floor is what
+    // made everything read as flat cardboard: it lights every normal equally,
+    // so the normal maps and clearcoats had nothing to catch. These are tuned
+    // so the directional and point lights in the rooms do the shaping while the
+    // ambient just keeps the shadows from going black.
+    this.ambient = new THREE.AmbientLight(0xfff3e0, 0.85);
     this.scene.add(this.ambient);
 
-    this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.9);
+    this.hemisphere = new THREE.HemisphereLight(0xf6f1e4, 0x6b5a44, 0.55);
     this.scene.add(this.hemisphere);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
-    this.scene.environmentIntensity = 0.8;
+    this.scene.environmentIntensity = 0.6;
     pmrem.dispose();
 
     this.camera.add(this.listener);
