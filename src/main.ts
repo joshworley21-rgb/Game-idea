@@ -1,17 +1,17 @@
 import "./ui/style.css";
 import "./ui/consoleBanner.ts";
 import { Engine } from "./game/engine.ts";
-import type { Outcome } from "./game/engine.ts";
+import type { Outcome } from "./game/outcome.ts";
 import { clearSave, hasSave, loadGame, saveGame } from "./game/save.ts";
 import { STATION_ORDER } from "./game/actions.ts";
 import { calendar } from "./game/state.ts";
-import { CAMPAIGN_INTRO, CAMPAIGN_START, campaignBeats, mergeCampaignDeltas } from "./game/campaign.ts";
-import type { CampaignDeltas } from "./game/campaign.ts";
-import type { Crisis, Ending, GameState, Party, StationId } from "./game/types.ts";
+import type { Arc } from "./game/arcs.ts";
+import type { Crisis, Ending, GameState, StationId } from "./game/types.ts";
 import type { MonthReport } from "./game/sim.ts";
 import { Hud } from "./ui/hud.ts";
 import {
   PanelHost,
+  arcPanel,
   billsPanel,
   budgetPanel,
   conversationPanel,
@@ -22,7 +22,8 @@ import {
   reportPanel,
   stationPanel,
 } from "./ui/panels.ts";
-import { clear, el } from "./ui/dom.ts";
+import { el } from "./ui/dom.ts";
+import { openingCutscene, titleScreen } from "./ui/screens.ts";
 import { STATION_ROOM, World } from "./world/scene.ts";
 import type { Door } from "./world/roomkit.ts";
 
@@ -111,6 +112,14 @@ class Game {
         this.open(() => crisisPanel(this.engine, c, this.host), true);
       }),
     );
+    // An arc is a consequence arriving, so it gets the same weight as a
+    // crisis: it blocks the month and it cannot be dismissed.
+    engine.on("arc", (a: Arc) =>
+      this.queue.push(() => {
+        this.world.sound.alert();
+        this.open(() => arcPanel(this.engine, a, this.host), true);
+      }),
+    );
     engine.on("report", (r: MonthReport) =>
       this.queue.unshift(() => {
         this.world.sound.chime();
@@ -130,9 +139,13 @@ class Game {
     // A read-only handle, so a test can see what the renderer settled on.
     (window as unknown as { __oval?: unknown }).__oval = this.world;
     void this.furnish();
-    // Any crises already waiting from a loaded save.
+    // Any crises or arcs already waiting from a loaded save.
     for (const crisis of engine.pendingCrises) {
       this.queue.push(() => this.open(() => crisisPanel(this.engine, crisis, this.host), true));
+    }
+    const arc = engine.pendingArc;
+    if (arc) {
+      this.queue.push(() => this.open(() => arcPanel(this.engine, arc, this.host), true));
     }
     this.drain();
   }
@@ -296,261 +309,22 @@ async function wireHardwareBack(): Promise<void> {
   }
 }
 
-// ------------------------------------------------------------ title screen
+// ------------------------------------------------------------ boot
 
-function titleScreen(): void {
-  let party: Party = "blue";
-  const nameInput = el("input", {
-    type: "text",
-    value: "President Reyes",
-    maxlength: "34",
-    placeholder: "Your name",
-  }) as HTMLInputElement;
-
-  const blue = el("button", { class: "party selected" }, [
-    el("strong", {}, ["The Union Party"]),
-    el("span", {}, ["Progressive base. Health, climate and labour play well at home."]),
-  ]);
-  const red = el("button", { class: "party" }, [
-    el("strong", {}, ["The Heritage Party"]),
-    el("span", {}, ["Conservative base. Defense, growth and enforcement play well at home."]),
-  ]);
-  blue.addEventListener("click", () => {
-    party = "blue";
-    blue.classList.add("selected");
-    red.classList.remove("selected");
-  });
-  red.addEventListener("click", () => {
-    party = "red";
-    red.classList.add("selected");
-    blue.classList.remove("selected");
-  });
-
-  const overlay = el("div", { class: "overlay" });
-  document.body.append(overlay);
-
-  const start = (state?: GameState, campaign?: { deltas: CampaignDeltas; summary: string }) => {
-    overlay.remove();
-    const engine = state
-      ? (() => {
-          const e = new Engine({ name: state.presidentName, party: state.party });
-          e.loadFrom(state);
-          return e;
-        })()
-      : new Engine({ name: nameInput.value.trim() || "President Reyes", party });
-    if (!state && campaign) engine.applyCampaignResult(campaign.deltas, campaign.summary);
-    // The world is built behind the cutscene, and the cutscene holds until
-    // the Oval model is actually on screen.
+titleScreen({
+  saved: hasSave() ? loadGame() : null,
+  onStart: ({ deltas, summary }) => {
+    const engine = new Engine({ name: "President Reyes", party: "blue" });
+    engine.applyCampaignResult(deltas, summary);
     const game = new Game(engine);
     openingCutscene(game.whenReady());
-  };
+  },
+  onContinue: (state) => {
+    const engine = new Engine({ name: state.presidentName, party: state.party });
+    engine.loadFrom(state);
+    const game = new Game(engine);
+    openingCutscene(game.whenReady());
+  },
+});
 
-  const saved = hasSave() ? loadGame() : null;
-
-  const showPicker = () => {
-    clear(overlay);
-    overlay.append(
-      el("div", { class: "title-card" }, [
-        el("div", { class: "title-mark" }, ["A single-player presidency"]),
-        el("div", { class: "title-name" }, ["OVAL"]),
-        el("div", { class: "title-tag" }, [
-          "Four years. Forty-eight months. A budget nobody can balance, a Congress that owes you nothing, and a family upstairs who would like to see you occasionally.",
-        ]),
-        el("div", { class: "field" }, [el("label", {}, ["Your name"]), nameInput]),
-        el("div", { class: "field" }, [
-          el("label", {}, ["Your party"]),
-          el("div", { class: "party-picker" }, [blue, red]),
-        ]),
-        el("div", { class: "title-actions" }, [
-          el(
-            "button",
-            {
-              class: "btn primary",
-              onclick: () => campaignScreen(overlay, party, (deltas, summary) => start(undefined, { deltas, summary })),
-            },
-            ["Run for it"],
-          ),
-          saved
-            ? el("button", { class: "btn", onclick: () => start(saved) }, [
-                `Continue — ${calendar(saved.month).label}`,
-              ])
-            : null,
-        ]),
-        el("div", { class: "help-list" }, [
-          el("div", {}, [el("b", {}, ["Look"]), " — drag anywhere to turn your head."]),
-          el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're looking at, or go through a door."]),
-          el("div", {}, [el("b", {}, ["Full stats"]), " and ", el("b", {}, ["End the month"]), " are the buttons in the bar below."]),
-          el("div", {}, [
-            "You get two or three actions a month, and rather more than three things that need doing.",
-          ]),
-        ]),
-      ]),
-    );
-  };
-
-  showPicker();
-}
-
-/**
- * The six weeks before the oath, played out beat by beat in the same overlay
- * the picker used. `onDone` fires once with the campaign's accumulated
- * deltas and a one-line summary once election night resolves.
- */
-function campaignScreen(
-  overlay: HTMLElement,
-  party: Party,
-  onDone: (deltas: CampaignDeltas, summary: string) => void,
-): void {
-  const beats = campaignBeats(party);
-  const taken: CampaignDeltas[] = [];
-  const path: string[] = [];
-
-  const renderBeat = (beatId: string) => {
-    const beat = beats[beatId];
-    clear(overlay);
-    overlay.append(
-      el("div", { class: "title-card" }, [
-        el("div", { class: "title-mark" }, [beat.speaker]),
-        el("div", { class: "title-tag" }, [beat.prompt]),
-        el(
-          "div",
-          { class: "option-grid", style: "text-align:left;margin-top:20px" },
-          beat.options
-            .filter((o) => !o.requires || o.requires(path))
-            .map((option) =>
-              el(
-                "button",
-                {
-                  class: "option",
-                  onclick: () => {
-                    taken.push(option.deltas);
-                    path.push(option.id);
-                    if (option.next) renderBeat(option.next);
-                    else renderResult(option.resultText);
-                  },
-                },
-                [
-                  el("div", { class: "option-top" }, [el("span", { class: "option-label" }, [option.label])]),
-                  el("div", { class: "option-detail" }, [option.detail]),
-                ],
-              ),
-            ),
-        ),
-      ]),
-    );
-  };
-
-  const renderResult = (lastText: string) => {
-    const total = mergeCampaignDeltas(taken);
-    const margin = 4 + (total.approval ?? 0) * 0.6 + (total.party ?? 0) * 0.25;
-    const summary =
-      margin >= 0
-        ? `Won a close one — up by roughly ${Math.round(margin)} points on the night.`
-        : `Pulled it out anyway, down to the wire and short in the polls all October.`;
-    clear(overlay);
-    overlay.append(
-      el("div", { class: "title-card" }, [
-        el("div", { class: "title-mark" }, ["Election night"]),
-        el("div", { class: "title-tag" }, [lastText]),
-        el("div", { class: "title-tag", style: "margin-top:10px" }, [summary]),
-        el("div", { class: "title-actions" }, [
-          el("button", { class: "btn primary", onclick: () => onDone(total, summary) }, ["Take the oath"]),
-        ]),
-      ]),
-    );
-  };
-
-  clear(overlay);
-  overlay.append(
-    el("div", { class: "title-card" }, [
-      el("div", { class: "title-mark" }, ["Before the oath"]),
-      el("div", { class: "title-tag" }, [CAMPAIGN_INTRO]),
-            el("div", { class: "title-actions" }, [
-        el("button", { class: "btn primary", onclick: () => renderBeat(CAMPAIGN_START) }, ["Begin"]),
-      ]),
-    ]),
-  );
-}
-
-// -------------------------------------------------------------- cutscene
-
-/**
- * The opening crawl. It plays over a black screen while the Oval model
- * downloads, and holds on the last line until `ready` resolves — so the
- * procedural stand-in is never visible.
- */
-function openingCutscene(ready: Promise<void>): void {
-  const lines = [
-    "January. The first month.",
-    "The Oval is yours now. The desk, the phone, the door to the study.",
-    "Everyone in this building wants an hour you do not have.",
-    "Four years. Forty-eight months. Begin.",
-  ];
-
-  const overlay = el("div", { class: "cutscene" });
-  const text = el("div", { class: "cutscene-line" });
-  const hint = el("div", { class: "cutscene-hint" }, ["Tap to continue"]);
-  overlay.append(text, hint);
-  document.body.append(overlay);
-
-  let index = 0;
-  let timer = 0;
-  let worldReady = false;
-  let dismissed = false;
-
-  ready.then(() => {
-    worldReady = true;
-  });
-
-  const finish = () => {
-    if (dismissed) return;
-    dismissed = true;
-    clearTimeout(timer);
-    overlay.classList.add("cutscene-out");
-    setTimeout(() => overlay.remove(), 700);
-  };
-
-  const showLine = () => {
-    text.textContent = lines[index];
-    text.classList.remove("cutscene-in");
-    // Force a reflow so the animation restarts on each line.
-    void text.offsetWidth;
-    text.classList.add("cutscene-in");
-  };
-
-  const advance = () => {
-    clearTimeout(timer);
-    index += 1;
-    if (index < lines.length) {
-      showLine();
-      timer = window.setTimeout(advance, 2600);
-      return;
-    }
-    // Past the last line: hold here until the Oval is on screen.
-    text.textContent = lines[lines.length - 1];
-    hint.classList.add("visible");
-    if (worldReady) {
-      finish();
-      return;
-    }
-    // Poll rather than await, so a tap can still skip ahead.
-    timer = window.setTimeout(() => {
-      if (worldReady) finish();
-      else advance();
-    }, 400);
-  };
-
-  overlay.addEventListener("pointerdown", () => {
-    if (index >= lines.length - 1 && worldReady) {
-      finish();
-      return;
-    }
-    advance();
-  });
-
-  showLine();
-  timer = window.setTimeout(advance, 2600);
-}
-
-titleScreen();
 void wireHardwareBack();
