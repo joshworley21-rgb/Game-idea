@@ -16,7 +16,6 @@ export class RenderLoop {
   /** A rolling frame-time sample, used to drop the extra passes if needed. */
   private frameCost = 0;
   private frameSamples = 0;
-  private grade: Grade | null = null;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -36,20 +35,16 @@ export class RenderLoop {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.postfx = new PostFX(this.renderer, this.scene, this.camera, w, h);
-    this.grade = grade;
     this.postfx.setGrade(grade);
   }
 
   /** Retunes the colour grade, for when the president changes rooms. */
   setGrade(grade: Grade): void {
-    this.grade = grade;
     this.postfx?.setGrade(grade);
   }
 
   resize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.postfx?.setSize(w, h);
+    this.postfx?.setSize(window.innerWidth, window.innerHeight);
   }
 
   start(): void {
