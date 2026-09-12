@@ -5,10 +5,12 @@ import type { Outcome } from "./game/outcome.ts";
 import { clearSave, hasSave, loadGame, saveGame } from "./game/save.ts";
 import { STATION_ORDER } from "./game/actions.ts";
 import { calendar } from "./game/state.ts";
+import { chiefReaction } from "./game/chief.ts";
 import type { Arc } from "./game/arcs.ts";
 import type { Crisis, Ending, GameState, StationId } from "./game/types.ts";
 import type { MonthReport } from "./game/sim.ts";
 import { Hud } from "./ui/hud.ts";
+import { ChiefPanel } from "./ui/chiefPanel.ts";
 import {
   PanelHost,
   arcPanel,
@@ -36,6 +38,7 @@ class Game {
   private engine: Engine;
   private world: World;
   private hud: Hud;
+  private chief = new ChiefPanel();
   private host = new PanelHost();
   private queue: Modal[] = [];
   private nearest: StationId | null = null;
@@ -43,6 +46,8 @@ class Game {
   /** True once the Oval model is on screen. */
   private ready = false;
   private readyWaiters: (() => void)[] = [];
+  /** The month the Chief of Staff last briefed, so she speaks once a month. */
+  private briefedMonth = 0;
 
   constructor(engine: Engine) {
     this.engine = engine;
@@ -57,7 +62,7 @@ class Game {
       () => this.world.sound.toggleMute(),
       () => this.world.toggleFreecam(),
     );
-    document.body.append(this.hud.root);
+    document.body.append(this.hud.root, this.chief.root);
 
     // The oath click is the user gesture browsers require before audio starts.
     this.world.startAudio();
@@ -272,12 +277,31 @@ class Game {
       check.ok,
       check.ok ? `End ${calendar(s.month).monthName}` : "A decision is waiting",
     );
+
+    // The Chief of Staff speaks once at the top of each month. She is not
+    // shown while a modal is up, because she would be talking over it.
+    if (s.month !== this.briefedMonth && !this.host.isOpen && !this.ended) {
+      this.briefedMonth = s.month;
+      this.chief.brief(s);
+    }
+
     if (s.phase === "playing") saveGame(s);
+  }
+
+  /**
+   * Her one-line reaction to a decision, if she has one. Called from the
+   * outcome handler so it lands with the toast rather than after it.
+   */
+  private reactTo(id: string): void {
+    if (this.host.isOpen || this.ended) return;
+    if (!chiefReaction(id)) return;
+    this.chief.react(id);
   }
 
   private showEnding(ending: Ending): void {
     this.ended = true;
     this.queue.length = 0;
+    this.chief.hide();
     this.host.release();
     clearSave();
     document.body.append(
