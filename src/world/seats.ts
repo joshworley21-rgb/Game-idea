@@ -1,20 +1,7 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { Door, RoomBuild, StationAnchor } from "./roomkit.ts";
 
-/**
- * Fixed-camera rig for the loaded Oval Office.
- *
- * The president does not walk. They sit at the Resolute Desk, and the view
- * moves between a handful of authored seats: the desk, the seating group, the
- * secure line, and the door. Each seat is a position plus a look-at target,
- * and moving between them is a short eased glide rather than a teleport, so
- * the room reads as one continuous space.
- *
- * Seats are discovered from the model's own named nodes where possible (the
- * desk, the chair behind it, the sofas) and fall back to offsets from the
- * room's bounding box where the GLB does not name anything useful.
- */
-
+/** A fixed camera position, and what it looks at. */
 export interface Seat {
   id: string;
   label: string;
@@ -22,228 +9,55 @@ export interface Seat {
   target: THREE.Vector3;
 }
 
-const BOX_SIZE = new THREE.Vector3();
-
 /** How long a move between two seats takes, in seconds. */
 const GLIDE_SECONDS = 0.85;
-
-/** Seated eye height above the room floor. */
-const SEATED_EYE = 1.42;
-
-/** Standing eye height, for the door seat. */
-const STANDING_EYE = 1.66;
-
-/** Field of view bounds for pinch/wheel zooming while seated. */
-const MIN_FOV = 35;
-const MAX_FOV = 75;
-
-/** Limits on how far up and down the player can crane their neck. */
-const MIN_PITCH = -Math.PI * 0.38;
-const MAX_PITCH = Math.PI * 0.38;
+/** Radians of head rotation per pixel of drag. */
+const LOOK_SENSITIVITY = 0.0032;
+/** How far the head can pitch before it feels wrong. */
+const PITCH_LIMIT = Math.PI / 2 - 0.12;
+/** FOV range for the seated zoom. */
+const FOV_MIN = 35;
+const FOV_MAX = 70;
 
 /**
- * The GLB contains the whole White House and its grounds, so the model's own
- * bounding box floor is the lawn, several metres below the Oval Office carpet.
- * The interior floor is found instead from the desk: the desk sits on the
- * carpet, so its base is the floor, give or take its own thickness.
+ * Builds the seat list for a procedural room: the spawn, then one seat per
+ * station, then one per door. Every seat looks at the thing it is for.
  */
-const DESK_BASE_LIFT = 0.02;
-
-interface NamedBox {
-  node: THREE.Object3D;
-  box: THREE.Box3;
-  name: string;
-}
-
-function collectNamedBoxes(root: THREE.Object3D): NamedBox[] {
-  const boxes: NamedBox[] = [];
-  root.traverse((obj) => {
-    const name = obj.name.trim();
-    if (!name) return;
-    const box = new THREE.Box3().setFromObject(obj);
-    const size = box.getSize(BOX_SIZE);
-    if (box.isEmpty() || size.x <= 0 || size.y <= 0 || size.z <= 0) return;
-    boxes.push({ node: obj, box, name });
-  });
-  return boxes;
-}
-
-function bestMatch(
-  candidates: NamedBox[],
-  pattern: RegExp,
-  reject: RegExp | null,
-  minVolume: number,
-  maxVolume: number,
-): NamedBox | null {
-  let best: NamedBox | null = null;
-  let bestVolume = Infinity;
-  for (const candidate of candidates) {
-    const name = candidate.name.toLowerCase();
-    if (!pattern.test(name)) continue;
-    if (reject && reject.test(name)) continue;
-    const size = candidate.box.getSize(BOX_SIZE);
-    const volume = size.x * size.y * size.z;
-    if (volume < minVolume || volume > maxVolume) continue;
-    // The tightest node that matches is the actual object, not a group
-    // containing it and half the room.
-    if (volume < bestVolume) {
-      best = candidate;
-      bestVolume = volume;
-    }
-  }
-  return best;
-}
-
-/**
- * Finds the interior floor height. The desk is the anchor: it stands on the
- * carpet, so its base is the floor. Falls back to the tallest furniture we can
- * find, then to the model floor only as a last resort.
- */
-function findFloorY(
-  modelBox: THREE.Box3,
-  desk: NamedBox | null,
-  chair: NamedBox | null,
-  sofa: NamedBox | null,
-): number {
-  const anchors = [desk, chair, sofa].filter((b): b is NamedBox => b !== null);
-  if (anchors.length) {
-    // The highest base among the furniture is the one standing on the carpet;
-    // anything lower is a rug, a step, or part of the exterior.
-    let floor = Number.NEGATIVE_INFINITY;
-    for (const anchor of anchors) floor = Math.max(floor, anchor.box.min.y);
-    return floor + DESK_BASE_LIFT;
-  }
-  return modelBox.min.y;
-}
-
-/** Logs every node whose name suggests furniture we might want to sit at. */
-export function logSeatCandidates(model: THREE.Object3D): void {
-  model.traverse((child) => {
-    if (/desk|resolute|chair|table|sofa|couch|seat/i.test(child.name)) {
-      console.log(
-        "Found desk/chair candidate:",
-        child.name,
-        "local:",
-        child.position.toArray(),
-        "world:",
-        child.getWorldPosition(new THREE.Vector3()).toArray(),
-      );
-    }
-  });
-}
-
-/**
- * Builds the seat list for the loaded model. The desk seat is the important
- * one: it is where the game opens, and it is derived from the desk and the
- * chair behind it rather than from a hard-coded coordinate.
- */
-export function buildSeats(model: THREE.Object3D): Seat[] {
-  const candidates = collectNamedBoxes(model);
-  const modelBox = new THREE.Box3().setFromObject(model);
-
-  const desk = bestMatch(candidates, /desk|resolute/, null, 0.2, 40);
-  const chair = bestMatch(candidates, /chair|seat|stool/, /armchair|sofa/, 0.05, 8);
-  const sofa = bestMatch(candidates, /sofa|couch|settee/, null, 0.3, 30);
-
-  const floorY = findFloorY(modelBox, desk, chair, sofa);
-
-  const roomCenter = modelBox.getCenter(new THREE.Vector3());
-  const roomSize = modelBox.getSize(BOX_SIZE);
-  const span = Math.max(roomSize.x, roomSize.z);
-
-  const deskCenter = new THREE.Vector3();
-  if (desk) desk.box.getCenter(deskCenter);
-  else deskCenter.copy(roomCenter).setY(floorY);
-
-  // The desk faces away from its chair. Without a chair, it faces the room.
-  const forward = new THREE.Vector3();
-  if (chair) {
-    const chairCenter = chair.box.getCenter(new THREE.Vector3());
-    forward.set(deskCenter.x - chairCenter.x, 0, deskCenter.z - chairCenter.z);
-  }
-  if (forward.lengthSq() < 0.01) {
-    forward.set(roomCenter.x - deskCenter.x, 0, roomCenter.z - deskCenter.z);
-  }
-  if (forward.lengthSq() < 0.01) forward.set(0, 0, 1);
-  forward.normalize();
-
-  const seats: Seat[] = [];
-
-  // --- The desk. Seated behind it, looking out across the room. -----------
-  const deskSeat = new THREE.Vector3();
-  if (chair) {
-    chair.box.getCenter(deskSeat);
-  } else {
-    deskSeat.copy(deskCenter).addScaledVector(forward, -0.72);
-  }
-  deskSeat.y = floorY + SEATED_EYE;
-
-  const deskLook = new THREE.Vector3()
-    .copy(deskCenter)
-    .addScaledVector(forward, THREE.MathUtils.clamp(span * 0.34, 2.4, 4.6));
-  deskLook.y = floorY + 1.05;
-
-  seats.push({ id: "desk", label: "The Resolute Desk", position: deskSeat, target: deskLook });
-
-  // --- The seating group, from the far side of the coffee table. ----------
-  const sofaSeat = new THREE.Vector3();
-  if (sofa) {
-    const sofaCenter = sofa.box.getCenter(new THREE.Vector3());
-    sofaSeat.copy(sofaCenter).addScaledVector(forward, -0.55);
-  } else {
-    sofaSeat.copy(deskCenter).addScaledVector(forward, 2.6);
-  }
-  sofaSeat.y = floorY + SEATED_EYE;
-  const sofaLook = new THREE.Vector3(deskCenter.x, floorY + 1.05, deskCenter.z);
-  seats.push({ id: "seating", label: "The seating group", position: sofaSeat, target: sofaLook });
-
-  // --- The secure line, standing at the credenza on the east side. --------
-  const side = new THREE.Vector3(forward.z, 0, -forward.x);
-  const phoneSeat = new THREE.Vector3()
-    .copy(deskCenter)
-    .addScaledVector(side, THREE.MathUtils.clamp(span * 0.3, 2.2, 4.2))
-    .addScaledVector(forward, 0.4);
-  phoneSeat.y = floorY + STANDING_EYE;
-  const phoneLook = new THREE.Vector3()
-    .copy(phoneSeat)
-    .addScaledVector(side, 1.4);
-  phoneLook.y = floorY + 1.15;
-  seats.push({ id: "phone", label: "The Secure Line", position: phoneSeat, target: phoneLook });
-
-  // --- The door, standing, looking back into the room. --------------------
-  const doorSeat = new THREE.Vector3()
-    .copy(deskCenter)
-    .addScaledVector(forward, -THREE.MathUtils.clamp(span * 0.3, 2.2, 4.2));
-  doorSeat.y = floorY + STANDING_EYE;
-  const doorLook = new THREE.Vector3(deskCenter.x, floorY + 1.2, deskCenter.z);
-  seats.push({ id: "door", label: "The door", position: doorSeat, target: doorLook });
-
-  console.log("Oval Office seats", {
-    desk: desk?.name ?? null,
-    chair: chair?.name ?? null,
-    sofa: sofa?.name ?? null,
-    modelFloorY: modelBox.min.y,
-    floorY,
-    seats: seats.map((s) => ({
-      id: s.id,
-      position: s.position.toArray().map((n) => Number(n.toFixed(2))),
-      target: s.target.toArray().map((n) => Number(n.toFixed(2))),
-    })),
-  });
-
+export function seatsForRoom(room: RoomBuild): Seat[] {
+  const seats: Seat[] = [
+    { id: "spawn", label: room.id, position: room.spawn.clone(), target: room.spawnLook.clone() },
+  ];
+  for (const anchor of room.anchors) seats.push(seatForStation(anchor));
+  for (const door of room.doors) seats.push(seatForDoor(door));
   return seats;
 }
 
+function seatForStation(anchor: StationAnchor): Seat {
+  return {
+    id: anchor.id,
+    label: anchor.id,
+    position: anchor.position.clone().setY(1.42),
+    target: anchor.focus.clone(),
+  };
+}
+
+function seatForDoor(door: Door): Seat {
+  return {
+    id: `door:${door.to}`,
+    label: door.label,
+    position: door.position.clone().setY(1.66),
+    target: door.position.clone().addScaledVector(door.facing, 2.4).setY(1.2),
+  };
+}
+
 /**
- * Keeps the camera in the seat and pivots in place.
- * Translates purely between authored seats; drags rotate the head,
- * and pinch changes field of view rather than dolly distance.
- * OrbitControls is kept idle as a dummy so scene.ts doesn't break.
+ * Holds the camera at one seat and glides between them. The eye never
+ * translates while seated: drags rotate the head in place, and pinch or wheel
+ * changes field of view rather than distance.
  */
 export class SeatRig {
   readonly seats: Seat[];
   private camera: THREE.PerspectiveCamera;
-  private controls: OrbitControls;
   private dom: HTMLElement;
   private fromPosition = new THREE.Vector3();
   private fromTarget = new THREE.Vector3();
@@ -253,35 +67,23 @@ export class SeatRig {
   private elapsed = GLIDE_SECONDS;
   private current: Seat;
 
-  // Head rotation in radians. Yaw is horizontal, pitch is vertical.
   private yaw = 0;
   private pitch = 0;
-
-  // Touch tracking for look and pinch-zoom
+  private fov = 62;
   private pointers = new Map<number, { x: number; y: number }>();
   private lookPointer: number | null = null;
   private pinchDistance = 0;
 
-  constructor(
-    camera: THREE.PerspectiveCamera,
-    controls: OrbitControls,
-    seats: Seat[],
-    dom: HTMLElement,
-  ) {
+  constructor(camera: THREE.PerspectiveCamera, seats: Seat[], dom: HTMLElement) {
     this.camera = camera;
-    this.controls = controls;
     this.seats = seats;
     this.dom = dom;
     this.current = seats[0];
-
-    // Disable orbit so it doesn't fight the head-turn
-    this.controls.enabled = false;
-
     this.snapTo(seats[0]);
     this.dom.addEventListener("pointerdown", this.onPointerDown);
-    window.addEventListener("pointermove", this.onPointerMove);
-    window.addEventListener("pointerup", this.onPointerUp);
-    window.addEventListener("pointercancel", this.onPointerUp);
+    this.dom.addEventListener("pointermove", this.onPointerMove);
+    this.dom.addEventListener("pointerup", this.onPointerUp);
+    this.dom.addEventListener("pointercancel", this.onPointerUp);
     this.dom.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
@@ -297,28 +99,28 @@ export class SeatRig {
   snapTo(seat: Seat): void {
     this.current = seat;
     this.camera.position.copy(seat.position);
+    this.aimAt(seat.target);
     this.fromPosition.copy(seat.position);
     this.fromTarget.copy(seat.target);
     this.toPosition.copy(seat.position);
     this.toTarget.copy(seat.target);
     this.elapsed = GLIDE_SECONDS;
-    this.aimAt(seat.target);
   }
 
   /** Eases to a seat by id. Unknown ids are ignored. */
   goTo(id: string): boolean {
     const seat = this.seats.find((s) => s.id === id);
     if (!seat || seat === this.current) return false;
-    this.current = seat;
     this.fromPosition.copy(this.camera.position);
     this.fromTarget.copy(this.current.target);
+    this.current = seat;
     this.toPosition.copy(seat.position);
     this.toTarget.copy(seat.target);
     this.elapsed = 0;
     return true;
   }
 
-  /** Advances the glide. Called once per frame. */
+  /** Advances the glide. Called once per frame from the render loop. */
   update(dt: number): void {
     if (this.elapsed >= GLIDE_SECONDS) return;
     this.elapsed = Math.min(GLIDE_SECONDS, this.elapsed + dt);
@@ -329,17 +131,12 @@ export class SeatRig {
     this.aimAt(this.look);
   }
 
-  /** Points the head at a world-position target. */
   private aimAt(target: THREE.Vector3): void {
     const dx = target.x - this.camera.position.x;
     const dy = target.y - this.camera.position.y;
     const dz = target.z - this.camera.position.z;
     this.yaw = Math.atan2(-dx, -dz);
-    this.pitch = THREE.MathUtils.clamp(
-      Math.atan2(dy, Math.hypot(dx, dz)),
-      MIN_PITCH,
-      MAX_PITCH,
-    );
+    this.pitch = Math.atan2(dy, Math.hypot(dx, dz));
     this.applyRotation();
   }
 
@@ -347,11 +144,17 @@ export class SeatRig {
     this.camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
   }
 
+  setFov(fov: number): void {
+    this.fov = Math.max(FOV_MIN, Math.min(FOV_MAX, fov));
+    this.camera.fov = this.fov;
+    this.camera.updateProjectionMatrix();
+  }
+
   dispose(): void {
     this.dom.removeEventListener("pointerdown", this.onPointerDown);
-    window.removeEventListener("pointermove", this.onPointerMove);
-    window.removeEventListener("pointerup", this.onPointerUp);
-    window.removeEventListener("pointercancel", this.onPointerUp);
+    this.dom.removeEventListener("pointermove", this.onPointerMove);
+    this.dom.removeEventListener("pointerup", this.onPointerUp);
+    this.dom.removeEventListener("pointercancel", this.onPointerUp);
     this.dom.removeEventListener("wheel", this.onWheel);
   }
 
@@ -361,10 +164,8 @@ export class SeatRig {
       this.lookPointer = e.pointerId;
       return;
     }
-    if (this.pointers.size === 2) {
-      this.lookPointer = null;
-      this.pinchDistance = this.getDistance();
-    }
+    this.lookPointer = null;
+    this.pinchDistance = this.pinchSpan();
   };
 
   private onPointerMove = (e: PointerEvent): void => {
@@ -376,60 +177,36 @@ export class SeatRig {
     tracked.y = e.clientY;
 
     if (this.pointers.size >= 2) {
-      const dist = this.getDistance();
-      if (this.pinchDistance > 0) {
-        const delta = dist - this.pinchDistance;
-        this.camera.fov = THREE.MathUtils.clamp(
-          this.camera.fov - delta * 0.1,
-          MIN_FOV,
-          MAX_FOV,
-        );
-        this.camera.updateProjectionMatrix();
-      }
-      this.pinchDistance = dist;
+      const span = this.pinchSpan();
+      if (this.pinchDistance > 0) this.setFov(this.fov - (span - this.pinchDistance) * 0.12);
+      this.pinchDistance = span;
       return;
     }
 
-    if (e.pointerId === this.lookPointer) {
-      const sens = e.pointerType === "touch" ? 0.0032 : 0.0022;
-      this.yaw -= dx * sens;
-      this.pitch = THREE.MathUtils.clamp(
-        this.pitch - dy * sens,
-        MIN_PITCH,
-        MAX_PITCH,
-      );
-      this.applyRotation();
-    }
+    if (e.pointerId !== this.lookPointer) return;
+    this.yaw -= dx * LOOK_SENSITIVITY;
+    this.pitch -= dy * LOOK_SENSITIVITY;
+    this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, this.pitch));
+    this.applyRotation();
   };
 
   private onPointerUp = (e: PointerEvent): void => {
     this.pointers.delete(e.pointerId);
-    if (e.pointerId === this.lookPointer) {
-      this.lookPointer = null;
-      // If one finger remains, promote it to lookPointer
-      if (this.pointers.size === 1) {
-        this.lookPointer = this.pointers.keys().next().value ?? null;
-      }
-    }
-    if (this.pointers.size < 2) {
-      this.pinchDistance = 0;
+    if (e.pointerId === this.lookPointer) this.lookPointer = null;
+    if (this.pointers.size < 2) this.pinchDistance = 0;
+    if (this.pointers.size === 1 && this.lookPointer === null) {
+      this.lookPointer = this.pointers.keys().next().value ?? null;
     }
   };
 
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
-    this.camera.fov = THREE.MathUtils.clamp(
-      this.camera.fov + e.deltaY * 0.04,
-      MIN_FOV,
-      MAX_FOV,
-    );
-    this.camera.updateProjectionMatrix();
+    this.setFov(this.fov + Math.sign(e.deltaY) * 2.5);
   };
 
-  private getDistance(): number {
+  private pinchSpan(): number {
     if (this.pointers.size < 2) return 0;
-    const [a, b] = Array.from(this.pointers.values());
+    const [a, b] = [...this.pointers.values()];
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
 }
-
