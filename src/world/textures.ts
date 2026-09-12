@@ -73,6 +73,11 @@ function finish(canvas: HTMLCanvasElement, repeat: number, srgb: boolean): THREE
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeat, repeat);
+  // Trilinear mipmaps plus the highest anisotropy the device supports is what
+  // keeps a floor from turning to soup at grazing angles.
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   // three clamps this to whatever the GPU actually supports, so asking for
   // more than a phone can give costs nothing.
   tex.anisotropy = 16;
@@ -354,7 +359,9 @@ export function suiting(colour: number, repeat = 4, seed = 6): Surface {
   const hit = cache.get(key);
   if (hit) return hit;
 
-  const size = 256;
+  // 512 rather than 256: this is the cloth on the people standing a metre
+  // from the camera, so the twill has to survive being looked at directly.
+  const size = 512;
   const [canvas, ctx] = canvasOf(size);
   const base = new THREE.Color(colour);
   const fleck = fbm(size, seed, 2, 46);
