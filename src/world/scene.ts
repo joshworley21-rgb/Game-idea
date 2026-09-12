@@ -17,6 +17,7 @@ import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
 import { loadOvalOffice } from "./ovalLoader.ts";
 import { RenderLoop } from "./renderLoop.ts";
+import { applyViewport, measureViewport } from "./viewport.ts";
 import { OVAL_GRADE, CABINET_GRADE, CAPITOL_GRADE, PRESS_GRADE, RESIDENCE_GRADE, STUDY_GRADE } from "./postfx.ts";
 import type { Grade } from "./postfx.ts";
 import type { GameState, StationId } from "../game/types.ts";
@@ -75,7 +76,11 @@ export class World {
   private listener = new THREE.AudioListener();
   private month = 1;
   private state: GameState | null = null;
-  private loop: RenderLoop;
+  /**
+   * Null until the constructor has built it. `enterRoom` runs before that
+   * point and calls `resize`, so every use is optional-chained.
+   */
+  private loop: RenderLoop | null = null;
   /** Fixed seat rig controlling camera position and head rotation. */
   private rig: SeatRig | null = null;
   private canvas: HTMLCanvasElement;
@@ -143,7 +148,12 @@ export class World {
 
     this.loop = new RenderLoop(this.renderer, this.scene, this.camera, (dt) => this.tick(dt));
     const plain = new URLSearchParams(location.search).has("plain");
-    if (!plain) this.loop.build(ROOM_GRADES.oval);
+    if (!plain) {
+      const { width, height } = measureViewport(canvas);
+      this.loop.build(ROOM_GRADES.oval, width, height);
+      // enterRoom ran before the chain existed, so its setGrade was a no-op.
+      this.loop.setGrade(ROOM_GRADES[this.current.id]);
+    }
     this.resize();
     window.addEventListener("resize", this.resize);
 
@@ -261,7 +271,7 @@ export class World {
     this.resize();
     this.stations.rebuild(room.anchors);
     this.doors.rebuild(room.doors);
-    this.loop.setGrade(ROOM_GRADES[id]);
+    this.loop?.setGrade(ROOM_GRADES[id]);
     this.castKey = "";
     this.syncPeople(this.state);
     this.setMonth(this.month);
@@ -349,24 +359,19 @@ export class World {
   }
 
   private resize = (): void => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
-    this.loop.resize();
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.stations.setLabelScale(w < 620 ? 0.66 : 1);
+    const { width } = applyViewport(this.canvas, this.renderer, this.camera, this.loop);
+    this.stations.setLabelScale(width < 620 ? 0.66 : 1);
   };
 
   start(): void {
-    this.loop.start();
+    this.loop?.start();
   }
 
   get composerActive(): boolean {
-    return this.loop.active;
+    return this.loop?.active ?? false;
   }
 
   stop(): void {
-    this.loop.stop();
+    this.loop?.stop();
   }
 }
