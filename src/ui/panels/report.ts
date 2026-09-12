@@ -1,9 +1,9 @@
 import { describeEffects } from "../../game/effects.ts";
-import { calendar, money } from "../../game/state.ts";
+import { calendar } from "../../game/state.ts";
 import type { Crisis } from "../../game/types.ts";
 import type { MonthReport } from "../../game/sim.ts";
 import type { Engine } from "../../game/engine.ts";
-import { el } from "../dom.ts";
+import { el, money } from "../dom.ts";
 import { chips, panel, type PanelHost } from "./host.ts";
 
 // ------------------------------------------------------------------ crisis
