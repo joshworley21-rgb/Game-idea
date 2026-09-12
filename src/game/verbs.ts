@@ -87,6 +87,16 @@ export interface ActiveConversation {
   totalShown: Effects;
 }
 
+/**
+ * The flags a finished meeting sets. A meeting that has happened is a fact
+ * about the term, and the Chief of Staff's list of outstanding obligations
+ * reads these to know what is still owed.
+ */
+const CONVERSATION_FLAGS: Record<string, string> = {
+  "first-cabinet": "met:cabinet",
+  "address-house": "addressed:house",
+};
+
 export function startConversation(
   s: GameState,
   id: string,
@@ -181,6 +191,9 @@ export function chooseConversationOption(
 
   // The meeting is over: one result for the whole exchange, the way a
   // crisis resolves as one thing rather than a running commentary.
+  const flag = CONVERSATION_FLAGS[active.conversation.id];
+  if (flag) s.flags[flag] = true;
+
   const text = failed && option.failText ? option.failText : option.resultText;
   return {
     beat: null,
@@ -275,6 +288,8 @@ export function signBudget(
   s.enacted = { ...budget };
   s.nation.taxRate = Math.min(45, Math.max(6, taxRate));
   s.flags[`budget${s.month}`] = true;
+  // The Chief of Staff's list of outstanding obligations reads this.
+  s.flags["budget:signed"] = true;
 
   const effects: Effects = {};
   // Raising taxes is unpopular; cutting them buys short-term goodwill.
