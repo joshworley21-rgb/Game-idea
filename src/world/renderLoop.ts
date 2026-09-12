@@ -29,12 +29,14 @@ export class RenderLoop {
     return this.postfx !== null;
   }
 
-  /** Builds the chain. Skipped entirely when the caller asks for a plain render. */
-  build(grade: Grade): void {
+  /**
+   * Builds the chain. Skipped entirely when the caller asks for a plain render.
+   * The size is passed in rather than read from the window, so it matches the
+   * canvas box the renderer was sized against.
+   */
+  build(grade: Grade, width: number, height: number): void {
     if (this.postfx) return;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.postfx = new PostFX(this.renderer, this.scene, this.camera, w, h);
+    this.postfx = new PostFX(this.renderer, this.scene, this.camera, width, height);
     this.postfx.setGrade(grade);
   }
 
@@ -43,8 +45,8 @@ export class RenderLoop {
     this.postfx?.setGrade(grade);
   }
 
-  resize(): void {
-    this.postfx?.setSize(window.innerWidth, window.innerHeight);
+  resize(width: number, height: number): void {
+    this.postfx?.setSize(width, height);
   }
 
   start(): void {
