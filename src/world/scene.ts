@@ -225,24 +225,14 @@ export class World {
         logSeatCandidates(model);
         const seats = buildSeats(model);
 
-        this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
-        this.orbit.enableDamping = true;
-        this.orbit.dampingFactor = 0.08;
-        // Anchored in the chair: look around and zoom.
-        // Player cannot slide out of the seat or walk through walls.
-        this.orbit.enablePan = false;
-        this.orbit.enableRotate = true;
-        this.orbit.enableZoom = true;
-        this.orbit.rotateSpeed = this.touch ? 0.65 : 0.85;
-        this.orbit.zoomSpeed = this.touch ? 0.7 : 1.0;
-        this.orbit.minDistance = 0.5;
-        this.orbit.maxDistance = 5;
-        this.orbit.minPolarAngle = Math.PI * 0.12;
-        this.orbit.maxPolarAngle = Math.PI * 0.88;
-        // Touch: one finger looks around, two fingers pinch to zoom
-        this.orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+        // The seated view is a head pivot, not an orbit: the eye is pinned to
+       // the chair and drags rotate the head. OrbitControls is constructed
+       // only so SeatRig can hold a handle; it is disabled immediately.
+      this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+      this.orbit.enabled = false;
 
-        this.rig = new SeatRig(this.camera, this.orbit, seats, this.renderer.domElement);
+      this.rig = new SeatRig(this.camera, this.orbit, seats, this.renderer.domElement);
+      this.rig.setFov(62);
 
 
         this.addModelKeyLight(seats[0].target);
