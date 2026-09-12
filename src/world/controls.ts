@@ -43,10 +43,10 @@ export class PlayerController {
   /** Pushes the player back inside whichever room they are in. */
   clamp: (p: THREE.Vector3) => void = () => {};
 
-/** Set false while a UI panel is open. */
-enabled = true;
-/** True while a fixed-seat rig owns the camera; the walker goes quiet. */
-private orbitMode = false;
+  /** Set false while a UI panel is open. */
+  enabled = true;
+  /** True while a fixed-seat rig owns the camera; the walker goes quiet. */
+  private orbitMode = false;
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
@@ -83,7 +83,11 @@ private orbitMode = false;
   }
 
   unlock(): void {
-  /** Hands the camera to a fixed-seat rig, or takes it back. While seated the
+  if (document.pointerLockElement === this.dom) document.exitPointerLock();
+}
+
+/**
+ * Hands the camera to a fixed-seat rig, or takes it back. While seated the
  * walker ignores all pointer input, so OrbitControls gets every drag, and
  * the joystick is zeroed so the player cannot walk out of the chair.
  */
@@ -96,7 +100,7 @@ setOrbitMode(on: boolean): void {
   this.velocity.set(0, 0, 0);
   this.lookPointer = null;
   this.unlock();
-  }
+}
     if (document.pointerLockElement === this.dom) document.exitPointerLock();
   }
 
@@ -121,7 +125,7 @@ setOrbitMode(on: boolean): void {
   };
 
   private onPointerDown = (e: PointerEvent): void => {
-    if (!this.enabled || this.lookPointer !== null) return;
+  if (!this.enabled || this.orbitMode || this.lookPointer !== null) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     this.lookPointer = e.pointerId;
     this.lastPointer = { x: e.clientX, y: e.clientY };
