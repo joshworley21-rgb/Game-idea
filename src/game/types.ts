@@ -425,6 +425,11 @@ export interface GameState {
   log: LogEntry[];
   /** Crises awaiting a decision before the month can end. */
   pendingCrises: string[];
+  /**
+   * A story arc awaiting an answer, by id. Like a crisis, it blocks the end
+   * of the month: something you did has arrived and wants a decision.
+   */
+  pendingArc: string | null;
   /** Situations currently running. */
   threads: Thread[];
   /** Per-domain temperature, 0-100. Decays a little every month. */
