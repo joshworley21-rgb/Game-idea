@@ -22,7 +22,6 @@ import {
   stationPanel,
 } from "./ui/panels.ts";
 import { clear, el } from "./ui/dom.ts";
-import { MoveStick, isTouchDevice } from "./ui/touch.ts";
 import { STATION_ROOM, World } from "./world/scene.ts";
 
 const canvas = document.getElementById("scene") as HTMLCanvasElement;
@@ -38,9 +37,6 @@ class Game {
   private queue: Modal[] = [];
   private nearest: StationId | null = null;
   private ended = false;
-  private stick = new MoveStick();
-  /** True once the seated Oval view owns the camera; hides the joystick. */
-  private seated = false;
 
   constructor(engine: Engine) {
     this.engine = engine;
@@ -53,33 +49,19 @@ class Game {
       },
       () => this.world.sound.toggleMute(),
     );
-    document.body.append(this.hud.root, this.stick.root);
+    document.body.append(this.hud.root);
 
     // The oath click is the user gesture browsers require before audio starts.
     this.world.startAudio();
     this.hud.setMuted(this.world.sound.isMuted);
 
-    // Walking with a thumb. The stick only appears once a touch is seen.
-    this.stick.onChange = (x, y) => {
-      this.world.player.moveInput = { x, y };
-    };
-    if (isTouchDevice()) this.stick.enable();
-    window.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (e.pointerType === "touch" && !this.seated) this.stick.enable();
-      },
-      { capture: true },
-    );
-
     // Tapping or clicking a station in the room opens it.
     this.world.onStationTap = (station) => {
       if (!this.host.isOpen && !this.ended) this.openStation(station);
     };
-    // Tapping anywhere while standing at a door walks through it — there is
-    // no "E" key on a phone.
-    this.world.onDoorTap = () => {
-      if (!this.host.isOpen && !this.ended) this.walkThrough();
+    // Tapping a door walks through it — there is no "E" key on a phone.
+    this.world.onDoorTap = (door) => {
+      if (!this.host.isOpen && !this.ended) this.walkThrough(door);
     };
 
     // Android's back button closes what is open rather than leaving the game.
@@ -96,9 +78,7 @@ class Game {
       this.world.sound.closePanel();
       if (this.drain()) return;
       if (!this.ended) {
-        this.world.player.enabled = true;
         this.hud.setPrompt(this.nearest);
-        this.world.player.lock();
       }
     };
 
@@ -108,11 +88,6 @@ class Game {
     this.world.onNearestChange = (station) => {
       this.nearest = station;
       this.hud.setPrompt(this.host.isOpen ? null : station);
-    };
-
-    // Fires when the loaded model switches the player into or out of seated mode
-    this.world.onSeatedChange = (seated) => {
-      this.setSeated(seated);
     };
 
     engine.on("state", (s) => this.onState(s));
@@ -155,14 +130,6 @@ class Game {
     this.drain();
   }
 
-  /** The seated Oval view has no walking, so hide/disable the move stick. */
-  private setSeated(on: boolean): void {
-    if (this.seated === on) return;
-    this.seated = on;
-    if (on) this.stick.disable();
-    else if (isTouchDevice()) this.stick.enable();
-  }
-
   /** Returns true when the press was handled and should not exit the app. */
   onBack: () => boolean = () => false;
 
@@ -202,9 +169,7 @@ class Game {
     }
     if (e.code === "KeyE") {
       e.preventDefault();
-      // A door under your feet takes priority: you are standing in it.
-      if (this.world.nearestDoor) this.walkThrough();
-      else if (this.nearest) this.openStation(this.nearest);
+      if (this.nearest) this.openStation(this.nearest);
     }
     if (e.code === "Enter") {
       e.preventDefault();
@@ -220,9 +185,9 @@ class Game {
     this.openStation(station);
   }
 
-  /** Uses the door the president is standing at. */
-  private walkThrough(): void {
-    if (!this.world.useDoor()) return;
+  /** Uses the door the player tapped. */
+  private walkThrough(door: Door): void {
+    if (!this.world.useDoor(door)) return;
     this.world.sound.paper();
     this.hud.setRoom(this.world.roomName);
     this.hud.setPrompt(null);
@@ -243,8 +208,6 @@ class Game {
 
   private open(factory: () => HTMLElement, locked = false): void {
     this.world.sound.openPanel();
-    this.world.player.enabled = false;
-    this.world.player.unlock();
     this.hud.setPrompt(null);
     this.host.show(factory(), locked);
   }
@@ -270,7 +233,6 @@ class Game {
     this.world.syncPeople(s);
     this.world.stations.setBadge("desk", s.pendingCrises.length);
     this.world.stations.setBadge("budget", this.engine.budgetPending() ? 1 : 0);
-    this.setSeated(this.world.seat !== null);
 
     const check = this.engine.canEndMonth();
     this.hud.setEndEnabled(
@@ -283,8 +245,6 @@ class Game {
   private showEnding(ending: Ending): void {
     this.ended = true;
     this.queue.length = 0;
-    this.world.player.enabled = false;
-    this.world.player.unlock();
     this.host.release();
     clearSave();
     document.body.append(
@@ -359,7 +319,7 @@ function titleScreen(): void {
         })()
       : new Engine({ name: nameInput.value.trim() || "President Reyes", party });
     if (!state && campaign) engine.applyCampaignResult(campaign.deltas, campaign.summary);
-    new Game(engine);
+    openingCutscene(() => new Game(engine));
   };
 
   const saved = hasSave() ? loadGame() : null;
@@ -394,8 +354,8 @@ function titleScreen(): void {
             : null,
         ]),
         el("div", { class: "help-list" }, [
-          el("div", {}, [el("b", {}, ["Move"]), " — the stick to walk, drag anywhere else to look."]),
-          el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're standing at, or walk through the door under your feet."]),
+          el("div", {}, [el("b", {}, ["Look"]), " — drag anywhere to turn your head."]),
+          el("div", {}, [el("b", {}, ["Tap"]), " — open whatever you're looking at, or go through a door."]),
           el("div", {}, [el("b", {}, ["Full stats"]), " and ", el("b", {}, ["End the month"]), " are the buttons in the bar below."]),
           el("div", {}, [
             "You get two or three actions a month, and rather more than three things that need doing.",
@@ -489,5 +449,15 @@ function campaignScreen(
   );
 }
 
-titleScreen();
-void wireHardwareBack();
+// -------------------------------------------------------------- cutscene
+
+/**
+ * The opening crawl. It plays over a black screen while the Oval model
+ * downloads, and only hands over once the world says it is ready — so the
+ * procedural stand-in is never visible.
+ */
+function openingCutscene(onDone: () => void): void {
+  const lines = [
+    "January. The first month.",
+    "The Oval is yours now. The desk, the phone, the door to the study.",
+    "Everyone
