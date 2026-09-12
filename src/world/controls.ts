@@ -174,7 +174,9 @@ export class PlayerController {
       Math.abs(e.clientX - this.pressedPos.x) < TAP_SLOP &&
       Math.abs(e.clientY - this.pressedPos.y) < TAP_SLOP &&
       this.moved < TAP_SLOP * 2;
-    if (this.enabled && quick && still) this.onTap({ x: e.clientX, y: e.clientY });
+    if (this.enabled && !this.orbitMode && quick && still) {
+  this.onTap({ x: e.clientX, y: e.clientY });
+    
   };
 
   private applyRotation(): void {
