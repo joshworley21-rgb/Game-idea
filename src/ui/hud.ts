@@ -2,20 +2,15 @@ import { STATION_INFO, STATION_ORDER } from "../game/actions.ts";
 import { TERM_MONTHS, calendar } from "../game/state.ts";
 import type { GameState, StationId } from "../game/types.ts";
 import { clear, el, meter, one } from "./dom.ts";
+import { band, bandLow, statLine } from "./panels/host.ts";
 
-function statLine(key: string, value: string, tone: "ok" | "warn" | "bad" | ""): HTMLElement {
-  return el("div", { class: "stat-line" }, [
-    el("span", { class: "k" }, [key]),
-    el("span", { class: `v ${tone}` }, [value]),
-  ]);
-}
-
-const band = (v: number, good: number, bad: number): "ok" | "warn" | "bad" =>
-  v >= good ? "ok" : v >= bad ? "warn" : "bad";
-const bandLow = (v: number, good: number, bad: number): "ok" | "warn" | "bad" =>
-  v <= good ? "ok" : v <= bad ? "warn" : "bad";
-
-/** The always-on overlay: date, action points, the nation, and you. */
+/**
+ * The always-on overlay: date, action points, the nation, and you.
+ *
+ * The band helpers and `statLine` live in `panels/host.ts` and are imported
+ * rather than duplicated — they were copy-pasted here, which meant a change
+ * to how a stat is coloured had to be made in two places.
+ */
 export class Hud {
   readonly root: HTMLElement;
   private readonly touch = matchMedia("(pointer: coarse)").matches;
@@ -33,7 +28,6 @@ export class Hud {
   private situations = el("div", { class: "hud-card", id: "hud-situations" });
   private roomReveal = el("div", { id: "room-reveal", "aria-live": "polite" });
   private roomRevealTimer = 0;
-
   private muteButton: HTMLButtonElement;
 
   constructor(
@@ -175,6 +169,7 @@ export class Hud {
 
     clear(this.nation);
     const n = s.nation;
+    const congress = (s.politics.house + s.politics.senate) / 2;
     this.nation.append(
       el("div", { class: "hud-title" }, ["The Nation"]),
       statLine("Growth", `${one(n.growth)}%`, band(n.growth, 2, 0.8)),
@@ -182,7 +177,7 @@ export class Hud {
       statLine("Inflation", `${one(n.inflation)}%`, bandLow(n.inflation, 3, 4.5)),
       statLine("Debt / GDP", `${Math.round(n.debtToGdp)}%`, bandLow(n.debtToGdp, 105, 125)),
       statLine("Unrest", Math.round(n.unrest).toString(), bandLow(n.unrest, 40, 60)),
-      statLine("Congress", `${Math.round((s.politics.house + s.politics.senate) / 2)}%`, band((s.politics.house + s.politics.senate) / 2, 50, 42)),
+      statLine("Congress", `${Math.round(congress)}%`, band(congress, 50, 42)),
     );
 
     // What is running, in the country and upstairs. A strain in the family is
@@ -194,32 +189,14 @@ export class Hud {
     if (anything) {
       this.situations.append(el("div", { class: "hud-title" }, ["Running"]));
       for (const thread of s.threads.slice(0, 3)) {
-        const severity = thread.intensity > 60 ? "bad" : thread.intensity > 30 ? "warn" : "ok";
         this.situations.append(
-          el("div", { class: "situation", title: thread.detail }, [
-            el("div", { class: "situation-head" }, [
-              el("span", {}, [thread.label]),
-              el("span", { class: `v ${severity}` }, [`${Math.round(thread.intensity)}`]),
-            ]),
-            el("div", { class: "meter-track" }, [
-              el("div", { class: `meter-fill ${severity}`, style: `width:${thread.intensity}%` }),
-            ]),
-          ]),
+          situationRow(thread.label, thread.intensity, thread.detail),
         );
       }
       for (const member of strained.slice(0, 3)) {
         const strain = member.strain!;
-        const severity = strain.severity > 60 ? "bad" : strain.severity > 30 ? "warn" : "ok";
         this.situations.append(
-          el("div", { class: "situation", title: strain.detail }, [
-            el("div", { class: "situation-head" }, [
-              el("span", {}, [`${member.name} — ${strain.label}`]),
-              el("span", { class: `v ${severity}` }, [`${Math.round(strain.severity)}`]),
-            ]),
-            el("div", { class: "meter-track" }, [
-              el("div", { class: `meter-fill ${severity}`, style: `width:${strain.severity}%` }),
-            ]),
-          ]),
+          situationRow(`${member.name} — ${strain.label}`, strain.severity, strain.detail),
         );
       }
     }
@@ -233,4 +210,18 @@ export class Hud {
       meter("Family", s.personal.family),
     );
   }
+}
+
+/** One running situation: a label, a severity, and a bar. */
+function situationRow(label: string, severity: number, detail: string): HTMLElement {
+  const tone = severity > 60 ? "bad" : severity > 30 ? "warn" : "ok";
+  return el("div", { class: "situation", title: detail }, [
+    el("div", { class: "situation-head" }, [
+      el("span", {}, [label]),
+      el("span", { class: `v ${tone}` }, [`${Math.round(severity)}`]),
+    ]),
+    el("div", { class: "meter-track" }, [
+      el("div", { class: `meter-fill ${tone}`, style: `width:${severity}%` }),
+    ]),
+  ]);
 }
