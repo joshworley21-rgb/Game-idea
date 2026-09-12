@@ -26,7 +26,9 @@ export function findDeskPose(model: THREE.Object3D): DeskPose | null {
 
   const desk = findDesk(model);
   if (!desk) {
-    console.warn("[oval] no desk node found in model", nodeNames(model));
+    // console.error, not warn: consoleBanner.ts puts this on the Android screen,
+    // where there is otherwise no console to read.
+    console.error("[oval] no desk node found in model", nodeNames(model));
     return null;
   }
 
