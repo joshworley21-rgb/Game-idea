@@ -32,7 +32,6 @@ export const clear = (node: HTMLElement): void => {
   node.replaceChildren();
 };
 
-export const pct = (v: number): string => `${Math.round(v)}%`;
 export const one = (v: number): string => v.toFixed(1);
 
 export function money(billions: number): string {
@@ -52,10 +51,19 @@ export function meter(label: string, value: number, invert = false, suffix = "")
       el("span", { class: `meter-value ${tone}` }, [`${Math.round(value)}${suffix}`]),
     ]),
     el("div", { class: "meter-track" }, [
-      el("div", { class: `meter-fill ${tone}`, style: `width:${Math.max(0, Math.min(100, value))}%` }),
+      el("div", { class: `meter-fill ${tone}`, style: `width:${clamp(value)}%` }),
     ]),
   ]);
 }
+
+/** A bare bar, for rows that are not a full labelled meter. */
+export function bar(value: number, tone: string): HTMLElement {
+  return el("div", { class: "meter-track" }, [
+    el("div", { class: `meter-fill ${tone}`, style: `width:${clamp(value)}%` }),
+  ]);
+}
+
+export const clamp = (v: number): number => Math.max(0, Math.min(100, v));
 
 /** A compact inline sparkline from a series of numbers. */
 export function sparkline(values: number[], min: number, max: number, tone = "#e2c16e"): SVGElement {
