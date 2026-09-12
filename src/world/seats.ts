@@ -46,7 +46,7 @@ function seatForDoor(door: Door): Seat {
     id: `door:${door.to}`,
     label: door.label,
     position: door.position.clone().setY(1.66),
-    target: door.position.clone().addScaledVector(door.facing, 2.4).setY(1.2),
+    target: door.position.clone().addScaledVector(door.facing, -2.4).setY(1.2),
   };
 }
 
