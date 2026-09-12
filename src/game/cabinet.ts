@@ -1,5 +1,6 @@
 import { Rng } from "../core/rng.ts";
 import { FACTIONS } from "./congress.ts";
+import { CHIEF_NAME } from "./chief.ts";
 import type { CrisisTag, FactionKey, GameState, Secretary } from "./types.ts";
 
 /**
@@ -9,6 +10,10 @@ import type { CrisisTag, FactionKey, GameState, Secretary } from "./types.ts";
  * Competence makes their department work and takes the edge off crises in
  * their domain. Loyalty decides whether they are still there next year, and
  * whether what you said in private stays private.
+ *
+ * The Chief of Staff is the exception: she is always Ruth Ellery, because she
+ * is the voice that teaches the job and a teacher who changes every run
+ * teaches nothing. See `chief.ts`. The other five are drawn from the seed.
  */
 
 export const OFFICES = [
@@ -54,14 +59,43 @@ function makeSecretary(
   };
 }
 
+/**
+ * Ruth. Fixed name, fixed competence, fixed loyalty — she is the one person
+ * in the building whose numbers do not move with the seed, because the
+ * player has to be able to trust her before they can trust anything else.
+ *
+ * Her loyalty starts high and her competence is the highest in the room. She
+ * is not a stat to be managed; she is the person who tells you what the stats
+ * mean.
+ */
+function makeChief(): Secretary {
+  return {
+    office: "chief",
+    title: "Chief of Staff",
+    name: CHIEF_NAME,
+    competence: 91,
+    loyalty: 88,
+    faction: "moderates",
+    months: 0,
+  };
+}
+
 export function createCabinet(rng: Rng): Secretary[] {
-  const taken = new Set<string>();
-  return OFFICES.map((office) => makeSecretary(rng, office, taken));
+  const taken = new Set<string>([CHIEF_NAME]);
+  return OFFICES.map((office) =>
+    office.key === "chief" ? makeChief() : makeSecretary(rng, office, taken),
+  );
 }
 
 /** Replaces one office with a fresh appointment. */
 export function replaceSecretary(rng: Rng, cabinet: Secretary[], officeKey: string): Secretary {
   const office = OFFICES.find((o) => o.key === officeKey) ?? OFFICES[0];
+  // The Chief of Staff is not replaceable by the reshuffle mechanic: she is
+  // the narrator of the job, and a run without her has no voice.
+  if (officeKey === "chief") {
+    const existing = cabinet.find((c) => c.office === "chief");
+    if (existing) return existing;
+  }
   const fresh = makeSecretary(rng, office, new Set(cabinet.map((c) => c.name)));
   const index = cabinet.findIndex((c) => c.office === officeKey);
   if (index >= 0) cabinet[index] = fresh;
@@ -132,6 +166,10 @@ export interface CabinetEvent {
  * Runs the cabinet for a month. Loyalty erodes when you are unpopular, mired
  * in scandal, or simply have been there a while; a secretary who has stopped
  * believing in you either walks or talks.
+ *
+ * The Chief of Staff is exempt from the erosion. She has been in this building
+ * through four presidents and she does not leave because a poll moved. She
+ * can still be disappointed in you, and she will say so, but she stays.
  */
 export function tickCabinet(s: GameState, rng: Rng): CabinetEvent[] {
   const events: CabinetEvent[] = [];
@@ -139,6 +177,8 @@ export function tickCabinet(s: GameState, rng: Rng): CabinetEvent[] {
 
   for (const person of s.cabinet) {
     person.months += 1;
+    if (person.office === "chief") continue;
+
     // Loyalty only ever erodes; a strong party position slows it, never
     // reverses it. Nobody gets more loyal the longer they serve.
     const strain =
