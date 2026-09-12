@@ -399,5 +399,200 @@ export class World {
 
   syncPeople(state: GameState | null): void {
     this.state = state;
-    const key = this.castFingerprint(state);
-    if (key === this.cast
+        const key = this.castFingerprint(state);
+    if (key === this.castKey) return;
+    this.castKey = key;
+
+    this.people.clear();
+    this.animator.clear();
+    if (!this.current.cast.length) return;
+
+    const crowd: CrowdMember[] = [];
+    for (const slot of this.current.cast) {
+      if (slot.role === "member" || slot.role === "press") {
+        crowd.push({
+          position: slot.position,
+          rotationY: slot.rotationY,
+          group: slot.role === "member" ? slot.index : 0,
+          seed: Math.round(slot.position.x * 977 + slot.position.z * 131 + slot.position.y * 17),
+        });
+        continue;
+      }
+      const person = this.namedFor(slot, state);
+      if (!person) continue;
+      const character = buildCharacter({
+        seed: person.seed,
+        age: person.age,
+        dress: person.dress,
+        pose: slot.pose,
+      });
+      character.group.position.copy(slot.position);
+      character.group.rotation.y = slot.rotationY;
+      this.people.add(character.group);
+      this.animator.add(character);
+    }
+
+    if (crowd.length) {
+      const styles =
+        this.current.id === "capitol"
+          ? FACTION_COLOURS.map((suit) => ({ suit }))
+          : [{ suit: 0x6d7382 }, { suit: 0x7a7263 }, { suit: 0x716577 }];
+      this.people.add(buildCrowd(crowd, styles));
+    }
+  }
+
+  private namedFor(
+    slot: CastSlot,
+    state: GameState | null,
+  ): { seed: string; age?: number; dress?: "suit" | "smart" | "casual" } | null {
+    if (slot.role === "cabinet") {
+      const person = state?.cabinet?.[slot.index];
+      return person ? { seed: person.name, dress: "suit" } : { seed: `secretary-${slot.index}`, dress: "suit" };
+    }
+    if (slot.role === "family") {
+      const person = state?.family?.[slot.index];
+      if (!person) return null;
+      return {
+        seed: person.name,
+        age: person.age,
+        dress: person.kind === "spouse" ? "smart" : "casual",
+      };
+    }
+    return { seed: `aide-${slot.index}`, dress: "suit" };
+  }
+
+  private castFingerprint(state: GameState | null): string {
+    if (!state) return `${this.current.id}:empty`;
+    const cabinet = state.cabinet?.map((c) => c.name).join(",") ?? "";
+    const family = state.family?.map((f) => f.name).join(",") ?? "";
+    return `${this.current.id}|${cabinet}|${family}`;
+  }
+
+  // ------------------------------------------------------------------ setup
+
+  async loadAssets(onProgress?: (progress: LoadProgress) => void): Promise<number> {
+    const propGroups = new Map<RoomId, THREE.Object3D>();
+    const footprints = new Map<RoomId, Footprint[]>();
+    for (const id of Object.keys(PROPS_BY_ROOM) as RoomId[]) {
+      const room = this.roomOf(id);
+      const props = new THREE.Group();
+      props.name = `${id}-signature-props`;
+      room.group.add(props);
+      propGroups.set(id, props);
+      footprints.set(id, []);
+    }
+    const count = await loadProps(propGroups, onProgress, footprints);
+    for (const [id, roomFootprints] of footprints) {
+      const room = this.roomOf(id);
+      room.colliders = [...room.colliders, ...roomFootprints];
+    }
+    return count;
+  }
+
+  startAudio(): void {
+    this.sound.start(this.listener);
+    const room = this.current;
+    if (room.fireplace) {
+      this.sound.attachRoom(this.listener, room.fireplace, room.clockSpot ?? room.fireplace);
+    }
+  }
+
+  setMonth(month: number): void {
+    this.month = month;
+    const season = SEASONS[Math.floor(((month - 1) % 12) / 3) % 4];
+    const room = this.current;
+    if (room.daylight) {
+      room.daylight.color.setHex(season.color);
+      room.daylight.intensity = season.intensity * (room.id === "study" ? 0.6 : 1);
+    }
+    this.hemisphere.color.setHex(season.ambient);
+    for (const light of room.windowLights?.children ?? []) {
+      if (light instanceof THREE.PointLight) {
+        light.color.setHex(season.color);
+        light.intensity = 2.5 + season.intensity * 1.6;
+      }
+    }
+  }
+
+  pickStation(clientX: number, clientY: number): StationId | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.camera);
+    return this.stations.pick(this.raycaster);
+  }
+
+  get nearestDoor(): Door | null {
+    return this.doors.nearest;
+  }
+
+  useDoor(door: Door): boolean {
+    this.enterRoom(door.to);
+    return true;
+  }
+
+  private resize = (): void => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
+    this.gtao?.setSize(w * AO_SCALE, h * AO_SCALE);
+    this.bloom?.setSize(w, h);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.stations.setLabelScale(w < 620 ? 0.66 : 1);
+  };
+
+  start(): void {
+    const loop = () => {
+      this.raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.05, this.clock.getDelta());
+
+      this.rig?.update(dt);
+
+      const before = this.stations.nearest;
+      const nearest = this.stations.update(dt, this.camera.position);
+      if (nearest !== before) this.onNearestChange(nearest);
+      this.doors.update(dt, this.camera);
+      this.animator.update(dt, this.camera.position);
+      if (this.composer) {
+        const t0 = performance.now();
+        this.composer.render();
+        this.measure(performance.now() - t0);
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
+    };
+    loop();
+  }
+
+  private measure(ms: number): void {
+    if (!this.composer) return;
+    this.frameSamples += 1;
+    if (this.frameSamples < 8) return;
+    if (ms > 120) {
+      this.dropComposer();
+      return;
+    }
+    if (this.frameSamples > 32) return;
+    this.frameCost += ms;
+    if (this.frameSamples === 32 && this.frameCost / 24 > 22) this.dropComposer();
+  }
+
+  get composerActive(): boolean {
+    return this.composer !== null;
+  }
+
+  private dropComposer(): void {
+    this.composer?.dispose();
+    this.composer = null;
+    this.gtao = null;
+    this.bloom = null;
+  }
+
+  stop(): void {
+    cancelAnimationFrame(this.raf);
+  }
+}
