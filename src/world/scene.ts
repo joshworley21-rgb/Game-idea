@@ -242,7 +242,8 @@ export class World {
         // Touch: one finger looks around, two fingers pinch to zoom
         this.orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
-        this.rig = new SeatRig(this.camera, this.orbit, seats);
+        this.rig = new SeatRig(this.camera, this.orbit, seats, this.renderer.domElement);
+
 
         this.addModelKeyLight(seats[0].target);
         this.renderer.toneMappingExposure = 1.2;
