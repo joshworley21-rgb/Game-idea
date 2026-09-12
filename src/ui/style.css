@@ -364,14 +364,9 @@ body {
   display: none; place-items: center; z-index: 20;
   touch-action: none;
 }
-.stick.visible { display: grid; }
-.stick-knob {
-  width: 56px; height: 56px; border-radius: 50%;
-  background: rgba(226, 193, 110, 0.72);
-  border: 1px solid rgba(255, 240, 200, 0.7);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  transition: transform 0.08s ease-out;
+.stick:not(.visible) {
   pointer-events: none;
+}
 }
 
 /*
