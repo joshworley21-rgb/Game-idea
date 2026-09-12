@@ -140,6 +140,7 @@ export function createInitialState(opts: NewGameOptions): GameState {
     news: [],
     log: [],
     pendingCrises: [],
+    pendingArc: null,
     threads: [],
     heat: {},
     // Everyone starts a little above water; the leans are applied on the first tick.
