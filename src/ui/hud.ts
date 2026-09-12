@@ -18,6 +18,7 @@ const bandLow = (v: number, good: number, bad: number): "ok" | "warn" | "bad" =>
 /** The always-on overlay: date, action points, the nation, and you. */
 export class Hud {
   readonly root: HTMLElement;
+  private readonly touch = matchMedia("(pointer: coarse)").matches;
   private date = el("div", { class: "hud-card", id: "hud-date" });
   private roomName = "The Oval Office";
   private power = el("div", { class: "hud-card", id: "hud-power" });
@@ -44,8 +45,6 @@ export class Hud {
     this.endButton = el("button", { class: "btn primary", onclick: onEndMonth }, [
       "End the month",
     ]) as HTMLButtonElement;
-    // "(Tab)" means nothing on a phone, where this button is the only way in.
-    const touch = matchMedia("(pointer: coarse)").matches;
     this.muteButton = el("button", {
       class: "btn ghost small mute",
       title: "Mute sound",
@@ -58,18 +57,19 @@ export class Hud {
     this.actions.append(
       this.endButton,
       el("button", { class: "btn ghost small", onclick: onDashboard }, [
-        touch ? "Full stats" : "Dashboard (Tab)",
+        this.touch ? "Full stats" : "Dashboard (Tab)",
       ]),
       this.muteButton,
     );
-    // Number keys reach every station without walking, so the whole game is
-    // playable from the keyboard alone.
+
+    // On a phone the number keys do not exist, so the legend is just a row of
+    // tappable stations. On desktop the key hints are kept for keyboard play.
     STATION_ORDER.forEach((station, i) => {
+      const children = this.touch
+        ? [el("span", {}, [STATION_INFO[station].name])]
+        : [el("kbd", {}, [String(i + 1)]), el("span", {}, [STATION_INFO[station].name])];
       this.legend.append(
-        el("button", { class: "legend-row", onclick: () => onStation(station) }, [
-          el("kbd", {}, [String(i + 1)]),
-          el("span", {}, [STATION_INFO[station].name]),
-        ]),
+        el("button", { class: "legend-row", onclick: () => onStation(station) }, children),
       );
     });
 
@@ -99,10 +99,11 @@ export class Hud {
     }
     const info = STATION_INFO[station];
     clear(this.prompt);
-    this.prompt.append(
-      el("kbd", {}, ["E"]),
-      document.createTextNode(` ${blocked ? "—" : "Open"} ${info.name}`),
-    );
+    if (this.touch) {
+      this.prompt.append(document.createTextNode(blocked ? info.name : `Tap to open ${info.name}`));
+    } else {
+      this.prompt.append(el("kbd", {}, ["E"]), document.createTextNode(` ${blocked ? "—" : "Open"} ${info.name}`));
+    }
     this.prompt.classList.add("show");
     this.crosshair.classList.add("hot");
   }
