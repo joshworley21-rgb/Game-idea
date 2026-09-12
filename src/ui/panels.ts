@@ -14,3 +14,4 @@ export { billsPanel, budgetPanel } from "./panels/legislation.ts";
 export { crisisPanel, reportPanel } from "./panels/report.ts";
 export { dashboardPanel } from "./panels/dashboard.ts";
 export { reelectionPanel, endingPanel } from "./panels/decisions.ts";
+export { arcPanel } from "./panels/arc.ts";
