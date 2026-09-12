@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MODEL_URL } from "./modelUrl.ts";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { SeatRig, seatsForRoom } from "./seats.ts";
-import { buildOffice } from "./office.ts";
+import { buildOffice, OVAL_MODEL_POSE } from "./office.ts";
 import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
 import type { Door, RoomBuild, RoomId } from "./roomkit.ts";
@@ -16,7 +16,6 @@ import { PROPS_BY_ROOM } from "./props.ts";
 import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
 import { loadOvalOffice } from "./ovalLoader.ts";
-import { findDeskPose } from "./deskPose.ts";
 import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
 import { applyViewport, measureViewport } from "./viewport.ts";
@@ -227,29 +226,28 @@ export class World {
         this.ovalPending = false;
         this.current.group.visible = false;
 
-        const deskPose = findDeskPose(model);
+        // The GLB lives at its own origin, so use the pose measured with the
+        // in-game freecam rather than the procedural room's coordinates.
+        const deskPose = {
+          position: OVAL_MODEL_POSE.position.clone(),
+          target: OVAL_MODEL_POSE.target.clone(),
+          nodeName: "measured",
+        };
 
         if (this.freecamActive) {
-          const start = deskPose
-            ? { position: deskPose.position, target: deskPose.target }
-            : { position: this.current.spawn, target: this.current.spawnLook };
-          this.camera.position.copy(start.position);
-          this.freecam?.setTarget(start.target);
+          this.camera.position.copy(deskPose.position);
+          this.freecam?.setTarget(deskPose.target);
         } else {
           this.rig?.dispose();
-          const overrides = deskPose
-            ? {
-                spawn: { id: "spawn", label: "oval", position: deskPose.position, target: deskPose.target },
-                desk: { id: "desk", label: "desk", position: deskPose.position, target: deskPose.target },
-              }
-            : {};
+          const overrides = {
+            spawn: { id: "spawn", label: "oval", position: deskPose.position, target: deskPose.target },
+            desk: { id: "desk", label: "desk", position: deskPose.position, target: deskPose.target },
+          };
           this.rig = new SeatRig(this.camera, seatsForRoom(this.current, overrides), this.canvas);
         }
 
-        if (deskPose) {
-          const p = deskPose.position;
-          console.log(`[oval] desk "${deskPose.nodeName}" — camera ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`);
-        }
+        const p = deskPose.position;
+        console.log(`[oval] desk pose ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`);
 
         this.stations.rebuild(this.current.anchors);
         this.doors.rebuild(this.current.doors);
