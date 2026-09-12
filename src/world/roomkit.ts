@@ -335,7 +335,9 @@ export function daylightFor(
   light.position.copy(from);
   light.target.position.copy(at);
   light.castShadow = true;
-  light.shadow.mapSize.set(2048, 2048);
+  // 4096 over the room footprint gives shadow edges that stay sharp at close
+  // range instead of falling apart into visible texels along furniture legs.
+  light.shadow.mapSize.set(4096, 4096);
   light.shadow.camera.near = 1;
   light.shadow.camera.far = 34;
   light.shadow.camera.left = -11;
