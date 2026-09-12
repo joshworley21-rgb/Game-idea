@@ -1,8 +1,6 @@
 import * as THREE from "three";
 import type { Door } from "./roomkit.ts";
 
-const REACH = 1.6;
-
 function labelTexture(label: string, active: boolean): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -41,12 +39,18 @@ interface DoorVisual {
 /**
  * The markers on the floor at each way out of a room. They work the same way
  * the station markers do, so leaving a room feels like using anything else.
+ *
+ * Seated, the camera never walks, so proximity is meaningless: the player
+ * looks at a door and taps it. `pick` does the raycast; `update` only drives
+ * the pulse and the highlight.
  */
 export class Doors {
   private visuals: DoorVisual[] = [];
   private scene: THREE.Scene;
   private group = new THREE.Group();
   private clock = 0;
+  private raycaster = new THREE.Raycaster();
+  private ndc = new THREE.Vector2();
   nearest: Door | null = null;
 
   constructor(scene: THREE.Scene) {
@@ -96,21 +100,41 @@ export class Doors {
     }
   }
 
-  update(dt: number, player: THREE.Vector3): Door | null {
+  /**
+   * Returns the door under a screen point, or null. The sprite is the target:
+   * it is a metre and a half wide and sits at eye height, so it is a far
+   * easier thing to hit with a thumb than the ring on the floor.
+   */
+  pick(clientX: number, clientY: number, camera: THREE.Camera, dom: HTMLElement): Door | null {
+    if (!this.visuals.length) return null;
+    const rect = dom.getBoundingClientRect();
+    this.ndc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.ndc, camera);
+    const hits = this.raycaster.intersectObjects(
+      this.visuals.map((v) => v.sprite),
+      false,
+    );
+    if (!hits.length) return null;
+    const hit = hits[0].object;
+    const visual = this.visuals.find((v) => v.sprite === hit);
+    return visual?.door ?? null;
+  }
+
+  /** Drives the pulse and the highlight. The camera position is not used. */
+  update(dt: number, camera: THREE.Camera): void {
     this.clock += dt;
-    let best: DoorVisual | null = null;
-    let bestDistance = REACH;
+    this.raycaster.setFromCamera(this.ndc.set(0, 0), camera);
+    const hits = this.raycaster.intersectObjects(
+      this.visuals.map((v) => v.sprite),
+      false,
+    );
+    const focused = hits.length ? hits[0].object : null;
 
     for (const v of this.visuals) {
-      const d = v.door.position.distanceTo(new THREE.Vector3(player.x, 0, player.z));
-      if (d < bestDistance) {
-        bestDistance = d;
-        best = v;
-      }
-    }
-
-    for (const v of this.visuals) {
-      const active = v === best;
+      const active = v.sprite === focused;
       if (active !== v.active) {
         v.active = active;
         (v.sprite.material.map as THREE.Texture | null)?.dispose();
@@ -123,7 +147,8 @@ export class Doors {
       v.sprite.scale.set(active ? 1.7 : 1.5, active ? 0.425 : 0.375, 1);
     }
 
-    this.nearest = best?.door ?? null;
-    return this.nearest;
+    this.nearest = focused
+      ? (this.visuals.find((v) => v.sprite === focused)?.door ?? null)
+      : null;
   }
 }
