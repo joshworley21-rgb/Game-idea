@@ -10,6 +10,8 @@ export interface StationAnchor {
   id: StationId;
   position: THREE.Vector3;
   focus: THREE.Vector3;
+  /** Where the camera sits for this station. Defaults to `position`. */
+  camera?: THREE.Vector3;
 }
 
 export interface Footprint {
