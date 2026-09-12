@@ -39,6 +39,8 @@ class Game {
   private nearest: StationId | null = null;
   private ended = false;
   private stick = new MoveStick();
+  /** True once the seated Oval view owns the camera; hides the joystick. */
+  private seated = false;
 
   constructor(engine: Engine) {
     this.engine = engine;
@@ -65,7 +67,7 @@ class Game {
     window.addEventListener(
       "pointerdown",
       (e) => {
-        if (e.pointerType === "touch") this.stick.enable();
+        if (e.pointerType === "touch" && !this.seated) this.stick.enable();
       },
       { capture: true },
     );
@@ -108,6 +110,11 @@ class Game {
       this.hud.setPrompt(this.host.isOpen ? null : station);
     };
 
+    // Fires when the loaded model switches the player into or out of seated mode
+    this.world.onSeatedChange = (seated) => {
+      this.setSeated(seated);
+    };
+
     engine.on("state", (s) => this.onState(s));
     engine.on("outcome", (o: Outcome) => {
       this.host.toast(o);
@@ -146,6 +153,14 @@ class Game {
       this.queue.push(() => this.open(() => crisisPanel(this.engine, crisis, this.host), true));
     }
     this.drain();
+  }
+
+  /** The seated Oval view has no walking, so hide/disable the move stick. */
+  private setSeated(on: boolean): void {
+    if (this.seated === on) return;
+    this.seated = on;
+    if (on) this.stick.disable();
+    else if (isTouchDevice()) this.stick.enable();
   }
 
   /** Returns true when the press was handled and should not exit the app. */
@@ -255,6 +270,7 @@ class Game {
     this.world.syncPeople(s);
     this.world.stations.setBadge("desk", s.pendingCrises.length);
     this.world.stations.setBadge("budget", this.engine.budgetPending() ? 1 : 0);
+    this.setSeated(this.world.seat !== null);
 
     const check = this.engine.canEndMonth();
     this.hud.setEndEnabled(
