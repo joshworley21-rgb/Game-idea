@@ -1,17 +1,20 @@
 /**
- * The stylesheet, in three parts.
+ * The stylesheet, in four parts.
  *
  * This was one file that had been truncated and rebuilt more than once, and
  * the rebuild had lost most of its rules — the HUD, panels, options, meters
  * and toasts had no styling at all. Splitting it by concern makes it obvious
  * when a part is missing, and keeps each file small enough to rewrite whole.
  *
- *   base.css        tokens, reset, the HUD frame
+ *   base.css        tokens, reset, the HUD frame, drawers, dock
  *   components.css  buttons, panels, options, meters, chips, toasts
  *   screens.css     title, campaign, cutscene, portraits, responsive
+ *   chief.css       the Chief of Staff's briefing card
  *
- * Order matters: the responsive block in screens.css overrides the base.
+ * Order matters: the responsive block in screens.css overrides the base, and
+ * chief.css comes last so her card sits above the dock on a small screen.
  */
 @import "./base.css";
 @import "./components.css";
 @import "./screens.css";
+@import "./chief.css";
