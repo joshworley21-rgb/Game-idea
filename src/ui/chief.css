@@ -1,0 +1,106 @@
+/* ==========================================================================
+   The Chief of Staff.
+   ========================================================================== */
+
+.chief-panel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(14px);
+  z-index: 58;
+  width: min(520px, 92vw);
+  padding: 14px 16px;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chief-panel.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+/* A briefing is the first thing she says in a month, so it sits higher and
+   stays until it is read. A reaction is a remark and gets out of the way. */
+.chief-panel.briefing { bottom: calc(104px + env(safe-area-inset-bottom)); }
+
+.chief-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 10px;
+}
+
+.chief-face { flex: 0 0 auto; }
+
+.chief-name {
+  font: 600 14px/1.2 var(--serif);
+  color: var(--ink);
+}
+
+.chief-role {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-top: 3px;
+}
+
+.chief-line {
+  margin: 0;
+  font: 400 14px/1.6 var(--serif);
+  color: var(--ink);
+  border-left: 2px solid rgba(201, 169, 97, 0.35);
+  padding-left: 13px;
+}
+
+/* The standing obligations, under whatever she is saying. */
+.chief-obligations {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.chief-obligations:empty { display: none; }
+
+.chief-obligations-title {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 7px;
+}
+
+.chief-obligation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  padding: 3px 0;
+}
+
+.chief-obligation-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex: 0 0 auto;
+}
+
+@media (max-width: 820px), (pointer: coarse) {
+  .chief-panel {
+    width: 94vw;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    padding: 12px 13px;
+  }
+  .chief-panel.briefing { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .chief-line { font-size: 13px; }
+}
