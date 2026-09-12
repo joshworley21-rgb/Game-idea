@@ -54,6 +54,7 @@ class Game {
         if (!this.host.isOpen && !this.ended) this.openStation(station);
       },
       () => this.world.sound.toggleMute(),
+      () => this.world.toggleFreecam(),
     );
     document.body.append(this.hud.root);
 
