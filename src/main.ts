@@ -240,6 +240,7 @@ class Game {
         () => this.open(() => billsPanel(this.engine, this.host)),
         () => this.open(() => budgetPanel(this.engine, this.host)),
         (id) => this.open(() => conversationPanel(this.engine, id, this.host)),
+        (id) => this.reactTo(id),
       ),
     );
   }
@@ -289,11 +290,12 @@ class Game {
   }
 
   /**
-   * Her one-line reaction to a decision, if she has one. Called from the
-   * outcome handler so it lands with the toast rather than after it.
+   * Her one-line reaction to a decision, if she has one. Called by the station
+   * panel after an action lands, so it arrives with the toast rather than
+   * after it.
    */
   private reactTo(id: string): void {
-    if (this.host.isOpen || this.ended) return;
+    if (this.ended) return;
     if (!chiefReaction(id)) return;
     this.chief.react(id);
   }
