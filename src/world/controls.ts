@@ -43,12 +43,10 @@ export class PlayerController {
   /** Pushes the player back inside whichever room they are in. */
   clamp: (p: THREE.Vector3) => void = () => {};
 
-  /** Set false while a UI panel is open. */
-  enabled = true;
-  locked = false;
-  onLockChange: (locked: boolean) => void = () => {};
-  /** Fired for a press that did not turn into a drag. */
-  onTap: (event: TapEvent) => void = () => {};
+/** Set false while a UI panel is open. */
+enabled = true;
+/** True while a fixed-seat rig owns the camera; the walker goes quiet. */
+private orbitMode = false;
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
@@ -85,6 +83,20 @@ export class PlayerController {
   }
 
   unlock(): void {
+  /** Hands the camera to a fixed-seat rig, or takes it back. While seated the
+ * walker ignores all pointer input, so OrbitControls gets every drag, and
+ * the joystick is zeroed so the player cannot walk out of the chair.
+ */
+setOrbitMode(on: boolean): void {
+  this.orbitMode = on;
+  this.enabled = !on;
+  if (!on) return;
+  this.keys.clear();
+  this.moveInput = { x: 0, y: 0 };
+  this.velocity.set(0, 0, 0);
+  this.lookPointer = null;
+  this.unlock();
+  }
     if (document.pointerLockElement === this.dom) document.exitPointerLock();
   }
 
