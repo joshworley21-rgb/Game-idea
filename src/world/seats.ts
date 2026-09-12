@@ -36,7 +36,7 @@ function seatForStation(anchor: StationAnchor): Seat {
   return {
     id: anchor.id,
     label: anchor.id,
-    position: anchor.position.clone().setY(1.42),
+    position: (anchor.camera ?? anchor.position).clone().setY(1.42),
     target: anchor.focus.clone(),
   };
 }
