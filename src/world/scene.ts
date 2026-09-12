@@ -85,8 +85,8 @@ export class World {
   private loop: RenderLoop | null = null;
   /** Fixed seat rig controlling camera position and head rotation. */
   private rig: SeatRig | null = null;
-  /** Developer free-roam camera, enabled with `?freecam`. */
-  private readonly freecamMode = new URLSearchParams(location.search).has("freecam");
+  /** Free-roam camera. Enabled by `?freecam`, or toggled from the HUD. */
+  private freecamActive = new URLSearchParams(location.search).has("freecam");
   private freecam: Freecam | null = null;
   private canvas: HTMLCanvasElement;
   private tapStart = { x: 0, y: 0, t: 0 };
@@ -141,14 +141,14 @@ export class World {
     this.stations = new Stations(this.scene, []);
     this.doors = new Doors(this.scene);
 
-    if (!this.freecamMode) {
+    if (!this.freecamActive) {
       canvas.addEventListener("pointerdown", (e) => {
         this.tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
       });
       canvas.addEventListener("pointerup", this.onCanvasTap);
     }
 
-    if (this.freecamMode) {
+    if (this.freecamActive) {
       this.freecam = new Freecam(this.camera, this.canvas);
     }
 
@@ -181,6 +181,7 @@ export class World {
   }
 
   private onCanvasTap = (e: PointerEvent): void => {
+    if (this.freecamActive) return;
     const dt = performance.now() - this.tapStart.t;
     const dist = Math.hypot(e.clientX - this.tapStart.x, e.clientY - this.tapStart.y);
     if (dt > 400 || dist > 14) return;
@@ -194,6 +195,28 @@ export class World {
     if (door) this.onDoorTap(door);
   };
 
+  /** Switches between the seated rig and the free-roam camera. */
+  toggleFreecam(): boolean {
+    if (!this.freecamActive) {
+      // Preserve the current framing as the orbit target.
+      const target = new THREE.Vector3();
+      this.camera.getWorldDirection(target);
+      target.multiplyScalar(2).add(this.camera.position);
+
+      this.freecam = new Freecam(this.camera, this.canvas);
+      this.freecam.setTarget(target);
+      this.rig?.dispose();
+      this.rig = null;
+      this.freecamActive = true;
+    } else {
+      this.freecam?.dispose();
+      this.freecam = null;
+      this.freecamActive = false;
+      this.rig = new SeatRig(this.camera, seatsForRoom(this.current), this.canvas);
+    }
+    return this.freecamActive;
+  }
+
   /** Loads the Oval GLB and swaps it in for the procedural stand-in. */
   private async loadOval(url: string): Promise<void> {
     loadOvalOffice(url, {
@@ -206,7 +229,7 @@ export class World {
 
         const deskPose = findDeskPose(model);
 
-        if (this.freecamMode) {
+        if (this.freecamActive) {
           const start = deskPose
             ? { position: deskPose.position, target: deskPose.target }
             : { position: this.current.spawn, target: this.current.spawnLook };
@@ -297,7 +320,7 @@ export class World {
       this.scene.fog.far = presentation.fogFar;
     }
 
-    if (this.freecamMode) {
+    if (this.freecamActive) {
       this.camera.position.copy(room.spawn);
       this.freecam?.setTarget(room.spawnLook);
     } else {
