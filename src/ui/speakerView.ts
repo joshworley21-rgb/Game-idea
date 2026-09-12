@@ -1,5 +1,5 @@
 import { resolveSpeaker } from "../game/speaker.ts";
-import type { Speaker } from "../game/speaker.ts";
+import type { Mood, Speaker } from "../game/speaker.ts";
 import type { GameState } from "../game/types.ts";
 import { el } from "./dom.ts";
 import { portrait } from "./portrait.ts";
@@ -50,22 +50,24 @@ export function speakerBlock(speaker: string | Speaker, prompt: string, s: GameS
   return el("div", {}, [head, el("div", { class: "speaker-line" }, [prompt])]);
 }
 
-/**
- * A person in a roster — the cabinet, the family — with their face, their
- * role, and whatever they are carrying.
- */
-export function personRow(opts: {
+export interface PersonRowOptions {
   seed: string;
   name: string;
   role: string;
   age?: number;
   dress?: string;
-  mood?: "neutral" | "warm" | "concerned" | "hostile" | "tired" | "amused" | "guarded";
+  mood?: Mood;
   value?: { text: string; tone: string };
   meta?: string;
   bars?: { label: string; value: number; tone: string }[];
   strain?: { text: string; severe: boolean };
-}): HTMLElement {
+}
+
+/**
+ * A person in a roster — the cabinet, the family — with their face, their
+ * role, and whatever they are carrying.
+ */
+export function personRow(opts: PersonRowOptions): HTMLElement {
   const body = el("div", { class: "person-body" }, [
     el("div", { class: "person-name" }, [
       el("span", {}, [opts.name]),
