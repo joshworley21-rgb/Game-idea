@@ -91,19 +91,17 @@ export class PlayerController {
  * walker ignores all pointer input, so OrbitControls gets every drag, and
  * the joystick is zeroed so the player cannot walk out of the chair.
  */
-setOrbitMode(on: boolean): void {
-  this.orbitMode = on;
-  this.enabled = !on;
-  if (!on) return;
-  this.keys.clear();
-  this.moveInput = { x: 0, y: 0 };
-  this.velocity.set(0, 0, 0);
-  this.lookPointer = null;
-  this.unlock();
+  setOrbitMode(on: boolean): void {
+   this.orbitMode = on;
+   this.enabled = !on;
+   if (!on) return;
+   this.keys.clear();
+   this.moveInput = { x: 0, y: 0 };
+   this.velocity.set(0, 0, 0);
+   this.lookPointer = null;
+   this.unlock();
 }
-    if (document.pointerLockElement === this.dom) document.exitPointerLock();
-  }
-
+  
   private release = (): void => {
     this.keys.clear();
     this.lookPointer = null;
@@ -125,7 +123,7 @@ setOrbitMode(on: boolean): void {
   };
 
   private onPointerDown = (e: PointerEvent): void => {
-  if (!this.enabled || this.orbitMode || this.lookPointer !== null) return;
+    if (!this.enabled || this.orbitMode || this.lookPointer !== null) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     this.lookPointer = e.pointerId;
     this.lastPointer = { x: e.clientX, y: e.clientY };
