@@ -226,14 +226,12 @@ export class World {
         const seats = buildSeats(model);
 
         // The seated view is a head pivot, not an orbit: the eye is pinned to
-       // the chair and drags rotate the head. OrbitControls is constructed
-       // only so SeatRig can hold a handle; it is disabled immediately.
-      this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
-      this.orbit.enabled = false;
+        // the chair and drags rotate the head. OrbitControls is constructed
+        // only so SeatRig can hold a handle; it is disabled immediately.
+        this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+        this.orbit.enabled = false;
 
-      this.rig = new SeatRig(this.camera, this.orbit, seats, this.renderer.domElement);
-      this.rig.setFov(62);
-
+        this.rig = new SeatRig(this.camera, this.orbit, seats, this.renderer.domElement);
 
         this.addModelKeyLight(seats[0].target);
         this.renderer.toneMappingExposure = 1.2;
@@ -548,9 +546,13 @@ export class World {
     this.gtao?.setSize(w * AO_SCALE, h * AO_SCALE);
     this.bloom?.setSize(w, h);
     this.camera.aspect = w / h;
-    const targetHorizontal = (this.horizontalFov * Math.PI) / 180;
-    const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
-    this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
+    // While seated the rig owns the field of view; outside it,
+    // derives it from the room's horizontal FOV.
+    if (!this.rig) {
+      const targetHorizontal = (this.horizontalFov * Math.PI) / 180;
+      const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
+      this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
+    }
     this.camera.updateProjectionMatrix();
     this.stations.setLabelScale(w < 620 ? 0.66 : 1);
   };
@@ -562,7 +564,6 @@ export class World {
 
       if (this.orbit) {
         this.rig?.update(dt);
-        this.orbit.update();
       } else {
         this.player.update(dt);
         this.sound.update(this.camera.position.distanceTo(this.lastPosition));
@@ -613,5 +614,3 @@ export class World {
     cancelAnimationFrame(this.raf);
   }
 }
-
-
