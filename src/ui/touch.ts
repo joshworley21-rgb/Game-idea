@@ -26,6 +26,14 @@ export class MoveStick {
     this.root.classList.add("visible");
   }
 
+  /** Hides the stick and zeroes any input it was providing. */
+  disable(): void {
+    this.root.classList.remove("visible");
+    this.pointerId = null;
+    this.knob.style.transform = "translate(0px, 0px)";
+    this.onChange(0, 0);
+  }
+
   private onDown = (e: PointerEvent): void => {
     if (this.pointerId !== null) return;
     e.preventDefault();
