@@ -71,7 +71,6 @@ export class World {
   private castKey = "";
   private ambient: THREE.AmbientLight;
   private hemisphere: THREE.HemisphereLight;
-  private modelKey: THREE.DirectionalLight | null = null;
   private raycaster = new THREE.Raycaster();
   private listener = new THREE.AudioListener();
   private month = 1;
@@ -129,7 +128,7 @@ export class World {
     pmrem.dispose();
 
     this.camera.add(this.listener);
-    this.stations = new Stations(this.scene, [], this.touch);
+    this.stations = new Stations(this.scene, []);
     this.doors = new Doors(this.scene);
 
     canvas.addEventListener("pointerdown", (e) => {
@@ -190,7 +189,7 @@ export class World {
         this.stations.rebuild(this.current.anchors);
         this.doors.rebuild(this.current.doors);
 
-        this.modelKey = addModelKeyLight(this.scene, this.current.spawnLook);
+        addModelKeyLight(this.scene, this.current.spawnLook);
         this.renderer.toneMappingExposure = ROOM_PRESENTATION.oval.exposure;
         this.syncPeople(this.state);
         this.onReady();
