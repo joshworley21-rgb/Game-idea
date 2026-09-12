@@ -9,7 +9,6 @@ import { calendar } from "./state.ts";
 import type { Outcome } from "./outcome.ts";
 import type { Rng } from "../core/rng.ts";
 import type {
-  Bill,
   BudgetKey,
   Choice,
   Conversation,
@@ -378,5 +377,3 @@ export function affordable(s: GameState, crisis: Crisis, choice: Choice): boolea
   const cheapest = Math.min(...crisis.choices.map((c) => c.capitalCost ?? 0));
   return cost === cheapest;
 }
-
-export type { Bill };
