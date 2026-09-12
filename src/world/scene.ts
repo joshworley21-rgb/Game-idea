@@ -16,6 +16,7 @@ import { PROPS_BY_ROOM } from "./props.ts";
 import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
 import { loadOvalOffice } from "./ovalLoader.ts";
+import { findDeskPose } from "./deskPose.ts";
 import { RenderLoop } from "./renderLoop.ts";
 import { applyViewport, measureViewport } from "./viewport.ts";
 import { OVAL_GRADE, CABINET_GRADE, CAPITOL_GRADE, PRESS_GRADE, RESIDENCE_GRADE, STUDY_GRADE } from "./postfx.ts";
@@ -189,13 +190,27 @@ export class World {
         this.scene.add(model);
         model.updateMatrixWorld(true);
 
-        // Seats come from the procedural room's anchors, which describe the
-        // same furniture the model does. The model is scenery; the anchors
-        // are the truth the rest of the game reads.
+        // The model is scenery, but it is also the only source of truth for
+        // where the real desk actually is. Measure it and put the camera in
+        // the chair behind it, falling back to the procedural seat if the
+        // node cannot be found.
         this.ovalPending = false;
         this.current.group.visible = false;
         this.rig?.dispose();
-        this.rig = new SeatRig(this.camera, seatsForRoom(this.current), this.canvas);
+
+        const deskPose = findDeskPose(model);
+        const overrides = deskPose
+          ? {
+              spawn: { id: "spawn", label: "oval", position: deskPose.position, target: deskPose.target },
+              desk: { id: "desk", label: "desk", position: deskPose.position, target: deskPose.target },
+            }
+          : {};
+        this.rig = new SeatRig(this.camera, seatsForRoom(this.current, overrides), this.canvas);
+        if (deskPose) {
+          const p = deskPose.position;
+          console.log(`[oval] desk "${deskPose.nodeName}" — camera ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`);
+        }
+
         this.stations.rebuild(this.current.anchors);
         this.doors.rebuild(this.current.doors);
 
