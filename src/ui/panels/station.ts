@@ -34,7 +34,8 @@ export function familyRoster(s: GameState): HTMLElement[] {
       // Someone carrying something reads as tired; otherwise they are fine.
       mood: member.strain ? "concerned" : member.bond >= 65 ? "warm" : "neutral",
       value: { text: Math.round(member.bond).toString(), tone },
-      meta: member.doing,
+      // What they are doing, and how long it has been since you asked.
+      meta: `${member.doing} · ${waiting}`,
       bars: [{ label: "Bond", value: member.bond, tone }],
       strain: member.strain
         ? {
