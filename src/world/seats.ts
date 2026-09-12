@@ -9,6 +9,12 @@ export interface Seat {
   target: THREE.Vector3;
 }
 
+/** Allows the Oval model to replace the spawn and desk seats it can measure. */
+export interface SeatOverrides {
+  spawn?: Seat;
+  desk?: Seat;
+}
+
 /** How long a move between two seats takes, in seconds. */
 const GLIDE_SECONDS = 0.85;
 /** Radians of head rotation per pixel of drag. */
@@ -23,11 +29,17 @@ const FOV_MAX = 70;
  * Builds the seat list for a room: the spawn, then one seat per station, then
  * one per door. Every seat looks at the thing it is for.
  */
-export function seatsForRoom(room: RoomBuild): Seat[] {
+export function seatsForRoom(room: RoomBuild, overrides: SeatOverrides = {}): Seat[] {
   const seats: Seat[] = [
-    { id: "spawn", label: room.id, position: room.spawn.clone(), target: room.spawnLook.clone() },
+    overrides.spawn ?? { id: "spawn", label: room.id, position: room.spawn.clone(), target: room.spawnLook.clone() },
   ];
-  for (const anchor of room.anchors) seats.push(seatForStation(anchor));
+  for (const anchor of room.anchors) {
+    if (anchor.id === "desk" && overrides.desk) {
+      seats.push({ ...overrides.desk, id: anchor.id, label: anchor.id });
+    } else {
+      seats.push(seatForStation(anchor));
+    }
+  }
   for (const door of room.doors) seats.push(seatForDoor(door));
   return seats;
 }
