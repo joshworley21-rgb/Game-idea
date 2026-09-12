@@ -47,7 +47,9 @@ export function titleScreen(cb: TitleCallbacks): void {
     blue.classList.remove("selected");
   });
 
-  const overlay = el("div", { class: "overlay" });
+  // `menu-screen` makes the overlay a full-bleed surface rather than a
+  // floating card over the canvas.
+  const overlay = el("div", { class: "overlay menu-screen" });
   document.body.append(overlay);
 
   clear(overlay);
