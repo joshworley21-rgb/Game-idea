@@ -8,15 +8,13 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { SeatRig, buildSeats, logSeatCandidates } from "./seats.ts";
+import { SeatRig, buildSeats } from "./seats.ts";
 import { buildOffice } from "./office.ts";
 import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
 import type { CastSlot, Door, RoomBuild, RoomId } from "./roomkit.ts";
 import { CharacterAnimator, buildCharacter, buildCrowd } from "./character.ts";
 import type { CrowdMember } from "./character.ts";
-import { PlayerController } from "./controls.ts";
 import { Stations } from "./stations.ts";
 import { Doors } from "./doors.ts";
 import { Sound } from "../audio/sound.ts";
@@ -103,7 +101,6 @@ export class World {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
-  readonly player: PlayerController;
   readonly stations: Stations;
   readonly doors: Doors;
   private rooms = new Map<RoomId, RoomBuild>();
@@ -119,7 +116,6 @@ export class World {
   private raf = 0;
   private raycaster = new THREE.Raycaster();
   private listener = new THREE.AudioListener();
-  private lastPosition = new THREE.Vector3();
   private month = 1;
   private state: GameState | null = null;
   /** Ambient occlusion and anti-aliasing, on hardware that can afford them. */
@@ -129,11 +125,10 @@ export class World {
   /** A rolling frame-time sample, used to drop the extra passes if needed. */
   private frameCost = 0;
   private frameSamples = 0;
-  private horizontalFov = ROOM_PRESENTATION.oval.horizontalFov;
-  /** Orbit controls for the loaded Oval Office viewer path. */
-  private orbit: OrbitControls | null = null;
-  /** Fixed seats in the loaded Oval Office. Null until the model arrives. */
+  /** Fixed seat rig controlling camera position and head rotation. */
   private rig: SeatRig | null = null;
+  private canvas: HTMLCanvasElement;
+  private tapStart = { x: 0, y: 0, t: 0 };
   readonly sound = new Sound();
   /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
   readonly touch: boolean;
@@ -143,10 +138,13 @@ export class World {
   onStationTap: (station: StationId) => void = () => {};
   /** A tap that landed near a door, with none open. */
   onDoorTap: () => void = () => {};
-  /** The player has walked through a door into another room. */
+  /** The player has moved through a door or station into another room. */
   onRoomChange: (room: RoomId, name: string) => void = () => {};
+  /** Signals when the seated view takes or relinquishes control. */
+  onSeatedChange: (seated: boolean) => void = () => {};
 
   constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
     this.touch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -177,16 +175,13 @@ export class World {
     pmrem.dispose();
 
     this.camera.add(this.listener);
-    this.player = new PlayerController(this.camera, this.renderer.domElement);
-    this.lastPosition.copy(this.camera.position);
     this.stations = new Stations(this.scene, [], this.touch);
     this.doors = new Doors(this.scene);
-    this.player.onTap = ({ x, y }) => {
-      const station = this.pickStation(x, y);
-      if (station) this.onStationTap(station);
-      else if (this.doors.nearest) this.onDoorTap();
-      else this.player.lock();
-    };
+
+    canvas.addEventListener("pointerdown", (e) => {
+      this.tapStart = { x: e.clientX, y: e.clientY, t: performance.now() };
+    });
+    canvas.addEventListener("pointerup", this.onCanvasTap);
 
     this.enterRoom("oval");
     const plain = new URLSearchParams(location.search).has("plain");
@@ -197,9 +192,22 @@ export class World {
     void this.loadOvalOffice(MODEL_URL);
   }
 
+  private onCanvasTap = (e: PointerEvent): void => {
+    const dt = performance.now() - this.tapStart.t;
+    const dist = Math.hypot(e.clientX - this.tapStart.x, e.clientY - this.tapStart.y);
+    if (dt > 400 || dist > 14) return;
+
+    const station = this.pickStation(e.clientX, e.clientY);
+    if (station) {
+      this.onStationTap(station);
+    } else if (this.doors.nearest) {
+      this.onDoorTap();
+    }
+  };
+
   /**
-   * Loads the bundled Oval Office GLB from the release URL, replaces the
-   * procedural Oval, and switches to orbit controls.
+   * Loads the bundled Oval Office GLB from the release URL and replaces the
+   * procedural Oval model.
    */
   private async loadOvalOffice(url: string): Promise<void> {
     const loader = new GLTFLoader();
@@ -222,22 +230,13 @@ export class World {
         this.scene.add(model);
         model.updateMatrixWorld(true);
 
-        logSeatCandidates(model);
         const seats = buildSeats(model);
-
-        // The seated view is a head pivot, not an orbit: the eye is pinned to
-        // the chair and drags rotate the head. OrbitControls is constructed
-        // only so SeatRig can hold a handle; it is disabled immediately.
-        this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
-        this.orbit.enabled = false;
-
-        this.rig = new SeatRig(this.camera, this.orbit, seats, this.renderer.domElement);
+        this.rig?.dispose();
+        this.rig = new SeatRig(this.camera, {} as any, seats, this.canvas);
 
         this.addModelKeyLight(seats[0].target);
         this.renderer.toneMappingExposure = 1.2;
-
-        // Disable walker and release pointer/touch locks to OrbitControls
-        this.player.setOrbitMode(true);
+        this.onSeatedChange(true);
 
         console.log(
           `Oval Office model loaded (${model.children.length} root nodes, ${seats.length} seats, at ${this.rig.currentId})`,
@@ -256,7 +255,7 @@ export class World {
         }
       },
       (error) => {
-        console.error("Oval Office model failed to load — keeping the procedural room", error);
+        console.error("Oval Office model failed to load — keeping procedural room", error);
       },
     );
   }
@@ -340,27 +339,22 @@ export class World {
     if (this.current) this.current.group.visible = false;
     this.current = room;
     room.group.visible = true;
+
     const presentation = ROOM_PRESENTATION[id];
-    this.horizontalFov = presentation.horizontalFov;
     this.renderer.toneMappingExposure = presentation.exposure;
     if (this.scene.fog instanceof THREE.Fog) {
       this.scene.fog.near = presentation.fogNear;
       this.scene.fog.far = presentation.fogFar;
     }
 
-    const back = arrivingFrom ? room.doors.find((d) => d.to === arrivingFrom) : undefined;
-    const spawn = back ? back.position.clone() : room.spawn.clone();
-    const look = back ? room.spawnLook.clone() : room.spawnLook.clone();
-    if (back) {
-      const inward = spawn.clone().sub(back.facing).setY(0).normalize().multiplyScalar(1.1);
-      spawn.add(inward);
-    }
-    this.player.teleport(spawn);
-    this.player.lookAt(look);
-    this.resize();
+    this.rig?.dispose();
+    const seats = buildSeats(room.group);
+    this.rig = new SeatRig(this.camera, {} as any, seats, this.canvas);
 
-    this.player.colliders = room.colliders;
-    this.player.clamp = room.clamp;
+    const back = arrivingFrom ? room.doors.find((d) => d.to === arrivingFrom) : undefined;
+    if (back) this.rig.goTo("door");
+
+    this.resize();
     this.stations.rebuild(room.anchors);
     this.doors.rebuild(room.doors);
     this.castKey = "";
@@ -368,17 +362,13 @@ export class World {
     this.setMonth(this.month);
     if (room.fireplace) this.sound.attachRoom(this.listener, room.fireplace, room.clockSpot ?? room.fireplace);
     this.onRoomChange(id, ROOM_INFO[id].name);
+    this.onSeatedChange(true);
   }
 
   goToStation(station: StationId): void {
     const target = STATION_ROOM[station];
     if (target !== this.current.id) this.enterRoom(target);
-    // In the Oval the view moves between fixed seats.
-    if (target === "oval" && this.rig) {
-      this.rig.goTo(station === "phone" ? "phone" : "desk");
-      return;
-    }
-    this.focus(station);
+    this.rig?.goTo(station);
   }
 
   /** The seat the camera is at, or heading to. */
@@ -482,7 +472,6 @@ export class World {
       const room = this.roomOf(id);
       room.colliders = [...room.colliders, ...roomFootprints];
     }
-    this.player.colliders = this.current.colliders;
     return count;
   }
 
@@ -521,11 +510,6 @@ export class World {
     return this.stations.pick(this.raycaster);
   }
 
-  focus(station: StationId): void {
-    const target = this.stations.focusOf(station);
-    if (target) this.player.lookAt(target);
-  }
-
   get nearestDoor(): Door | null {
     return this.doors.nearest;
   }
@@ -546,13 +530,6 @@ export class World {
     this.gtao?.setSize(w * AO_SCALE, h * AO_SCALE);
     this.bloom?.setSize(w, h);
     this.camera.aspect = w / h;
-    // While seated the rig owns the field of view; outside it,
-    // derives it from the room's horizontal FOV.
-    if (!this.rig) {
-      const targetHorizontal = (this.horizontalFov * Math.PI) / 180;
-      const vertical = 2 * Math.atan(Math.tan(targetHorizontal / 2) / this.camera.aspect);
-      this.camera.fov = Math.min(86, Math.max(52, (vertical * 180) / Math.PI));
-    }
     this.camera.updateProjectionMatrix();
     this.stations.setLabelScale(w < 620 ? 0.66 : 1);
   };
@@ -562,13 +539,7 @@ export class World {
       this.raf = requestAnimationFrame(loop);
       const dt = Math.min(0.05, this.clock.getDelta());
 
-      if (this.orbit) {
-        this.rig?.update(dt);
-      } else {
-        this.player.update(dt);
-        this.sound.update(this.camera.position.distanceTo(this.lastPosition));
-        this.lastPosition.copy(this.camera.position);
-      }
+      this.rig?.update(dt);
 
       const before = this.stations.nearest;
       const nearest = this.stations.update(dt, this.camera.position);
