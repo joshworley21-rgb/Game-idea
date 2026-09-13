@@ -27,7 +27,10 @@ function labelTexture(label: string, active: boolean): THREE.CanvasTexture {
   fitFont(ctx, label, 500 - PAD * 2, "600", 30, "Georgia, 'Times New Roman', serif");
   withTextShadow(ctx, () => ctx.fillText(label, 256, 58));
 
-  const hint = active ? "tap to go through" : "walk here";
+  // Not "walk here": in the Oval the camera is on a seat rig and never walks,
+  // which the class comment below says outright. The player looks at a door
+  // and taps it, so that is what the sign says in both states.
+  const hint = active ? "go through" : "tap to go through";
   ctx.font = "500 20px system-ui, sans-serif";
   ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.62)";
   withTextShadow(ctx, () => ctx.fillText(hint, 256, 88));
@@ -36,6 +39,17 @@ function labelTexture(label: string, active: boolean): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+
+/**
+ * The plaque's size in metres, resting and while the crosshair is on it.
+ *
+ * These live here because `update` re-applies them every frame: setting a
+ * size at rebuild time alone does nothing, it is overwritten on the next
+ * tick. Narrow, because the Oval's west side has three openings inside eighty
+ * degrees and the closest pair of plaques is under two metres apart.
+ */
+const PLAQUE = { w: 1.26, h: 0.315 };
+const PLAQUE_ACTIVE = { w: 1.43, h: 0.357 };
 
 interface DoorVisual {
   door: Door;
@@ -99,8 +113,10 @@ export class Doors {
           depthTest: false,
         }),
       );
-      sprite.position.copy(door.position).setY(1.65);
-      sprite.scale.set(1.5, 0.375, 1);
+      // Above the eye line, like the station labels, so a plaque across the
+      // room reads as a sign on a wall rather than a slab across the view.
+      sprite.position.copy(door.position).setY(1.95);
+      sprite.scale.set(PLAQUE.w, PLAQUE.h, 1);
       sprite.renderOrder = 8;
       this.group.add(sprite);
 
@@ -109,9 +125,10 @@ export class Doors {
   }
 
   /**
-   * Returns the door under a screen point, or null. The sprite is the target:
-   * it is a metre and a half wide and sits at eye height, so it is a far
-   * easier thing to hit with a thumb than the ring on the floor.
+   * Returns the door under a screen point, or null. The sprite is the target
+   * rather than the ring on the floor: it is over a metre wide and stands just
+   * above the eye line, which is a far easier thing to hit with a thumb than a
+   * ring lying flat at the far side of the room.
    */
   pick(clientX: number, clientY: number, camera: THREE.Camera, dom: HTMLElement): Door | null {
     if (!this.visuals.length) return null;
@@ -152,7 +169,8 @@ export class Doors {
       }
       const pulse = active ? 0.5 + Math.sin(this.clock * 3.2) * 0.16 : 0.24;
       v.ring.material.opacity = pulse;
-      v.sprite.scale.set(active ? 1.7 : 1.5, active ? 0.425 : 0.375, 1);
+      const size = active ? PLAQUE_ACTIVE : PLAQUE;
+      v.sprite.scale.set(size.w, size.h, 1);
     }
 
     this.nearest = focused

@@ -17,6 +17,7 @@ import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
 import { findDeskPose } from "./deskPose.ts";
 import { loadOvalOffice } from "./ovalLoader.ts";
+import { ovalModelAnchors, ovalModelDoors } from "./ovalModelLayout.ts";
 import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
 import { applyViewport, measureViewport } from "./viewport.ts";
@@ -92,6 +93,14 @@ export class World {
   private tapStart = { x: 0, y: 0, t: 0 };
   /** True until the Oval GLB has replaced the procedural stand-in. */
   private ovalPending = true;
+  /**
+   * The loaded Oval GLB. It is added to the scene rather than to the Oval's
+   * room group, so nothing was hiding it when the player left the room and
+   * the White House was still drawn around them in the Cabinet Room. It is
+   * also what the Oval's markers are measured from, so it has to be reachable
+   * from `enterRoom` and not just from the load callback.
+   */
+  private ovalModel: THREE.Object3D | null = null;
   readonly sound = new Sound();
   /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
   readonly touch: boolean;
@@ -180,7 +189,7 @@ export class World {
   private tick(dt: number): void {
     this.rig?.update(dt);
     this.freecam?.update();
-    this.stations.update(dt);
+    this.stations.update(dt, this.camera.position);
     this.doors.update(dt, this.camera);
     this.animator.update(dt, this.camera.position);
   }
@@ -228,6 +237,8 @@ export class World {
       onLoaded: (model) => {
         this.scene.add(model);
         model.updateMatrixWorld(true);
+        this.ovalModel = model;
+        model.visible = this.current.id === "oval";
 
         this.ovalPending = false;
         this.current.group.visible = false;
@@ -260,8 +271,7 @@ export class World {
           `[oval] desk pose ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)} from "${deskPose.nodeName}"`,
         );
 
-        this.stations.rebuild(this.current.anchors);
-        this.doors.rebuild(this.current.doors);
+        this.rebuildMarkers(this.current);
 
         addModelKeyLight(this.scene, this.current.spawnLook);
         this.renderer.toneMappingExposure = ROOM_PRESENTATION.oval.exposure;
@@ -315,6 +325,24 @@ export class World {
     return room;
   }
 
+  /**
+   * Puts the station rings and door plaques where the room on screen actually
+   * has them.
+   *
+   * For every room but the Oval that is the room's own layout. For the Oval it
+   * depends on which Oval is being drawn: the procedural one is 10.9 x 8.8m
+   * and the model is 9.6 x 11.3m, so the procedural markers hang the Residence
+   * plaque inside a bookcase and the Cabinet Room's on blank wall. Going
+   * through this on every room change, rather than only when the model loads,
+   * is what stops walking out of the Oval and back in from restoring the
+   * wrong set.
+   */
+  private rebuildMarkers(room: RoomBuild): void {
+    const model = room.id === "oval" ? this.ovalModel : null;
+    this.stations.rebuild((model && ovalModelAnchors(model)) || room.anchors);
+    this.doors.rebuild((model && ovalModelDoors(model)) || room.doors);
+  }
+
   enterRoom(id: RoomId): void {
     const room = this.roomOf(id);
     if (this.current) this.current.group.visible = false;
@@ -337,9 +365,11 @@ export class World {
       this.rig = new SeatRig(this.camera, seatsForRoom(room), this.canvas);
     }
 
+    // The Oval's model is scenery for one room, not for the building.
+    if (this.ovalModel) this.ovalModel.visible = id === "oval";
+
     this.resize();
-    this.stations.rebuild(room.anchors);
-    this.doors.rebuild(room.doors);
+    this.rebuildMarkers(room);
     this.loop?.setGrade(ROOM_GRADES[id]);
     this.castKey = "";
     this.syncPeople(this.state);

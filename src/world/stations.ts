@@ -7,6 +7,36 @@ import type { StationAnchor } from "./roomkit.ts";
 /** Inset from the plate's edge that the text is not allowed to cross. */
 const PAD = 30;
 
+/**
+ * How high the floating label sits above its marker, in metres.
+ *
+ * Above a seated eye line (about 1.6m), not across it. At 1.62 the label for
+ * the station you were sitting at hung dead centre in the view, a metre and a
+ * half wide and two metres away, with the room behind it.
+ */
+const LABEL_HEIGHT = 1.95;
+
+/**
+ * A label fades out as you approach the thing it names. Standing at a station
+ * and being shouted at by its sign is the one case where the sign is certainly
+ * not needed — you are already there — and it is also the case where a sprite
+ * of fixed world size fills the screen.
+ */
+const FADE_NEAR = 1.6;
+const FADE_FAR = 3.2;
+/** Never all the way out: it stays findable, and it stays tappable. */
+const FADE_FLOOR = 0.12;
+
+/**
+ * How much of its size a label keeps when you are right on top of it.
+ *
+ * A sprite is a fixed size in the world, so at two metres a 1.5m-wide plate
+ * subtends about forty degrees and runs off the top of the frame. Fading it
+ * alone left a cropped plate hanging over the view; it has to get smaller as
+ * well.
+ */
+const NEAR_SCALE = 0.55;
+
 function labelTexture(title: string, hint: string, active: boolean): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -100,7 +130,7 @@ export class Stations {
           depthTest: false,
         }),
       );
-      sprite.position.copy(anchor.position).setY(1.62);
+      sprite.position.copy(anchor.position).setY(LABEL_HEIGHT);
       sprite.scale.set(1.5, 0.47, 1);
       sprite.userData.baseScale = [1.5, 0.47];
       sprite.renderOrder = 10;
@@ -135,7 +165,7 @@ export class Stations {
     v.sprite.material.needsUpdate = true;
   }
 
-  update(dt: number): void {
+  update(dt: number, cameraPosition?: THREE.Vector3): void {
     this.clock += dt;
     for (const v of this.visuals) {
       const urgent = v.badge > 0;
@@ -143,8 +173,24 @@ export class Stations {
       v.ring.material.opacity = (urgent ? 0.4 : 0.18) + pulse * (urgent ? 0.35 : 0.14);
       v.ring.material.color.setHex(urgent ? 0xe06a4a : 0xe2c16e);
       v.ring.scale.setScalar(1 + pulse * 0.03);
-      v.sprite.position.y = 1.62 + Math.sin(this.clock * 1.4 + v.anchor.position.z) * 0.03;
-      v.sprite.material.opacity = urgent ? 0.95 : 0.6;
+      v.sprite.position.y = LABEL_HEIGHT + Math.sin(this.clock * 1.4 + v.anchor.position.z) * 0.03;
+
+      // Measured on the floor, not through the air: how far you would walk to
+      // it, rather than how far the label is from your eyes.
+      const full = urgent ? 0.95 : 0.6;
+      let opacity = full;
+      if (cameraPosition) {
+        const reach = Math.hypot(
+          cameraPosition.x - v.anchor.position.x,
+          cameraPosition.z - v.anchor.position.z,
+        );
+        const t = Math.min(1, Math.max(0, (reach - FADE_NEAR) / (FADE_FAR - FADE_NEAR)));
+        opacity = Math.max(FADE_FLOOR, full * t);
+        const [bx, by] = v.sprite.userData.baseScale as [number, number];
+        const near = NEAR_SCALE + (1 - NEAR_SCALE) * t;
+        v.sprite.scale.set(bx * this.labelScale * near, by * this.labelScale * near, 1);
+      }
+      v.sprite.material.opacity = opacity;
     }
   }
 

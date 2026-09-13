@@ -39,7 +39,10 @@ breathe, blink, shift their weight, and turn to look at you when you walk in.
 
 **Controls** — a thumb stick to walk, drag anywhere else to look around, and a
 tap opens whatever you're standing at or walks you through the door under your
-feet. The station chips, the dashboard and ending the month are all buttons in
+feet. You arrive in a room standing up, which is newer than it sounds: five of
+the six rooms gave their spawn a y of 0 and nothing lifted it, so every room
+but the Oval opened with the camera lying on the carpet, looking up at the
+underside of the Cabinet table. The station chips, the dashboard and ending the month are all buttons in
 the HUD. Everything is reachable from a thumb alone.
 
 The dock carries two rows: every station on the first, the month's controls on
@@ -462,6 +465,39 @@ the model comes back wider than 60 metres, because a model that was stripped by
 nothing is a silent failure that only shows up in game as a camera standing in
 a field.
 
+### The signs in the room
+
+The floor markers and the door plaques were laid out on the procedural room's
+ellipse, and the two rooms are not the same ellipse — the procedural Oval is
+10.9m across and 8.8m deep, the model 9.6 across and 11.3 deep. So with the
+model on screen the Residence plaque hung in the middle of a bookcase and the
+Cabinet Room's hung on blank wall. `src/world/ovalModelLayout.ts` places them
+from the model instead.
+
+The doors are written down as **bearings**, because a bearing is what was
+surveyed: raycasting the room's shell outward from its centre at door height
+finds the gaps, and the gaps are the openings. There are ten — four of them
+windows, two bookcase alcoves, and four real doors. The radius comes from the
+model at load time, so the markers follow the room rather than a number
+written down beside them.
+
+Two bugs the markers were sitting on top of. The loaded model is added to the
+scene rather than to the Oval's room group, so nothing hid it when the player
+left: in the Cabinet Room the White House was still drawn around them, lawn
+and all. And `enterRoom` rebuilt the markers from the room's own layout every
+time, so walking out of the Oval and back in put the procedural set back. Both
+now go through one `rebuildMarkers`, which knows which Oval is on screen.
+
+Three smaller things the signs needed. They sat at 1.62m, across a seated eye
+line rather than above it, so the label for the station you were sitting at
+hung dead centre in the view; they now sit at 1.95m and **fade and shrink as
+you approach**, since a sign for the thing you are already standing at is the
+one sign nobody needs. The door plaques said "walk here" in a room where the
+camera is on a seat rig and never walks — the class comment in `doors.ts` says
+so outright — and now say "tap to go through". And their size was being set
+in two places, once at rebuild and again every frame in `update`, so the
+rebuild one had never had any effect at all.
+
 ### The furniture
 
 The furniture is real geometry, not boxes: eleven models from
@@ -546,7 +582,7 @@ debug-signed, so it is for sideloading rather than the Play Store.
 
 ```
 src/game/     simulation: state, sim tick, bills, crises, arcs, cabinet, endings
-src/world/    three.js: office geometry, props, controls, stations, asset loading
+src/world/    three.js: office geometry, props, controls, stations, model layout
 src/ui/       HUD, panels, touch stick, styling
 src/audio/    procedural sound synthesis
 src/tools/    headless balance harness

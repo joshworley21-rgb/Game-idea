@@ -26,12 +26,31 @@ const FOV_MIN = 35;
 const FOV_MAX = 70;
 
 /**
+ * Eye height for a seat given as a spot on the floor, in metres.
+ *
+ * A station anchor is a marker on the carpet and is lifted to this when it
+ * becomes a seat. A room's spawn was not: five of the six rooms give their
+ * spawn a y of 0, the rig does not lift it, and the player arrived lying on
+ * the floor looking up at the underside of the Cabinet table. Only the Oval
+ * escaped it, by writing 1.42 into its own spawn.
+ */
+const EYE_HEIGHT = 1.42;
+
+/** Below this, a seat's y is a floor position rather than a head position. */
+const FLOOR_Y = 0.4;
+
+/**
  * Builds the seat list for a room: the spawn, then one seat per station, then
  * one per door. Every seat looks at the thing it is for.
  */
 export function seatsForRoom(room: RoomBuild, overrides: SeatOverrides = {}): Seat[] {
+  // A spawn written as a floor position is lifted to eye height; one that
+  // already carries a head height, like the Oval's, is left exactly as it is.
+  const spawnAt = room.spawn.clone();
+  if (spawnAt.y < FLOOR_Y) spawnAt.y = EYE_HEIGHT;
+
   const seats: Seat[] = [
-    overrides.spawn ?? { id: "spawn", label: room.id, position: room.spawn.clone(), target: room.spawnLook.clone() },
+    overrides.spawn ?? { id: "spawn", label: room.id, position: spawnAt, target: room.spawnLook.clone() },
   ];
   for (const anchor of room.anchors) {
     if (anchor.id === "desk" && overrides.desk) {
@@ -48,7 +67,7 @@ function seatForStation(anchor: StationAnchor): Seat {
   return {
     id: anchor.id,
     label: anchor.id,
-    position: (anchor.camera ?? anchor.position).clone().setY(1.42),
+    position: (anchor.camera ?? anchor.position).clone().setY(EYE_HEIGHT),
     target: anchor.focus.clone(),
   };
 }
