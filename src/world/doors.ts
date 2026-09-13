@@ -1,5 +1,9 @@
 import * as THREE from "three";
+import { fitFont, withTextShadow } from "./labelText.ts";
 import type { Door } from "./roomkit.ts";
+
+/** Inset from the plate's edge that the text is not allowed to cross. */
+const PAD = 34;
 
 function labelTexture(label: string, active: boolean): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -10,19 +14,23 @@ function labelTexture(label: string, active: boolean): THREE.CanvasTexture {
 
   ctx.beginPath();
   ctx.roundRect(6, 22, 500, 84, 22);
-  ctx.fillStyle = active ? "rgba(18,26,40,0.94)" : "rgba(14,18,28,0.55)";
+  // The plate carries the text, so it has to hold up against a sunlit wall as
+  // well as a dark corner. A half-transparent plate does not.
+  ctx.fillStyle = active ? "rgba(14,20,32,0.95)" : "rgba(10,13,20,0.82)";
   ctx.fill();
   ctx.lineWidth = 3;
-  ctx.strokeStyle = active ? "rgba(226,193,110,0.95)" : "rgba(226,220,205,0.24)";
+  ctx.strokeStyle = active ? "rgba(226,193,110,0.95)" : "rgba(226,220,205,0.3)";
   ctx.stroke();
 
   ctx.textAlign = "center";
-  ctx.fillStyle = active ? "#f6e9c8" : "rgba(238,232,220,0.68)";
-  ctx.font = "600 30px Georgia, 'Times New Roman', serif";
-  ctx.fillText(label, 256, 58);
+  ctx.fillStyle = active ? "#f6e9c8" : "rgba(240,235,224,0.88)";
+  fitFont(ctx, label, 500 - PAD * 2, "600", 30, "Georgia, 'Times New Roman', serif");
+  withTextShadow(ctx, () => ctx.fillText(label, 256, 58));
+
+  const hint = active ? "tap to go through" : "walk here";
   ctx.font = "500 20px system-ui, sans-serif";
-  ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.4)";
-  ctx.fillText(active ? "tap to go through" : "walk here", 256, 88);
+  ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.62)";
+  withTextShadow(ctx, () => ctx.fillText(hint, 256, 88));
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;

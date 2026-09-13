@@ -4,7 +4,7 @@
 
 :root {
   --ink: #e9e4d8;
-  --ink-dim: #a49c8c;
+  --ink-dim: #b8b0a0;
   --panel: rgba(14, 16, 22, 0.94);
   --panel-edge: rgba(255, 255, 255, 0.09);
   --gold: #c9a961;
@@ -15,6 +15,12 @@
   --red: #c96f6f;
 
   /* One place for the things that repeat. */
+  /* How far above the bottom edge anything that must clear the dock sits.
+     The dock is two rows on a pointer and one on a phone, and four separate
+     things float over it — the walk prompt, the room banner, the loading
+     note and the Chief of Staff. They used to carry four hand-tuned offsets
+     that all went stale the moment the dock changed height. */
+  --dock-clear: 134px;
   --radius: 10px;
   --radius-lg: 14px;
   --serif: Georgia, "Times New Roman", serif;
@@ -23,10 +29,15 @@
   --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.6);
 
   /* The unified dark glass surface. Every HUD element shares this, so the
-     scene stays visible through the whole interface. */
-  --glass: rgba(0, 0, 0, 0.5);
-  --glass-strong: rgba(8, 10, 15, 0.8);
-  --glass-edge: rgba(255, 255, 255, 0.12);
+     scene stays visible through the whole interface.
+
+     It sits over rooms that range from firelight to a blown-out south window.
+     Half-transparent black reads as grey against the bright ones and took the
+     dim ink down with it, so the glass is darker than it looks like it needs
+     to be when you are only ever testing on a dark scene. */
+  --glass: rgba(6, 8, 13, 0.68);
+  --glass-strong: rgba(5, 7, 11, 0.88);
+  --glass-edge: rgba(255, 255, 255, 0.13);
 }
 
 * {
@@ -221,10 +232,15 @@ body {
   bottom: calc(12px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 52;
+  /* Two rows: every station on the first, the month's controls on the second.
+     Eight chips and four buttons want about 1350px side by side, which no
+     laptop has, and sharing one row is what pushed half the building off the
+     end of a silent scroller. Stacked, the whole game fits at 1280. */
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  max-width: min(94vw, 880px);
+  width: min(96vw, 1120px);
   padding: 8px;
   background: var(--glass);
   border: 1px solid var(--glass-edge);
@@ -235,30 +251,34 @@ body {
   pointer-events: auto;
 }
 
-/* The seven stations scroll horizontally on a phone rather than wrapping. */
+/* The eight stations.
+ *
+ * They used to be one horizontally scrolling row at every size. On a laptop
+ * that put three of them on screen and hid the Capitol, the briefing room,
+ * the residence and the study behind a scroll with no scrollbar, no fade and
+ * no arrow — four of the game's six rooms, invisible. With a pointer there is
+ * room to wrap instead, so every station is on screen at once. */
 .dock-stations {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
 }
 
 .dock-stations::-webkit-scrollbar { display: none; }
 
-/* End month, dashboard, mute and camera sit to the right of the stations. */
+/* End the month, the dashboard and the overflow, under the stations. */
 .dock-actions {
   display: flex;
   align-items: stretch;
+  justify-content: center;
   gap: 6px;
   flex: 0 0 auto;
-  padding-left: 10px;
-  border-left: 1px solid var(--glass-edge);
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-edge);
 }
 
 .dock .btn {
@@ -292,6 +312,47 @@ body {
   background: rgba(201, 169, 97, 0.14);
 }
 
+/* ------------------------------------------------------- the dock overflow */
+
+.dock-more-wrap { position: relative; display: flex; }
+
+.dock-more {
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  color: var(--ink-dim);
+}
+
+.dock-more.active,
+.dock-more:hover { color: var(--ink); }
+
+.dock-more svg { display: block; }
+
+.dock-overflow {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  min-width: 150px;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-edge);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+}
+
+.dock-overflow .btn {
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .legend-row kbd {
   font: 600 10px/1 inherit;
   color: var(--gold);
@@ -305,7 +366,7 @@ body {
 #room-reveal {
   position: fixed;
   left: 50%;
-  bottom: calc(86px + env(safe-area-inset-bottom));
+  bottom: calc(var(--dock-clear) + env(safe-area-inset-bottom));
   transform: translateX(-50%) translateY(6px);
   font: 600 15px/1 var(--serif);
   color: var(--ink);
@@ -340,7 +401,7 @@ body {
 #prompt {
   position: fixed;
   left: 50%;
-  bottom: calc(86px + env(safe-area-inset-bottom));
+  bottom: calc(var(--dock-clear) + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 56;
   display: flex;

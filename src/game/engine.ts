@@ -93,8 +93,12 @@ export class Engine extends Emitter<EngineEvents> {
    * so the numbers the presidency opens with carry the reason for them. Call
    * this once, right after `newGame`.
    */
-  applyCampaignResult(deltas: CampaignDeltas, summary: string): void {
+  applyCampaignResult(deltas: CampaignDeltas, summary: string, path: string[] = []): void {
     const s = this.state;
+    // What you said to win is a thing you said, and the country was
+    // listening. Recording the path as flags is what lets an arc a year
+    // later be about the promise rather than about the numbers it moved.
+    for (const id of path) s.flags[`campaign:${id}`] = true;
     const clamp = (v: number) => Math.max(0, Math.min(100, v));
     if (deltas.approval) s.politics.approval = clamp(s.politics.approval + deltas.approval);
     if (deltas.capital) s.politics.capital = clamp(s.politics.capital + deltas.capital);

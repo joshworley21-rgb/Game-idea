@@ -133,6 +133,11 @@
 
 .option {
   appearance: none;
+  /* A button shrink-wraps its content unless something stretches it. Inside
+     `.option-grid` the grid does; the standalone ones — the legislative
+     agenda, the budget — were left short and narrower than the list under
+     them, which read as a different kind of thing. */
+  width: 100%;
   text-align: left;
   border: 1px solid var(--panel-edge);
   background: rgba(24, 28, 37, 0.8);

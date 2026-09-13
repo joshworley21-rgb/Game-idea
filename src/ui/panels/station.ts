@@ -1,6 +1,8 @@
 import { actionCooldownLeft, actionsFor, STATION_INFO } from "../../game/actions.ts";
+import { FACTION_BY_KEY } from "../../game/congress.ts";
 import { describeEffects } from "../../game/effects.ts";
 import { memberById } from "../../game/family.ts";
+import { temperamentLine, temperamentOf } from "../../game/temperament.ts";
 import type { GameState, StationId } from "../../game/types.ts";
 import type { Engine } from "../../game/engine.ts";
 import { el, meter } from "../dom.ts";
@@ -43,6 +45,40 @@ export function familyRoster(s: GameState): HTMLElement[] {
             severe: member.strain.severity > 55,
           }
         : undefined,
+    });
+  });
+}
+
+/**
+ * The five people running the departments, plus the one running the building.
+ *
+ * The West Wing is where the cabinet is, and until now the only place you
+ * could see who they were was the dashboard — a screen of numbers you open
+ * from the dock, not a room you walk into. Standing in the room should show
+ * you the room.
+ */
+export function cabinetRoster(s: GameState): HTMLElement[] {
+  return (s.cabinet ?? []).map((person) => {
+    const def = FACTION_BY_KEY.get(person.faction);
+    const t = temperamentOf(person);
+    const chief = person.office === "chief";
+    const tone = person.loyalty >= 55 ? "ok" : person.loyalty >= 35 ? "warn" : "bad";
+    return personRow({
+      seed: person.name,
+      name: person.name,
+      role: chief ? person.title : `${person.title} · ${t.label}`,
+      mood: person.loyalty < 35 ? "guarded" : person.loyalty < 55 ? "concerned" : "neutral",
+      value: { text: Math.round(person.loyalty).toString(), tone },
+      meta: chief
+        ? `${def?.short ?? "unaligned"} · ${person.months} months in post`
+        : `${t.note} · ${def?.short ?? "unaligned"}`,
+      bars: [
+        { label: "Competence", value: person.competence, tone: "ok" },
+        { label: "Loyalty", value: person.loyalty, tone },
+      ],
+      strain: chief
+        ? undefined
+        : { text: `${person.name} ${temperamentLine(person)}.`, severe: person.loyalty < 35 },
     });
   });
 }
@@ -99,6 +135,9 @@ export function stationPanel(
 
   if (station === "family" && s.family?.length) {
     body.append(el("div", { class: "section-title" }, ["Upstairs"]), ...familyRoster(s));
+  }
+  if (station === "staff" && s.cabinet?.length) {
+    body.append(el("div", { class: "section-title" }, ["Your cabinet"]), ...cabinetRoster(s));
   }
   if (station === "rest") {
     const p = s.personal;

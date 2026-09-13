@@ -11,8 +11,20 @@ import { clear, el } from "./dom.ts";
  */
 
 export interface TitleCallbacks {
-  /** Starts a fresh run, with the campaign's deltas folded in. */
-  onStart: (campaign: { deltas: CampaignDeltas; summary: string }) => void;
+  /**
+   * Starts a fresh run: who you are, which party you ran as, and what the
+   * campaign did to the numbers. The name and the party are the two things
+   * the title screen asks for, so they have to be the two things it hands
+   * over — they were collected here and then dropped, and every run opened
+   * as President Reyes of the Union Party whatever you typed or picked.
+   */
+  onStart: (campaign: {
+    name: string;
+    party: Party;
+    deltas: CampaignDeltas;
+    summary: string;
+    path: string[];
+  }) => void;
   /** Resumes a saved run. */
   onContinue: (state: GameState) => void;
   /** The save to offer, if there is one. */
@@ -71,9 +83,9 @@ export function titleScreen(cb: TitleCallbacks): void {
           {
             class: "btn primary",
             onclick: () =>
-              campaignScreen(overlay, party, (deltas, summary) => {
+              campaignScreen(overlay, party, (deltas, summary, path) => {
                 overlay.remove();
-                cb.onStart({ deltas, summary });
+                cb.onStart({ name: nameInput.value, party, deltas, summary, path });
               }),
           },
           ["Run for it"],
@@ -117,7 +129,7 @@ export function titleScreen(cb: TitleCallbacks): void {
 export function campaignScreen(
   overlay: HTMLElement,
   party: Party,
-  onDone: (deltas: CampaignDeltas, summary: string) => void,
+  onDone: (deltas: CampaignDeltas, summary: string, path: string[]) => void,
 ): void {
   const beats = campaignBeats(party);
   const taken: CampaignDeltas[] = [];
@@ -172,7 +184,9 @@ export function campaignScreen(
         el("div", { class: "title-tag" }, [lastText]),
         el("div", { class: "title-tag", style: "margin-top:10px" }, [summary]),
         el("div", { class: "title-actions" }, [
-          el("button", { class: "btn primary", onclick: () => onDone(total, summary) }, ["Take the oath"]),
+          el("button", { class: "btn primary", onclick: () => onDone(total, summary, path) }, [
+            "Take the oath",
+          ]),
         ]),
       ]),
     );

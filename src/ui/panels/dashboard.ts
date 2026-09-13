@@ -1,5 +1,6 @@
 import { BLOCS } from "../../game/blocs.ts";
 import { FACTION_BY_KEY } from "../../game/congress.ts";
+import { temperamentLine, temperamentOf } from "../../game/temperament.ts";
 import { electionMargin, gradeFor, scoreLegacy } from "../../game/endings.ts";
 import { BUDGET_KEYS, BUDGET_LABELS } from "../../game/state.ts";
 import type { Engine } from "../../game/engine.ts";
@@ -50,19 +51,31 @@ export function dashboardPanel(engine: Engine, host: PanelHost): HTMLElement {
     el("div", { class: "section-title" }, ["Your cabinet"]),
     ...(s.cabinet ?? []).map((person) => {
       const def = FACTION_BY_KEY.get(person.faction);
+      const t = temperamentOf(person);
       const loyalTone = person.loyalty >= 55 ? "ok" : person.loyalty >= 35 ? "warn" : "bad";
       // A secretary who has stopped believing in you looks it.
       const mood = person.loyalty < 35 ? "guarded" : person.loyalty < 55 ? "concerned" : "neutral";
+      const chief = person.office === "chief";
       return personRow({
         seed: person.name,
         name: person.name,
-        role: person.title,
+        // Who they are, not just what they hold. A loyalty bar tells you a
+        // number is falling; this tells you why it would.
+        role: chief ? person.title : `${person.title} · ${t.label}`,
         mood,
         meta: `${def?.short ?? "unaligned"} · ${person.months} months in post`,
         bars: [
           { label: "Competence", value: person.competence, tone: "ok" },
           { label: "Loyalty", value: person.loyalty, tone: loyalTone },
         ],
+        // Where they are with you this month, in their own register. Ruth is
+        // written rather than drawn, so she speaks for herself elsewhere.
+        strain: chief
+          ? undefined
+          : {
+              text: `${person.name} ${temperamentLine(person)}.`,
+              severe: person.loyalty < 35,
+            },
       });
     }),
     el("div", { class: "section-title" }, ["Conditions"]),

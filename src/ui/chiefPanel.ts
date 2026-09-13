@@ -25,10 +25,21 @@ export class ChiefPanel {
   private dismissTimer = 0;
 
   constructor() {
+    // A briefing waits until it is read, and it sits over the desk while it
+    // waits. Without this there is no way to put her down.
+    const close = el("button", {
+      class: "chief-close",
+      type: "button",
+      title: "Dismiss",
+      "aria-label": "Dismiss the briefing",
+      onclick: () => this.hide(),
+    }, ["\u2715"]);
+
     this.root = el("div", { id: "chief-panel", class: "chief-panel" }, [
       el("div", { class: "chief-head" }, [
         this.face,
         el("div", { class: "chief-who" }, [this.name, this.role]),
+        close,
       ]),
       this.body,
       this.obligations,

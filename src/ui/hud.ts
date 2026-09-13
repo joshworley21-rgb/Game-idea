@@ -17,6 +17,9 @@ import { band, bandLow, statLine } from "./panels/host.ts";
 const NATION_GLYPH = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 19v-5M10 19V8M15 19v-7M20 19V5"/></svg>`;
 const SELF_GLYPH = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="7.5" r="3.4"/><path d="M5.5 20c1.4-3.6 3.7-5.1 6.5-5.1s5.1 1.5 6.5 5.1"/></svg>`;
 
+/** The overflow that holds sound and the free camera. */
+const MORE_GLYPH = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>`;
+
 function edgeTab(side: "left" | "right", glyph: string, label: string): HTMLButtonElement {
   return el("button", {
     class: `edge-tab edge-tab-${side}`,
@@ -46,6 +49,9 @@ export class Hud {
   private roomReveal = el("div", { id: "room-reveal", "aria-live": "polite" });
   private roomRevealTimer = 0;
   private muteButton: HTMLButtonElement;
+  /** Sound and the free camera, behind one button so the rooms get the room. */
+  private overflow = el("div", { class: "dock-overflow", hidden: "" });
+  private overflowTab: HTMLButtonElement;
 
   /** The slide-out homes of the two stat cards. */
   private nationDrawer = el("div", { class: "drawer drawer-left", id: "drawer-nation" });
@@ -73,31 +79,64 @@ export class Hud {
       },
     }, ["Sound on"]) as HTMLButtonElement;
 
-    this.actions.append(
-      this.endButton,
-      el("button", { class: "btn ghost small", onclick: onDashboard }, [
-        this.touch ? "Full stats" : "Dashboard (Tab)",
-      ]),
-      this.muteButton,
-    );
-
+    // Sound and the camera are settings, not moves you make in a month. They
+    // used to sit in the dock beside "End the month" and cost roughly two
+    // stations' worth of width, which is how four rooms ended up scrolled out
+    // of sight on a laptop. They live behind a button now.
+    this.overflow.append(this.muteButton);
     if (onFreecam) {
       const camButton = el("button", { class: "btn ghost small" }, ["Free camera"]) as HTMLButtonElement;
       camButton.addEventListener("click", () => {
         const active = onFreecam();
         camButton.textContent = active ? "Exit camera" : "Free camera";
       });
-      this.actions.append(camButton);
+      this.overflow.append(camButton);
     }
+
+    this.overflowTab = el("button", {
+      class: "btn ghost small dock-more",
+      type: "button",
+      title: "Sound and camera",
+      "aria-label": "Sound and camera",
+      "aria-expanded": "false",
+      html: MORE_GLYPH,
+    }) as HTMLButtonElement;
+    this.overflowTab.addEventListener("click", () => this.toggleOverflow());
+    // Anywhere else closes it, the way a menu should.
+    document.addEventListener("pointerdown", (e) => {
+      if (this.overflow.hidden) return;
+      const target = e.target as Node;
+      if (!this.overflow.contains(target) && !this.overflowTab.contains(target)) {
+        this.toggleOverflow(false);
+      }
+    });
+
+    this.actions.append(
+      this.endButton,
+      el("button", { class: "btn ghost small", onclick: onDashboard }, [
+        this.touch ? "Full stats" : "Dashboard (Tab)",
+      ]),
+      el("div", { class: "dock-more-wrap" }, [this.overflowTab, this.overflow]),
+    );
 
     // On a phone the number keys do not exist, so the legend is just a row of
     // tappable stations. On desktop the key hints are kept for keyboard play.
+    //
+    // The chip drops the leading article — every station begins with "The",
+    // so it identifies nothing and costs eight chips a word each. The full
+    // name is still the tooltip, the prompt in the room and the panel title.
     STATION_ORDER.forEach((station, i) => {
+      const full = STATION_INFO[station].name;
+      const short = full.replace(/^The /, "");
       const children = this.touch
-        ? [el("span", {}, [STATION_INFO[station].name])]
-        : [el("kbd", {}, [String(i + 1)]), el("span", {}, [STATION_INFO[station].name])];
+        ? [el("span", {}, [short])]
+        : [el("kbd", {}, [String(i + 1)]), el("span", {}, [short])];
       this.legend.append(
-        el("button", { class: "legend-row", onclick: () => onStation(station) }, children),
+        el(
+          "button",
+          { class: "legend-row", title: full, "aria-label": full, onclick: () => onStation(station) },
+          children,
+        ),
       );
     });
 
@@ -111,6 +150,19 @@ export class Hud {
 
     this.dock.append(this.legend, this.actions);
 
+    // On a phone the rail scrolls, and the CSS fades whichever end has more
+    // behind it. Nothing here runs on a desktop, where the rail wraps and
+    // both ends are always "at" — but it is cheap and it keeps the two
+    // layouts from needing two code paths.
+    const syncRail = () => {
+      const slack = this.legend.scrollWidth - this.legend.clientWidth;
+      this.legend.classList.toggle("at-start", this.legend.scrollLeft <= 1);
+      this.legend.classList.toggle("at-end", this.legend.scrollLeft >= slack - 1);
+    };
+    this.legend.addEventListener("scroll", syncRail, { passive: true });
+    window.addEventListener("resize", syncRail);
+    syncRail();
+
     this.root = el("div", { id: "hud" }, [
       this.date,
       this.power,
@@ -123,6 +175,14 @@ export class Hud {
       this.dock,
     ]);
     document.body.append(this.crosshair, this.prompt);
+  }
+
+  /** Opens or closes the sound/camera overflow. */
+  private toggleOverflow(force?: boolean): void {
+    const open = force ?? this.overflow.hidden;
+    this.overflow.hidden = !open;
+    this.overflowTab.classList.toggle("active", open);
+    this.overflowTab.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   private toggleDrawer(drawer: HTMLElement, tab: HTMLButtonElement): void {

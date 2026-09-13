@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { Character } from "./character.ts";
+import { applyPose, type Character, type Pose } from "./character.ts";
 
 /**
  * Walking.
@@ -113,7 +113,7 @@ export class WalkIn {
   private readonly from: THREE.Vector3;
   private readonly to: THREE.Vector3;
   private readonly duration: number;
-  private readonly endPose: "stand" | "sit" | "sit-forward" | "lean";
+  private readonly endPose: Pose;
   private readonly endRotationY: number;
   private readonly startRotationY: number;
   private elapsed = 0;
@@ -126,7 +126,7 @@ export class WalkIn {
     from: THREE.Vector3,
     to: THREE.Vector3,
     endRotationY: number,
-    endPose: "stand" | "sit" | "sit-forward" | "lean",
+    endPose: Pose,
     phase = 0,
   ) {
     this.character = character;
@@ -174,6 +174,9 @@ export class WalkIn {
       this.done = true;
       this.character.group.position.copy(this.to);
       this.character.group.rotation.y = this.endRotationY;
+      // Drop out of the walk and into the stance their slot asked for, so the
+      // idle animator takes over a body that is already standing or seated.
+      applyPose(this.character, this.endPose);
       this.onArrive?.(this.character);
       return true;
     }

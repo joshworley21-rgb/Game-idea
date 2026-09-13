@@ -1,6 +1,7 @@
 import { applyEffects } from "./effects.ts";
 import { attend, mostNeglected } from "./family.ts";
 import { tickCabinet, replaceSecretary } from "./cabinet.ts";
+import { temperamentOf } from "./temperament.ts";
 import { applyMidtermSwing } from "./congress.ts";
 import { pushNews } from "./news.ts";
 import { calendar } from "./state.ts";
@@ -19,13 +20,19 @@ import type { GameState } from "./types.ts";
 /** The cabinet's month: resignations and leaks. */
 export function runCabinet(s: GameState, rng: Rng, report: MonthReport): void {
   for (const event of tickCabinet(s, rng)) {
+    const who = temperamentOf(event.person);
     if (event.kind === "resigned") {
       const successor = replaceSecretary(rng, s.cabinet, event.person.office);
+      // How loudly they go is who they were. An institutionalist resigning on
+      // principle is a week of coverage; an old friend stepping down for
+      // health reasons costs you almost nothing but the person.
+      const loud = who.key === "institutionalist" || who.key === "rival";
+      const quiet = who.key === "friend";
       applyEffects(s, {
-        "politics.capital": -5,
-        "politics.approval": -1.4,
-        "politics.media": -3,
-        "personal.stress": 5,
+        "politics.capital": quiet ? -2 : loud ? -8 : -5,
+        "politics.approval": quiet ? -0.4 : loud ? -2.2 : -1.4,
+        "politics.media": quiet ? -1 : loud ? -5 : -3,
+        "personal.stress": quiet ? 7 : 5,
       });
       s.counters.resignations = (s.counters.resignations ?? 0) + 1;
       s.log.unshift({
@@ -33,29 +40,48 @@ export function runCabinet(s: GameState, rng: Rng, report: MonthReport): void {
         text: `${event.person.title} ${event.person.name} resigns; ${successor.name} sworn in.`,
         kind: "system",
       });
-      report.notes.push(`${event.person.name} is gone. ${successor.name} takes the department.`);
+      report.notes.push(
+        `${event.person.name} ${who.parting}. ${successor.name} takes the department.`,
+      );
       pushNews(s, [
         {
           month: s.month,
-          headline: `${event.person.name} resigns as ${event.person.title}, citing "differences of direction"`,
+          headline: loud
+            ? `${event.person.name} quits as ${event.person.title} and does not go quietly`
+            : quiet
+              ? `${event.person.name} steps down as ${event.person.title} after a private year`
+              : `${event.person.name} resigns as ${event.person.title}, citing "differences of direction"`,
           source: "The Beacon",
           tone: "bad",
         },
       ]);
     } else {
       event.person.loyalty = Math.min(100, event.person.loyalty + 6); // the leak vents the pressure
-      applyEffects(s, { "politics.scandal": 7, "politics.media": -5, "personal.stress": 4 });
+      // A rival leaking is not the same as a junior aide leaking: they know
+      // which meeting was the damaging one, and they were in it.
+      const sharp = who.key === "rival";
+      applyEffects(s, {
+        "politics.scandal": sharp ? 10 : 7,
+        "politics.media": -5,
+        "personal.stress": 4,
+      });
       s.counters.leaks = (s.counters.leaks ?? 0) + 1;
       s.log.unshift({
         month: s.month,
         text: `A private meeting with ${event.person.name} appears in print.`,
         kind: "system",
       });
-      report.notes.push(`Someone in the room is talking to the press.`);
+      report.notes.push(
+        sharp
+          ? `Someone who wanted this desk is briefing against you, and they were in the room.`
+          : `Someone in the room is talking to the press.`,
+      );
       pushNews(s, [
         {
           month: s.month,
-          headline: `Leaked account of Oval Office meeting contradicts White House line`,
+          headline: sharp
+            ? `Cabinet source gives detailed account of Oval Office meeting "the President would rather forget"`
+            : `Leaked account of Oval Office meeting contradicts White House line`,
           source: "The Beacon",
           tone: "bad",
         },

@@ -102,7 +102,7 @@ export const FIRST_CABINET: Conversation = {
       ],
     },
 
-    defense-speaks: {
+    "defense-speaks": {
       id: "defense-speaks",
       speaker: {
         role: "defense",

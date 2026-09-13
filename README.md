@@ -26,7 +26,7 @@ bottom take you straight to a station, wherever it lives.
 | **The Oval Office** | The Resolute Desk | Executive orders, clemency, vetoes: what you can do alone |
 | | The Secure Line | Allies, summits, trade deals, the intelligence brief |
 | **The Cabinet Room** | The Cabinet Table | The annual budget: nine agencies and the tax rate |
-| | The West Wing | Cabinet meetings, fundraisers, reshuffles |
+| | The West Wing | Your cabinet by name, plus meetings, fundraisers, reshuffles |
 | **The Capitol** | The House Floor | Bringing a bill to a vote, and whipping it, in front of the chamber |
 | **The Briefing Room** | The Press Pool | Addresses, hostile interviews, rallies, campaign swings |
 | **The Residence** | Upstairs | Your family by name: their evenings, and what they are carrying |
@@ -41,6 +41,15 @@ breathe, blink, shift their weight, and turn to look at you when you walk in.
 tap opens whatever you're standing at or walks you through the door under your
 feet. The station chips, the dashboard and ending the month are all buttons in
 the HUD. Everything is reachable from a thumb alone.
+
+The dock carries two rows: every station on the first, the month's controls on
+the second. They shared one row once, which wanted about 1350px and meant that
+on a laptop you saw three stations and the other five — the Capitol, the
+briefing room, the residence and the study — sat behind a horizontal scroll
+with no scrollbar, no fade and no arrow. Four of the six rooms, invisible. On a
+phone the rail still scrolls, because eight chips would wrap to four rows, but
+it gets the full width of the dock and a fade on whichever end has more behind
+it.
 
 Progress saves to the device after every action.
 
@@ -57,6 +66,14 @@ debate — the campaign is the same small engine as the meetings below, just
 running before there is a `GameState` for it to touch, so its choices land
 as one bag of deltas applied on top of the freshly-sworn-in country rather
 than modifying a nation that doesn't exist yet.
+
+The choices themselves are kept, not just their arithmetic. Every option you
+took is recorded as a flag, so the campaign can come back as a *person* rather
+than as a number you cannot trace: the financial filing you sat on in October
+is obtained by a committee in the spring, and the base you won the primary by
+courting sends a letter in year two saying the patience was a loan. Whether
+you released the filing yourself, lawyered up, or leaked something in return
+changes which version of that arrives.
 
 **Meetings are not menus.** The four events that are actually a
 conversation with someone — the cabinet meeting, a hostile interview, a call
@@ -144,12 +161,37 @@ every agency's output, a good treasury secretary adds to growth, and the
 department that owns a crisis takes the edge off its risk of going wrong.
 Appointments are patronage, so the factions your people came from warm to you.
 
-Loyalty only ever erodes. It falls faster when you are unpopular, mired in
-scandal or facing unrest, slower when your party is behind you, and a little
-faster every month someone has served. A secretary who has stopped believing in
-you either walks — costing capital, approval and a week of coverage — or talks
-to a reporter, which is worse. A steady presidency keeps its cabinet for four
-years. A failing one loses most of it.
+**And they have reasons for being there.** A name carrying two numbers is a
+spreadsheet with a face on it, so each of the five appointed secretaries also
+holds a *temperament*: a true believer, an operator, an institutionalist, a
+rival, an old friend, or a technocrat. There are six of them and five seats, so
+every run seats five different ones and leaves one out — who is missing is part
+of the cast too.
+
+It is not a label. The temperament decides **what erodes them**: an operator
+reads your approval rating, an institutionalist does not care about polls at
+all and reads the scandal column, a technocrat looks out of the window at the
+country. It decides **what they bring to a crisis** in their own department —
+thirty years in the building is worth a few points, and working out how it
+plays is worth losing a few. It decides **whether they have a floor**: somebody
+who is here for the work does not stop turning up because a poll moved, and
+somebody who is here for themselves has no floor at all. And it decides **how
+they go**: a friend never talks to a reporter, an operator almost always does,
+an institutionalist resigns on principle in a letter the whole country reads,
+and a rival resigns without warning and books the Sunday shows.
+
+The temperaments are expressed as multipliers on the cabinet's base erosion
+coefficients rather than as rates of their own, and each set averages about
+one, so a cabinet turns over at the rate it always did. Measured over four
+years against the old model: a steady presidency loses 0.75 of its five
+(it was 0.48), a struggling one 4.3 (4.9), a failing one 5.0 (5.0). What
+changed is not how many go but which — after four steady years the old friend
+is sitting on 55 and the rival on 14.
+
+So loyalty still only ever erodes, and the roster in the West Wing says why in
+their own register rather than by showing you a falling bar. A steady
+presidency keeps its cabinet for four years. A failing one loses most of it,
+and which of them goes first is a fact about who you appointed.
 
 **Crises** are weighted by pressure derived from state, so they are consequences
 rather than dice. Underfund the environment and the fire seasons get worse;
@@ -183,6 +225,24 @@ random trouble.
 Running situations show on a board in the HUD and in the dashboard, and a crisis
 produced by one says which, so trouble can be traced back to the decision that
 caused it.
+
+**Arcs are the slow half of that.** A crisis is something that happens to you.
+An arc is something you did, arriving months later as a person who wants an
+answer. They are checked once a month, fire at most one at a time, and each
+one is one-shot — so an arc is a scene rather than a recurring event.
+
+What makes them stories rather than timed events is what they are keyed to.
+Five of the twelve are about a **specific temperament in your cabinet**, so a
+term that drew a rival gets the arc where one of your secretaries turns out to
+be running for something, and a term that did not will never see it. Two are
+keyed to **what you said to win**, replayed out of the campaign's recorded
+flags. The rest are keyed to the state you have produced: a Treasury Secretary
+who has stopped returning calls, a leak the counsel's office has finally put a
+name to, a child who has stopped coming home, a party measuring the drapes,
+protests that have acquired organisers and a bank account.
+
+A term sees two or three of them. Which two or three is a fact about who you
+appointed and how you got here, which is the point.
 
 **Your family are people, not two numbers.** A spouse and two children,
 generated with the run's seed: names, ages, and a life each of them is living
@@ -397,8 +457,8 @@ build-tools 36. Point `ANDROID_HOME` at the SDK before building.
 on pointer events, so a thumb drag looks around exactly as a mouse drag does; a
 stick in the bottom-left corner walks; and tapping an object in the room, or a
 door under your feet, opens or uses it. The HUD reflows below 900px: the four
-corner cards collapse into a top bar and a stat strip, the stations become a
-scrolling row of chips along the bottom edge, and panels take the full screen.
+corner cards collapse into a top bar and a stat strip, the station rail scrolls
+instead of wrapping, and panels take the full screen.
 The camera's vertical field of view is derived from a fixed horizontal one,
 because three.js measures FOV vertically and a portrait phone would otherwise
 show the room through a slot, and the Android back button closes a panel
@@ -424,7 +484,7 @@ debug-signed, so it is for sideloading rather than the Play Store.
 ## Project layout
 
 ```
-src/game/     simulation: state, sim tick, bills, crises, actions, endings
+src/game/     simulation: state, sim tick, bills, crises, arcs, cabinet, endings
 src/world/    three.js: office geometry, props, controls, stations, asset loading
 src/ui/       HUD, panels, touch stick, styling
 src/audio/    procedural sound synthesis
@@ -458,11 +518,16 @@ where the numbers land. It is the fastest way to see whether a change to the
 model has broken the difficulty curve:
 
 ```
-idle          legacy 43.5  approval 46.4  debt 103.7  health 41.5  marriage 32.2  bills 0    earlyEnd 0/6
-workaholic    legacy 48.0  approval 46.6  debt 103.5  health 10.8  marriage 28.0  bills 6.7  earlyEnd 2/6
-balanced      legacy 58.8  approval 50.4  debt 104.3  health 88.2  marriage 87.8  bills 6.7  earlyEnd 0/6
-family-first  legacy 55.0  approval 48.9  debt 103.5  health 93.8  marriage 92.7  bills 0    earlyEnd 0/6
+idle          legacy 43.5  approval 46.1  debt 102.8  health 39.5  marriage 29.2  bills 0    arcs 3.0  earlyEnd 1/6
+workaholic    legacy 49.5  approval 48.5  debt 101.8  health 32.5  marriage 27.0  bills 6.0  arcs 2.7  earlyEnd 0/6
+balanced      legacy 59.3  approval 52.5  debt 101.5  health 87.8  marriage 81.2  bills 7.3  arcs 2.2  earlyEnd 0/6
+family-first  legacy 54.5  approval 46.8  debt 100.3  health 94.7  marriage 90.5  bills 0    arcs 2.0  earlyEnd 0/6
 ```
+
+The harness answers arcs as well as crises, which it has to: an arc blocks the
+end of a month exactly as a crisis does, and before it did, `npm run balance`
+hung silently the first time one fired — around month eight, with no output at
+all.
 
 Governing well beats governing hard, and neither beats doing both — which is the
 shape the game is meant to have.

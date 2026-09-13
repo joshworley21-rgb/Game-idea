@@ -127,6 +127,12 @@
   margin-right: auto;
 }
 
+/* `.title-tag` carries a 52ch cap for the floating card. In the full-screen
+   menu every child is already centred in a 560px column, so the cap centres
+   the tagline inside that column too and it sits indented from the title,
+   the fields and the buttons it belongs with. */
+.menu-screen .title-card > .title-tag { max-width: none; }
+
 .menu-screen .title-name {
   font-size: clamp(40px, 9vw, 64px);
 }
@@ -135,7 +141,7 @@
 
 #loading-note {
   position: fixed;
-  bottom: calc(74px + env(safe-area-inset-bottom));
+  bottom: calc(var(--dock-clear) + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 60;
@@ -368,15 +374,52 @@
 
   .drawer { width: min(230px, 84vw); }
 
+  /* The dock keeps its two rows here. Sharing one row with the buttons left
+     the station rail about 130px wide — one chip and a sliver of the next. */
   .dock {
+    width: auto;
     max-width: 96vw;
     bottom: calc(8px + env(safe-area-inset-bottom));
     padding: 6px;
     border-radius: 16px;
   }
 
-  .dock-actions { padding-left: 6px; }
+  /* A shorter dock: tighter padding and smaller chips than the desktop one. */
+  :root { --dock-clear: 116px; }
+
   .legend-row { padding: 8px 11px; }
+
+  /* What does change is that the rail scrolls rather than wrapping: eight
+     chips would wrap to four rows on a phone. It gets a fade on each end so
+     it is visible that there is more of the building off to the side, masked
+     out at the ends of the travel by the scroll handler in hud.ts, which
+     sets `at-start` and `at-end`. */
+  .dock-stations {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  }
+
+  .dock-stations.at-start {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent 100%);
+  }
+
+  .dock-stations.at-end {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px);
+    mask-image: linear-gradient(90deg, transparent 0, #000 18px);
+  }
+
+  .dock-stations.at-start.at-end {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
 
   /* The room banner is redundant next to the dock on a small screen. */
   #room-reveal { display: none; }

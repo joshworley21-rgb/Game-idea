@@ -139,6 +139,12 @@ export interface Secretary {
   loyalty: number;
   /** The congressional faction they are close to. */
   faction: FactionKey;
+  /**
+   * Why they are here: what erodes them, what they bring to a crisis, and
+   * whether they resign or leak when they break. See `temperament.ts`.
+   * Optional so a save written before temperaments still loads.
+   */
+  temperament?: string;
   /** Months served. */
   months: number;
 }

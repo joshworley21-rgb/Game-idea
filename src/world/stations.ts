@@ -1,7 +1,11 @@
 import * as THREE from "three";
 import { STATION_INFO } from "../game/actions.ts";
 import type { StationId } from "../game/types.ts";
+import { fitFont, withTextShadow } from "./labelText.ts";
 import type { StationAnchor } from "./roomkit.ts";
+
+/** Inset from the plate's edge that the text is not allowed to cross. */
+const PAD = 30;
 
 function labelTexture(title: string, hint: string, active: boolean): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -13,20 +17,22 @@ function labelTexture(title: string, hint: string, active: boolean): THREE.Canva
   const radius = 26;
   ctx.beginPath();
   ctx.roundRect(6, 34, 500, 92, radius);
-  ctx.fillStyle = active ? "rgba(20,28,44,0.92)" : "rgba(16,20,30,0.62)";
+  // Dark enough to read against a window wall at noon. The old plate was
+  // barely there, and the hint under it was invisible in a bright room.
+  ctx.fillStyle = active ? "rgba(20,28,44,0.94)" : "rgba(12,16,25,0.84)";
   ctx.fill();
   ctx.lineWidth = 3;
-  ctx.strokeStyle = active ? "rgba(226,193,110,0.95)" : "rgba(226,220,205,0.28)";
+  ctx.strokeStyle = active ? "rgba(226,193,110,0.95)" : "rgba(226,220,205,0.32)";
   ctx.stroke();
 
   ctx.textAlign = "center";
-  ctx.fillStyle = active ? "#f6e9c8" : "rgba(238,232,220,0.72)";
-  ctx.font = "600 34px Georgia, 'Times New Roman', serif";
-  ctx.fillText(title, 256, 74);
+  ctx.fillStyle = active ? "#f6e9c8" : "rgba(242,237,227,0.9)";
+  fitFont(ctx, title, 500 - PAD * 2, "600", 34, "Georgia, 'Times New Roman', serif");
+  withTextShadow(ctx, () => ctx.fillText(title, 256, 74));
 
   ctx.font = "500 22px system-ui, sans-serif";
-  ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.42)";
-  ctx.fillText(hint, 256, 108);
+  ctx.fillStyle = active ? "rgba(226,193,110,0.95)" : "rgba(238,232,220,0.66)";
+  withTextShadow(ctx, () => ctx.fillText(hint, 256, 108));
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;

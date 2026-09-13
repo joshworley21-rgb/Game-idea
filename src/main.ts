@@ -339,9 +339,9 @@ async function wireHardwareBack(): Promise<void> {
 
 titleScreen({
   saved: hasSave() ? loadGame() : null,
-  onStart: ({ deltas, summary }) => {
-    const engine = new Engine({ name: "President Reyes", party: "blue" });
-    engine.applyCampaignResult(deltas, summary);
+  onStart: ({ name, party, deltas, summary, path }) => {
+    const engine = new Engine({ name, party });
+    engine.applyCampaignResult(deltas, summary, path);
     const game = new Game(engine);
     openingCutscene(game.whenReady());
   },

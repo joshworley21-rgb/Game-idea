@@ -82,8 +82,19 @@ function run(strat: Strategy, seed: number) {
   const s = engine.state;
   const seenThreads = new Set<string>();
   const gatedFired = new Set<string>();
+  const seenArcs = new Set<string>();
 
   while (s.phase === "playing") {
+    // An arc blocks the month exactly as a crisis does, so the harness has to
+    // answer it or the term never advances. It did not, which is why `npm run
+    // balance` hung the first time one fired — around month eight, silently,
+    // with no output at all.
+    const arc = engine.pendingArc;
+    if (arc) {
+      seenArcs.add(arc.id);
+      engine.resolveArc(arc.id, rng.pick(arc.choices).id);
+    }
+
     // Resolve every crisis with a random affordable option.
     for (const t of s.threads) seenThreads.add(t.id);
     for (const crisis of [...engine.pendingCrises]) {
@@ -124,6 +135,7 @@ function run(strat: Strategy, seed: number) {
     threads: seenThreads.size,
     threadNames: [...seenThreads].join("|") || "-",
     gated: gatedFired.size,
+    arcs: seenArcs.size,
     strat,
     seed,
     endMonth: s.month,
@@ -160,7 +172,7 @@ for (const strat of strategies) {
   const avg = (f: (r: (typeof rows)[number]) => number) =>
     +(mine.reduce((a, r) => a + f(r), 0) / mine.length).toFixed(1);
   console.log(
-    `${strat.padEnd(13)} legacy ${avg((r) => r.legacy)}  approval ${avg((r) => r.approval)}  debt ${avg((r) => r.debt)}  health ${avg((r) => r.health)}  marriage ${avg((r) => r.marriage)}  bills ${avg((r) => r.bills)}  earlyEnd ${mine.filter((r) => r.endMonth <= 48).length}/${mine.length}`,
+    `${strat.padEnd(13)} legacy ${avg((r) => r.legacy)}  approval ${avg((r) => r.approval)}  debt ${avg((r) => r.debt)}  health ${avg((r) => r.health)}  marriage ${avg((r) => r.marriage)}  bills ${avg((r) => r.bills)}  arcs ${avg((r) => r.arcs)}  earlyEnd ${mine.filter((r) => r.endMonth <= 48).length}/${mine.length}`,
   );
 }
 
