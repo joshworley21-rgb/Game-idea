@@ -55,10 +55,23 @@ jobs:
           test -s uncompressed.glb || { echo "::error::no glb"; exit 1; }
           ls -lh uncompressed.glb
 
+      # The FBX is the whole White House estate — building, South Lawn, fence,
+      # outbuildings and a few thousand trees, 312 x 300 metres of it. The game
+      # is the Oval Office and never leaves it. Cutting the room out here, before
+      # the optimiser runs, means the expensive passes only ever touch geometry
+      # and textures that ship.
+      - name: Strip the estate down to the Oval Office
+        run: |
+          set -euo pipefail
+          npm install --no-save @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions
+          node scripts/strip-exterior.mjs uncompressed.glb room.glb
+          test -s room.glb || { echo "::error::strip produced nothing"; exit 1; }
+          ls -lh uncompressed.glb room.glb
+
       - name: Optimise (quantize + webp + simplify)
         run: |
           set -euo pipefail
-          npx --yes @gltf-transform/cli@4.5.0 optimize uncompressed.glb OvalOffice.glb --compress quantize --texture-compress webp --texture-size 1024 --simplify true --simplify-error "${{ inputs.simplify_error || '0.003' }}"
+          npx --yes @gltf-transform/cli@4.5.0 optimize room.glb OvalOffice.glb --compress quantize --texture-compress webp --texture-size 1024 --simplify true --simplify-error "${{ inputs.simplify_error || '0.003' }}"
           test -s OvalOffice.glb || { echo "::error::no output"; exit 1; }
           ls -lh OvalOffice.glb
 
@@ -79,6 +92,16 @@ jobs:
           if (bad.length) { console.error(`::error::uses ${bad.join(", ")} — needs a decoder`); process.exit(1); }
           if (root.listMeshes().length === 0) { console.error("::error::no meshes"); process.exit(1); }
           console.log(`meshes: ${root.listMeshes().length}`);
+          const { getBounds } = await import("@gltf-transform/core");
+          const { min, max } = getBounds(doc.getRoot().listScenes()[0]);
+          const size = [0, 1, 2].map((k) => max[k] - min[k]);
+          console.log(`bounds: ${size.map((v) => v.toFixed(1)).join(" x ")} m, floor at y=${min[1].toFixed(2)}`);
+          // The Oval plus its margin is about 33m across. The estate was 312,
+          // and a model that arrives back at that size has been stripped by
+          // nothing — which is a silent failure that only shows up in game as
+          // a camera standing in a field.
+          const across = Math.max(size[0], size[2]);
+          if (across > 60) { console.error(`::error::model is ${across.toFixed(0)}m across — the estate was not stripped`); process.exit(1); }
           '
 
       - name: Publish

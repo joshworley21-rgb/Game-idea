@@ -15,6 +15,7 @@ import type { Footprint, LoadProgress } from "./assetLoader.ts";
 import { PROPS_BY_ROOM } from "./props.ts";
 import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
+import { findDeskPose } from "./deskPose.ts";
 import { loadOvalOffice } from "./ovalLoader.ts";
 import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
@@ -231,12 +232,15 @@ export class World {
         this.ovalPending = false;
         this.current.group.visible = false;
 
-        // The GLB lives at its own origin, so use the pose measured with the
-        // in-game freecam rather than the procedural room's coordinates.
-        const deskPose = {
+        // Where the president sits is a fact about the model, so ask the
+        // model: `findDeskPose` locates the Resolute desk and puts the camera
+        // behind it. That works whatever origin the GLB was authored at, which
+        // a hand-measured constant does not — and it was a hand-measured
+        // constant here until the estate was stripped out of the model.
+        const deskPose = findDeskPose(model) ?? {
           position: OVAL_MODEL_POSE.position.clone(),
           target: OVAL_MODEL_POSE.target.clone(),
-          nodeName: "measured",
+          nodeName: "fallback",
         };
 
         if (this.freecamActive) {
@@ -252,7 +256,9 @@ export class World {
         }
 
         const p = deskPose.position;
-        console.log(`[oval] desk pose ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`);
+        console.log(
+          `[oval] desk pose ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)} from "${deskPose.nodeName}"`,
+        );
 
         this.stations.rebuild(this.current.anchors);
         this.doors.rebuild(this.current.doors);

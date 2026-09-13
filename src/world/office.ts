@@ -7,13 +7,22 @@ import type { StationId } from "../game/types.ts";
 export const ROOM = { rx: 5.45, rz: 4.4, height: 4.3, wallThickness: 0.35 };
 
 /**
- * Camera pose measured in the loaded Oval Office GLB with the in-game freecam.
- * The GLB is authored at a different origin and scale than the procedural room,
- * so this pose only applies to the loaded model, never the procedural fallback.
+ * Fallback camera pose for the loaded Oval Office GLB.
+ *
+ * The pose is normally derived from the model itself — `findDeskPose` locates
+ * the Resolute desk and sits the camera behind it — and this is only used if
+ * that fails to find a desk. It is expressed in the stripped model's frame,
+ * where `scripts/strip-exterior.mjs` has put the floor's centre at the origin:
+ * eye height 1.31m above the floor, a little under the desk's own offset from
+ * the middle of the room, facing the fireplace.
+ *
+ * It used to read (69.03, -7.09, 28.42), which were three numbers somebody
+ * measured by hand in a model whose origin was 69 metres away and eight
+ * metres up, and which meant nothing at all to read.
  */
 export const OVAL_MODEL_POSE = {
-  position: new THREE.Vector3(69.03, -7.09, 28.42),
-  target: new THREE.Vector3(69.09, -7.1, 28.86),
+  position: new THREE.Vector3(-0.12, 1.31, -4.21),
+  target: new THREE.Vector3(-0.06, 1.30, -3.77),
 };
 
 /** The point on the inside face of the wall directly behind a given x. */

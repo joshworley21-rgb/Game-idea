@@ -16,3 +16,8 @@ build-output/
 
 # Raw model downloads; `npm run assets` regenerates them into public/models
 assets-src/
+
+# The Oval Office model is a release asset, not source: `npm run assets`
+# fetches it and CI re-fetches it with FORCE_ASSETS on every build. It has
+# never been committed and at ~12 MB it should not start now.
+public/models/OvalOffice.glb

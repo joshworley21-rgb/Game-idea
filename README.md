@@ -403,6 +403,67 @@ made from screen size or touch support.
 
 ## The 3D assets
 
+### The Oval Office
+
+The room itself is one model, built from an FBX by
+[`process-model.yml`](.github/workflows/process-model.yml) and published as a
+GitHub Release asset rather than committed, because it is twelve megabytes and
+it is not source.
+
+The source FBX is not a room. It is **the whole White House estate** — the
+building, the South Lawn, the perimeter fence, the outbuildings and a few
+thousand instanced trees, 312 x 33 x 300 metres of it. The game is six rooms
+in first person, never leaves the Oval, and the Oval's window glass is opaque,
+so none of the rest is ever on screen. All of it was being converted,
+optimised, shipped inside the APK and handed to the GPU anyway.
+
+It also put the room 69 metres from the model's origin and eight metres below
+it, which is the actual reason the camera pose for the Oval used to be
+`(69.03, -7.09, 28.42)` — three numbers someone measured by hand, in a frame
+where they meant nothing, with an 86-line module that monkey-patched
+`THREE.Scene.prototype.add`, `OrbitControls.prototype.update` and
+`WebGLRenderer.prototype.render` to try to find the room on the first frame.
+
+```bash
+node scripts/strip-exterior.mjs in.glb out.glb    # what CI runs
+```
+
+`strip-exterior.mjs` cuts the room out. It finds the Oval by its `Interior01`
+shell rather than assuming anything about the layout, keeps what is inside plus
+a margin, and **clips rather than keeps-or-drops** whatever straddles the
+boundary — `DoorL` is a single mesh holding every door in the building and
+`Molding` every piece of trim, both centred somewhere out on the lawn, so
+dropping them whole leaves the Oval with holes where its doors were and keeping
+them whole keeps the building. A straddling mesh is cut to the triangles that
+lie inside and re-indexed down to the vertices those triangles still use.
+
+Two details worth naming. Every vertex of a triangle has to be inside, not just
+its centroid: the estate's ground plane is a handful of triangles 226 metres
+across, and keeping one because its middle lands in the room drags a hundred
+metres of geometry back with it. And the repacking works on raw typed arrays —
+the model is quantised, so `getElement` hands back a denormalised float like
+`0.461` and writing that back into the `Int16Array` it came from truncates
+every coordinate to zero.
+
+Then it re-origins on the floor's centre, which is what makes the numbers
+readable: eye height is 1.31m, not -7.09. The camera pose is no longer written
+down at all — `findDeskPose` locates the Resolute desk in the loaded model and
+sits the camera behind it, so it is derived from the model and works whatever
+origin the next export happens to use.
+
+| | before | after |
+| --- | --- | --- |
+| bounds | 312 x 33 x 300 m | 23 x 7 x 25 m |
+| triangles | 132,805 | 69,877 |
+| file | 17.6 MB | 12.4 MB |
+
+The view from the desk is unchanged — that is the point. CI fails the build if
+the model comes back wider than 60 metres, because a model that was stripped by
+nothing is a silent failure that only shows up in game as a camera standing in
+a field.
+
+### The furniture
+
 The furniture is real geometry, not boxes: eleven models from
 [Poly Haven](https://polyhaven.com), all CC0.
 
@@ -491,7 +552,7 @@ src/audio/    procedural sound synthesis
 src/tools/    headless balance harness
 android/      Capacitor Android project
 public/models/ optimised .glb props (built by `npm run assets`)
-scripts/      asset pipeline
+scripts/      asset pipeline (fetch + optimise props, strip the estate)
 ```
 
 The simulation has no dependency on the renderer or the DOM, which is what makes

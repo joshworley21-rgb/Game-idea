@@ -53,7 +53,7 @@ export function findDeskPose(model: THREE.Object3D): DeskPose | null {
   // Which way is the front? The side of the desk that points toward the middle
   // of the room. This only chooses the sign; the direction itself is snapped to
   // the desk's axis.
-  const toRoom = new THREE.Vector3().subVectors(roomCenter(model), deskCenter);
+  const toRoom = new THREE.Vector3().subVectors(roomCenter(model, deskCenter), deskCenter);
   toRoom.y = 0;
   if (toRoom.lengthSq() < 1e-6) toRoom.set(0, 0, 1);
   toRoom.normalize();
@@ -74,7 +74,44 @@ export function findDeskPose(model: THREE.Object3D): DeskPose | null {
   return { position, target, nodeName: desk.name || "(unnamed)" };
 }
 
-function roomCenter(model: THREE.Object3D): THREE.Vector3 {
+/** Names that mark a node holding a room's own shell — floor, walls, ceiling. */
+const ROOM_PATTERN = /interior/i;
+
+/**
+ * The middle of the room the desk is standing in. This is only ever used to
+ * decide which side of the desk the president sits on, but getting it wrong
+ * seats them facing the window with their back to the room.
+ *
+ * The whole model's bounding centre is the obvious thing to use and it is
+ * wrong the moment the model holds anything but the room. The Oval Office GLB
+ * used to be the entire White House estate, so "toward the middle" pointed at
+ * a spot on the South Lawn, and the camera went to the window side of the desk
+ * looking at the back of the president's chair.
+ *
+ * So it looks for the room's own shell, and of the shells it finds it takes
+ * the one the desk is actually inside — a model with several rooms in it has
+ * several, and only one of them is this desk's. The model's own bounds are the
+ * fallback for a model that is nothing but a room anyway.
+ */
+function roomCenter(model: THREE.Object3D, deskCenter: THREE.Vector3): THREE.Vector3 {
+  let best: THREE.Box3 | null = null;
+  let bestDistance = Infinity;
+
+  model.traverse((obj) => {
+    if (!ROOM_PATTERN.test(obj.name)) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    if (box.isEmpty()) return;
+    // Containment first, then proximity: a desk inside a shell is that room's.
+    const distance = box.containsPoint(deskCenter)
+      ? 0
+      : box.distanceToPoint(deskCenter);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = box;
+    }
+  });
+
+  if (best) return (best as THREE.Box3).getCenter(new THREE.Vector3());
   return new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
 }
 
