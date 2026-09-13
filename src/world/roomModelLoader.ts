@@ -35,7 +35,7 @@ function applySRGB(mesh: THREE.Mesh): void {
   }
 }
 
-export interface OvalLoadHandlers {
+export interface RoomModelHandlers {
   /** The model is in the scene and its meshes are configured. */
   onLoaded: (model: THREE.Group) => void;
   /** The model could not be fetched; the caller should fall back. */
@@ -43,10 +43,13 @@ export interface OvalLoadHandlers {
 }
 
 /**
- * Loads the bundled Oval Office GLB and hands the configured model back.
+ * Loads a bundled room GLB and hands the configured model back.
+ *
  * The caller owns the scene graph and the fallback, so this stays a loader.
+ * `label` only names the room in the progress and error logs; nothing in here
+ * was ever specific to the Oval except the word.
  */
-export function loadOvalOffice(url: string, handlers: OvalLoadHandlers): void {
+export function loadRoomModel(url: string, label: string, handlers: RoomModelHandlers): void {
   const loader = new GLTFLoader();
 
   loader.load(
@@ -69,10 +72,10 @@ export function loadOvalOffice(url: string, handlers: OvalLoadHandlers): void {
         const totalMB = progress.total / 1048576;
         const pct = (progress.loaded / progress.total) * 100;
         console.log(
-          `Oval Office loading… ${pct.toFixed(1)}% (${loadedMB.toFixed(1)} MB / ${totalMB.toFixed(1)} MB)`,
+          `${label} loading… ${pct.toFixed(1)}% (${loadedMB.toFixed(1)} MB / ${totalMB.toFixed(1)} MB)`,
         );
       } else {
-        console.log(`Oval Office loading… ${loadedMB.toFixed(1)} MB`);
+        console.log(`${label} loading… ${loadedMB.toFixed(1)} MB`);
       }
     },
     (error) => handlers.onError(error),

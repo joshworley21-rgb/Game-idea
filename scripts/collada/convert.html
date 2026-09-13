@@ -1,0 +1,218 @@
+<!doctype html><meta charset=utf-8>
+<!--
+  SketchUp COLLADA -> glTF, stage one.
+
+  Driven by scripts/convert-collada-room.mjs, which serves this page next to
+  the .dae and its textures and calls window.__glb(). It runs in a browser
+  because three's ColladaLoader parses XML with DOMParser, which Node has not
+  got; everything after this stage is plain Node.
+
+  What a SketchUp export needs doing to it before it is a game asset, all of
+  which is below and all of which was found the hard way:
+
+    - Its edge overlay ships as line primitives. In SketchUp they are the
+      drawing; here they are 1735 draw calls of white wireframe over every
+      surface.
+    - Its normals are per-face, so no two vertices are ever identical and
+      nothing welds — weld and simplify both come back having changed nothing.
+      Dropped, and flat-shaded in the game instead.
+    - Half its objects are mirrored copies with negative-determinant matrices.
+      Baking those into the vertices reverses the winding for good.
+    - Every face has a front material and a back material, and where only one
+      was painted the other is the exporter's own default sitting a millimetre
+      proud of it, hiding it.
+-->
+<canvas id=c></canvas>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+const log = [];
+// ColladaLoader hands back the scene before its TextureLoader calls have
+// resolved, so map.image is still null. Wait for the images rather than
+// exporting a room with no textures on it.
+const waitForTextures = (root) => new Promise((res) => {
+  const maps = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (m?.map) maps.push(m.map);
+  });
+  const tick = () => {
+    const pending = maps.filter((t) => !t.image || !(t.image.width || t.image.naturalWidth));
+    if (!pending.length) return res(maps.length);
+    setTimeout(tick, 120);
+  };
+  tick();
+});
+
+new ColladaLoader().load('/model.dae', async (collada) => {
+  const root = collada.scene;
+  log.push(`waited on ${await waitForTextures(root)} textures`);
+
+  // 1. SketchUp exports its edge overlay as line primitives. In SketchUp they
+  //    are the drawing; in a game they are 1735 draw calls of white wireframe
+  //    over every surface. Nothing wants them.
+  const doomed = [];
+  root.traverse((o) => { if (o.isLine || o.isLineSegments || o.isPoints) doomed.push(o); });
+  for (const o of doomed) o.parent?.remove(o);
+  log.push(`dropped ${doomed.length} edge/line objects`);
+
+  // 2. Bake every transform down and bucket the geometry by material, so the
+  //    room draws in as many calls as it has materials rather than 1596.
+  root.updateMatrixWorld(true);
+  const buckets = new Map();
+  let mirrored = 0;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const groups = o.geometry.groups?.length ? o.geometry.groups : [{ start: 0, count: Infinity, materialIndex: 0 }];
+    for (const g of groups) {
+      const m = mats[g.materialIndex ?? 0] ?? mats[0];
+      if (!m) continue;
+      let geo = o.geometry;
+      if (groups.length > 1) {
+        geo = geo.clone();
+        geo.clearGroups();
+        const idx = geo.getIndex();
+        if (idx) geo.setIndex(Array.from(idx.array.slice(g.start, g.start + g.count)));
+      }
+      geo = geo.clone().applyMatrix4(o.matrixWorld);
+      // SketchUp mirrors half of a symmetrical object rather than modelling it
+      // twice, so those nodes carry a negative-determinant matrix. Baking such
+      // a matrix into the vertices reverses the triangle winding for good, and
+      // with back faces culled the mirrored halves turn inside out: the table's
+      // pale underside won over its mahogany top, one millimetre above it.
+      if (o.matrixWorld.determinant() < 0) {
+        const idx = geo.getIndex();
+        if (idx) {
+          const a = idx.array;
+          for (let i = 0; i < a.length; i += 3) { const t = a[i]; a[i] = a[i + 2]; a[i + 2] = t; }
+          idx.needsUpdate = true;
+        } else {
+          const pos = geo.attributes.position.array;
+          const uv = geo.attributes.uv?.array;
+          for (let i = 0; i < pos.length; i += 9) {
+            for (let k = 0; k < 3; k++) { const t = pos[i + k]; pos[i + k] = pos[i + 6 + k]; pos[i + 6 + k] = t; }
+            if (uv) { const j = (i / 3) * 2; for (let k = 0; k < 2; k++) { const t = uv[j + k]; uv[j + k] = uv[j + 4 + k]; uv[j + 4 + k] = t; } }
+          }
+        }
+        mirrored++;
+      }
+      // Position and UV only. The normals SketchUp writes are per-face, so no
+      // two vertices are ever identical and nothing welds — which is why weld
+      // and simplify both came back having changed nothing. Dropped here and
+      // flat-shaded in the game instead: the source is faceted anyway, the
+      // welds then work, and the export loses a third of its vertex data.
+      for (const name of Object.keys(geo.attributes)) {
+        if (!['position', 'uv'].includes(name)) geo.deleteAttribute(name);
+      }
+      if (!geo.attributes.uv) {
+        const n = geo.attributes.position.count;
+        geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+      }
+      const key = m.name || m.uuid;
+      const b = buckets.get(key) ?? { mat: m, geos: [] };
+      b.geos.push(geo.toNonIndexed());
+      buckets.set(key, b);
+    }
+  });
+
+  const out = new THREE.Group();
+  out.name = 'SituationRoom';
+  let tris = 0;
+  for (const [name, b] of buckets) {
+    // SketchUp gives every face a front material and a back material, and
+    // exports both. Where the modeller only painted one side, the other keeps
+    // the exporter's own default, and that default sits a millimetre proud of
+    // the real surface and hides it: "material_0" covered the navy carpet with
+    // white, and "material" covered the whole mahogany table top — inlaid
+    // border, gold centre stripe and all — with flat blue-grey.
+    //
+    // Only these two are defaults. Every other "material_N" in this export is
+    // a surface the modeller actually painted: material_1 is the wainscot,
+    // material_15 the chandelier brass.
+    if (name === 'material_0' || name === 'material') {
+      log.push(`dropped ${name} (SketchUp default, covers a painted surface)`);
+      continue;
+    }
+    let merged = BufferGeometryUtils.mergeGeometries(b.geos, false);
+    if (!merged) { log.push(`! could not merge ${name}`); continue; }
+    const rawTris = merged.attributes.position.count / 3;
+    merged = BufferGeometryUtils.mergeVertices(merged, 1e-4);
+    log.push(`${name}: ${Math.round(rawTris)} tris, ${merged.attributes.position.count} verts after weld`);
+    const src = b.mat;
+    // SketchUp writes Phong/Lambert with no PBR intent. Standard materials with
+    // a plausible roughness read far better under the game's IBL and post chain.
+    const mat = new THREE.MeshStandardMaterial({
+      name,
+      color: src.color ? src.color.clone() : new THREE.Color(0xffffff),
+      map: src.map ?? null,
+      roughness: 0.72,
+      metalness: 0.0,
+      flatShading: true,
+      // The other half: with both sides drawn, every doubled face z-fights its
+      // own twin. The export's winding is consistent, so culling back faces
+      // keeps the painted side and discards the duplicate.
+      side: THREE.FrontSide,
+      transparent: !!src.transparent,
+      opacity: src.opacity ?? 1,
+    });
+    if (mat.map) {
+      mat.map.colorSpace = THREE.SRGBColorSpace;
+      mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+      // The exporter cannot read the loader's decoded image directly. Redraw
+      // each texture onto a canvas — and cap it at 1024, because the chair
+      // texture ships at 4032 x 5500 for a seat you see from four metres away.
+      const img = mat.map.image;
+      const w = img.width ?? img.naturalWidth, h = img.height ?? img.naturalHeight;
+      const scale = Math.min(1, 1024 / Math.max(w, h));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * scale));
+      cv.height = Math.max(1, Math.round(h * scale));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      mat.map = mat.map.clone();
+      mat.map.image = cv;
+      mat.map.colorSpace = THREE.SRGBColorSpace;
+      mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+      mat.map.needsUpdate = true;
+      log.push(`texture ${name}: ${w}x${h} -> ${cv.width}x${cv.height}`);
+    }
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.name = name;
+    tris += (merged.index ? merged.index.count : merged.attributes.position.count) / 3;
+    out.add(mesh);
+  }
+  log.push(`rewound ${mirrored} mirrored primitives`);
+  log.push(`merged into ${out.children.length} meshes, ${Math.round(tris)} triangles`);
+
+  // 3. Put the room on the origin with its floor at y = 0, the way every other
+  //    room in the game is built, instead of 12m out and 6.8m up.
+  //
+  //    Baked into the vertices, not written as a transform on the group: a
+  //    node transform leaves the exported accessor positions in SketchUp's
+  //    original space, and anything downstream that reads raw positions — the
+  //    caster rebuild, a collider bake — then works 12 metres from the room.
+  const box = new THREE.Box3().setFromObject(out);
+  const c = box.getCenter(new THREE.Vector3());
+  const shift = new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z);
+  for (const m of out.children) m.geometry.applyMatrix4(shift);
+  out.updateMatrixWorld(true);
+  const after = new THREE.Box3().setFromObject(out);
+  log.push(`bounds ${after.min.toArray().map(v => v.toFixed(2))} .. ${after.max.toArray().map(v => v.toFixed(2))}`);
+
+  window.__log = log;
+  window.__out = out;
+  window.__glb = () => new Promise((res, rej) => {
+    new GLTFExporter().parse(out, (buf) => {
+      const u8 = new Uint8Array(buf);
+      let s = '';
+      for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+      res(btoa(s));
+    }, rej, { binary: true });
+  });
+  window.__ready = true;
+}, undefined, (e) => { window.__log = ['ERROR ' + e]; window.__ready = true; });
+</script>

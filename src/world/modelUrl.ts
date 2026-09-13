@@ -12,3 +12,12 @@
  * back to the procedural room. assetLoader.ts resolves props the same way.
  */
 export const MODEL_URL = "models/OvalOffice.glb";
+
+/**
+ * The Situation Room model.
+ *
+ * Unlike the Oval's, this one is committed: at 1.6 MB it is the size of a
+ * prop, not of an estate, so it goes in the repo with the Poly Haven furniture
+ * rather than living in a GitHub release and being fetched by `npm run assets`.
+ */
+export const SITROOM_MODEL_URL = "models/SituationRoom.glb";

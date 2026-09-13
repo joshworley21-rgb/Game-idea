@@ -39,14 +39,34 @@ table, your family is upstairs, a press corps fills the briefing room, and the
 House chamber holds a hundred members seated in their five faction blocks. They
 breathe, blink, shift their weight, and turn to look at you when you walk in.
 
-The Situation Room is downstairs from the Cabinet Room and is the one room with
-no window in it — no daylight, no fireplace, two recessed downlights and three
-screens that are the brightest things in the frame. It is also the only room
-whose fittings are a readout rather than a set: the three screens are drawn from
-the running threads, worst first, with each one's intensity and drift on it, and
-the board on the wall to your left is the six crisis domains ranked by heat, redrawn
+The Situation Room is the real one — the JFK Conference Room, modelled in
+SketchUp and converted for the game: mahogany table, fourteen leather chairs,
+three chandeliers, the presidential seal on the wall behind your chair, and no
+window anywhere in it. It is also the only room whose fittings are a readout
+rather than a set. The wide display on the wall you face carries the running
+situations, worst first, with each one's intensity and which way it is drifting;
+the two projector screens on the wall the Watch Floor seat faces carry the
+eleven crisis domains ranked by heat, and the watch summary. All of it redraws
 every time the month turns. Nothing in it is decoration. If the room looks calm,
 the country is calm.
+
+The model arrived as a 62 MB COLLADA export and ships at 1.6 MB, which is most
+of a day's work in `scripts/convert-collada-room.mjs`. A SketchUp export is not
+a game asset: its edge overlay is 1,735 draw calls of white wireframe, its
+normals are per-face so nothing welds and neither weld nor simplify changes
+anything at all, a third of its objects are mirrored copies whose winding
+reverses the moment you bake their transforms, and every face carries a second
+material on its back that sits a millimetre proud of the front and hides it —
+which is why the navy carpet first rendered as a white void and the mahogany
+table as flat blue-grey. The best of it was the chair casters: 150 ball-and-fork
+assemblies four centimetres across, under a conference table, in a room with no
+daylight, which came to 180,000 of the model's 350,000 triangles and which
+meshoptimizer refuses to touch, because each ball is its own closed shell and
+there is no edge to collapse that does not delete a whole caster. They are
+rebuilt as low-poly proxies instead.
+
+The procedural Situation Room that the model replaces is still there, and still
+what you get if the model does not load — the same arrangement the Oval has.
 
 **Controls** — a thumb stick to walk, drag anywhere else to look around, and a
 tap opens whatever you're standing at or walks you through the door under your

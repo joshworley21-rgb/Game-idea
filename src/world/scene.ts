@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { MODEL_URL } from "./modelUrl.ts";
+import { MODEL_URL, SITROOM_MODEL_URL } from "./modelUrl.ts";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { SeatRig, seatsForRoom } from "./seats.ts";
 import { buildOffice, OVAL_MODEL_POSE } from "./office.ts";
@@ -23,8 +23,16 @@ import { PROPS_BY_ROOM } from "./props.ts";
 import { applySeason, addModelKeyLight } from "./lighting.ts";
 import { buildCast, castFingerprint } from "./cast.ts";
 import { findDeskPose } from "./deskPose.ts";
-import { loadOvalOffice } from "./ovalLoader.ts";
+import { loadRoomModel } from "./roomModelLoader.ts";
 import { ovalModelAnchors, ovalModelDoors } from "./ovalModelLayout.ts";
+import {
+  sitroomModelAnchors,
+  sitroomModelCast,
+  sitroomModelDoors,
+  sitroomModelLights,
+  sitroomModelSpawn,
+} from "./sitroomModelLayout.ts";
+import { buildSitroomScreens, type SitroomScreens } from "./sitroomScreens.ts";
 import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
 import { applyViewport, measureViewport } from "./viewport.ts";
@@ -134,6 +142,10 @@ export class World {
    * from `enterRoom` and not just from the load callback.
    */
   private ovalModel: THREE.Object3D | null = null;
+  /** The Situation Room model, once it has loaded. */
+  private sitroomModel: THREE.Object3D | null = null;
+  /** The live panels hung on that model. */
+  private sitroomScreens: SitroomScreens | null = null;
   readonly sound = new Sound();
   /** Whether the player is on a touch screen, for UI sizing — not graphics quality. */
   readonly touch: boolean;
@@ -216,6 +228,10 @@ export class World {
     window.addEventListener("resize", this.resize);
 
     void this.loadOval(MODEL_URL);
+    // Queued behind the Oval rather than beside it: the Oval gates the title
+    // screen and the Situation Room is four rooms away, so it should not be
+    // competing for the connection while the player is waiting to start.
+    this.loadSitroom(SITROOM_MODEL_URL);
   }
 
   /** One frame of simulation, before the frame is drawn. */
@@ -264,9 +280,49 @@ export class World {
     return this.freecamActive;
   }
 
+  /**
+   * Loads the Situation Room GLB and swaps it in for the procedural stand-in.
+   *
+   * Unlike the Oval this is not the room the game opens in, so nothing waits
+   * on it: it loads in the background and takes over whenever it arrives. If
+   * it never does, the procedural room is already on screen and stays.
+   */
+  private loadSitroom(url: string): void {
+    loadRoomModel(url, "Situation Room", {
+      onLoaded: (model) => {
+        this.scene.add(model);
+        model.updateMatrixWorld(true);
+        this.sitroomModel = model;
+        for (const light of sitroomModelLights(model)) model.add(light);
+        this.sitroomScreens = buildSitroomScreens(model);
+        if (this.sitroomScreens) {
+          model.add(this.sitroomScreens.group);
+          this.sitroomScreens.update(this.state);
+        }
+        model.visible = this.current.id === "sitroom";
+
+        const procedural = this.rooms.get("sitroom");
+        if (procedural) procedural.group.visible = false;
+
+        if (this.current.id === "sitroom") {
+          if (!this.freecamActive) {
+            this.rig?.dispose();
+            this.rig = new SeatRig(this.camera, this.seatsFor(this.current), this.canvas);
+          }
+          this.rebuildMarkers(this.current);
+          this.syncPeople(this.state);
+        }
+        console.log(`Situation Room model loaded (${model.children.length} meshes)`);
+      },
+      onError: (error) => {
+        console.error("Situation Room model failed to load — keeping the procedural room", error);
+      },
+    });
+  }
+
   /** Loads the Oval GLB and swaps it in for the procedural stand-in. */
   private async loadOval(url: string): Promise<void> {
-    loadOvalOffice(url, {
+    loadRoomModel(url, "Oval Office", {
       onLoaded: (model) => {
         this.scene.add(model);
         model.updateMatrixWorld(true);
@@ -372,10 +428,36 @@ export class World {
    * is what stops walking out of the Oval and back in from restoring the
    * wrong set.
    */
+  /**
+   * The seats for a room, taken from its model where one has loaded.
+   *
+   * A room whose geometry is a model has to seat you in the model, not in the
+   * procedural stand-in behind it: those two rooms are never the same size and
+   * the stand-in's seats put the camera inside the model's furniture.
+   */
+  private seatsFor(room: RoomBuild): ReturnType<typeof seatsForRoom> {
+    const model = room.id === "sitroom" ? this.sitroomModel : null;
+    if (!model) return seatsForRoom(room);
+    const spawn = sitroomModelSpawn(model);
+    return seatsForRoom(
+      {
+        ...room,
+        anchors: sitroomModelAnchors(model) ?? room.anchors,
+        doors: sitroomModelDoors(model) ?? room.doors,
+        spawn: spawn?.position ?? room.spawn,
+        spawnLook: spawn?.target ?? room.spawnLook,
+      },
+      {},
+    );
+  }
+
   private rebuildMarkers(room: RoomBuild): void {
-    const model = room.id === "oval" ? this.ovalModel : null;
-    this.stations.rebuild((model && ovalModelAnchors(model)) || room.anchors);
-    this.doors.rebuild((model && ovalModelDoors(model)) || room.doors);
+    const oval = room.id === "oval" ? this.ovalModel : null;
+    const sitroom = room.id === "sitroom" ? this.sitroomModel : null;
+    const anchors = (oval && ovalModelAnchors(oval)) || (sitroom && sitroomModelAnchors(sitroom));
+    const doors = (oval && ovalModelDoors(oval)) || (sitroom && sitroomModelDoors(sitroom));
+    this.stations.rebuild(anchors || room.anchors);
+    this.doors.rebuild(doors || room.doors);
   }
 
   enterRoom(id: RoomId): void {
@@ -383,7 +465,7 @@ export class World {
     if (this.current) this.current.group.visible = false;
     this.current = room;
     // The Oval stays dark until its model has loaded.
-    room.group.visible = !(id === "oval" && this.ovalPending);
+    room.group.visible = !(id === "oval" && this.ovalPending) && !(id === "sitroom" && this.sitroomModel);
 
     const presentation = ROOM_PRESENTATION[id];
     this.renderer.toneMappingExposure = presentation.exposure;
@@ -398,11 +480,12 @@ export class World {
       this.freecam?.setTarget(room.spawnLook);
     } else {
       this.rig?.dispose();
-      this.rig = new SeatRig(this.camera, seatsForRoom(room), this.canvas);
+      this.rig = new SeatRig(this.camera, this.seatsFor(room), this.canvas);
     }
 
     // The Oval's model is scenery for one room, not for the building.
     if (this.ovalModel) this.ovalModel.visible = id === "oval";
+    if (this.sitroomModel) this.sitroomModel.visible = id === "sitroom";
 
     this.resize();
     this.rebuildMarkers(room);
@@ -438,10 +521,14 @@ export class World {
     // fingerprint short-circuits: the Situation Room's screens and map wall
     // move with `threads` and `heat`, which change without the cast changing.
     if (state) this.current.onState?.(state);
+    if (this.current.id === "sitroom") this.sitroomScreens?.update(state);
     const key = castFingerprint(this.current.id, state);
     if (key === this.castKey) return;
     this.castKey = key;
-    buildCast(this.current.id, this.current.cast, state, this.people, this.animator);
+    // A room with a model seats its people in the model's own chairs.
+    const model = this.current.id === "sitroom" ? this.sitroomModel : null;
+    const cast = (model && sitroomModelCast(model)) || this.current.cast;
+    buildCast(this.current.id, cast, state, this.people, this.animator);
   }
 
   // ------------------------------------------------------------------ setup

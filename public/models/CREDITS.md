@@ -1,6 +1,20 @@
 # Model credits
 
-Every model here comes from [Poly Haven](https://polyhaven.com), released under
+## Rooms
+
+**SituationRoom.glb** — the White House Situation Room (the JFK Conference
+Room), modelled in SketchUp by **Hlostoops**, supplied by the project owner
+along with its six textures. Converted from COLLADA with
+`node scripts/convert-collada-room.mjs`, which is where the whole conversion —
+and the reasons for each step of it — is written down. 617k triangles and
+62 MB as exported; 135k and 1.6 MB as shipped.
+
+**OvalOffice.glb** is not in the repo: at ~12 MB it lives as a GitHub release
+asset and `npm run assets` fetches it.
+
+## Props
+
+Every prop here comes from [Poly Haven](https://polyhaven.com), released under
 [CC0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no
 attribution required. Credited anyway, because the people who made them deserve it.
 
