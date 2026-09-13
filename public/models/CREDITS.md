@@ -9,6 +9,12 @@ along with its six textures. Converted from COLLADA with
 and the reasons for each step of it — is written down. 617k triangles and
 62 MB as exported; 135k and 1.6 MB as shipped.
 
+**BR_*.glb** — the White House Briefing Room kit, modelled in 3ds Max and
+supplied by the project owner with its textures. Thirteen of its sixteen parts
+ship; the Floor and Ceiling slabs are 8 x 21m, the wrong shape for the game's
+9 x 12m room, and Door_1 is 1.33m tall, too short to read as a door. Converted
+with `node scripts/convert-fbx-props.mjs`. 17,454 triangles, 768 KB.
+
 **OvalOffice.glb** is not in the repo: at ~12 MB it lives as a GitHub release
 asset and `npm run assets` fetches it.
 

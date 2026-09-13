@@ -1,0 +1,238 @@
+<!doctype html><meta charset=utf-8>
+<!--
+  3ds Max FBX -> glTF, stage one. Driven by scripts/convert-fbx-props.mjs.
+
+  It runs in a browser because three's FBXLoader is the only FBX reader to
+  hand, and what it needs doing to a 3ds Max export is:
+
+    - Scale. 3ds Max writes UnitScaleFactor 1, which for FBX means centimetres,
+      and nothing downstream applies it.
+    - Textures. The FBX stores an absolute Windows path and a relative one, and
+      FBXLoader uses neither: it takes the basename and resolves it against the
+      resource path, so the textures have to be served as siblings and pointed
+      at explicitly. A texture the pack never supplied simply never resolves,
+      so the wait for them is bounded rather than indefinite.
+    - Multi-material meshes. Splitting a mesh by material group needs an index
+      built over the group's range; slicing an existing index only works when
+      there is one, and on non-indexed geometry keeping the whole mesh for
+      every group turned a 3,468-triangle camera into 305,184.
+    - Normal maps. The pack ships them, the FBX references none of them, so
+      they are paired back up by filename.
+-->
+<canvas id=c></canvas>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/","fflate":"/three/examples/jsm/libs/fflate.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+/** cm -> m. 3ds Max wrote UnitScaleFactor 1, which for FBX means centimetres. */
+const SCALE = 0.01;
+/** Colour maps that ship with a matching normal map the FBX never references. */
+const NORMALS = {
+  'carpet': 'carpet_n.png', 'column': 'column_n.png', 'door wood': 'door wood_n.png',
+  'firealarm': 'firealarm_n.png',
+};
+/**
+ * The pack ships a backdrop atlas of blue louvred panels that no FBX material
+ * references, and the Glass pieces are exactly panel-sized and carry no texture
+ * at all. So one panel out of the atlas goes on each, with the UVs remapped to
+ * that panel's rectangle rather than stretched over the whole sheet.
+ */
+const BACKDROP_RECT = { u0: 0.120, u1: 0.255, v0: 0.294, v1: 0.852 };
+
+const texLoader = new THREE.TextureLoader().setPath('/Textures/');
+
+const waitForTextures = (root) => new Promise((res) => {
+  const maps = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) if (m?.map) maps.push(m.map);
+  });
+  let waited = 0;
+  const tick = () => {
+    const pending = maps.filter((t) => !t.image || !(t.image.width || t.image.naturalWidth));
+    // A texture the pack did not supply 404s and never resolves, so the wait is
+    // bounded: a missing map falls back to its material's flat colour.
+    if (!pending.length || waited > 6000) return res({ total: maps.length, missing: pending.length });
+    waited += 120;
+    setTimeout(tick, 120);
+  };
+  tick();
+});
+
+/** Redraws a texture onto a canvas so the exporter can read it, capped in size. */
+function bakeTexture(tex, cap) {
+  const img = tex.image;
+  const w = img.width ?? img.naturalWidth, h = img.height ?? img.naturalHeight;
+  if (!w || !h) return null;
+  const s = Math.min(1, cap / Math.max(w, h));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(w * s));
+  cv.height = Math.max(1, Math.round(h * s));
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  const out = tex.clone();
+  out.image = cv;
+  out.needsUpdate = true;
+  return out;
+}
+
+window.__convert = (name, cap) => new Promise((resolve, reject) => {
+  const log = [];
+  const loader = new FBXLoader();
+  loader.setResourcePath('/Textures/');
+  loader.load(`/Models/${name}.fbx`, async (obj) => {
+    try {
+      const waited = await waitForTextures(obj);
+      log.push(`${waited.total} textures, ${waited.missing} never arrived`);
+
+      if (name === 'Glass_1' || name === 'Glass_2') {
+        const panel = texLoader.load('backdrop.png');
+        panel.colorSpace = THREE.SRGBColorSpace;
+        const panelNormal = texLoader.load('backdrop_n.png');
+        await new Promise((r) => setTimeout(r, 900));
+        obj.traverse((o) => {
+          if (!o.isMesh) return;
+          const uv = o.geometry.attributes.uv;
+          if (uv) {
+            for (let i = 0; i < uv.count; i += 1) {
+              uv.setXY(
+                i,
+                BACKDROP_RECT.u0 + uv.getX(i) * (BACKDROP_RECT.u1 - BACKDROP_RECT.u0),
+                BACKDROP_RECT.v0 + uv.getY(i) * (BACKDROP_RECT.v1 - BACKDROP_RECT.v0),
+              );
+            }
+            uv.needsUpdate = true;
+          }
+          for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+            if (!m || /metal/i.test(m.name)) continue;
+            m.map = panel;
+            m.normalMap = panelNormal;
+            m.transparent = false;
+            m.opacity = 1;
+            // The atlas was photographed under studio lights and comes out
+            // electric blue under the briefing room's key light. Knocked back
+            // and roughened, it reads as the deep navy the real panels are.
+            m.color?.setHex(0x97a1ae);
+            m.userData.backdrop = true;
+          }
+        });
+        log.push('backdrop panel mapped onto the glass');
+      }
+
+      obj.scale.setScalar(SCALE);
+      obj.updateMatrixWorld(true);
+
+      // Bucket every mesh by material, baking the world transform in so the
+      // export has no node hierarchy to carry.
+      const buckets = new Map();
+      obj.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        const groups = o.geometry.groups?.length ? o.geometry.groups : [{ start: 0, count: Infinity, materialIndex: 0 }];
+        for (const g of groups) {
+          const m = mats[g.materialIndex ?? 0] ?? mats[0];
+          if (!m) continue;
+          let geo = o.geometry;
+          if (groups.length > 1) {
+            // Slice the group out by building an index over its range. Slicing
+            // the existing index only works when there is one: on non-indexed
+            // geometry the old code kept the whole mesh for every group, so a
+            // three-material prop came out three times over — the camera came
+            // back as 305,184 triangles against the 3,468 it actually has.
+            geo = geo.clone();
+            const idx = geo.getIndex();
+            const total = idx ? idx.count : geo.attributes.position.count;
+            const count = g.count === Infinity ? total - g.start : Math.min(g.count, total - g.start);
+            const range = new Uint32Array(count);
+            for (let i = 0; i < count; i += 1) range[i] = idx ? idx.getX(g.start + i) : g.start + i;
+            geo.clearGroups();
+            geo.setIndex(new THREE.BufferAttribute(range, 1));
+          }
+          geo = geo.clone().applyMatrix4(o.matrixWorld);
+          for (const attr of Object.keys(geo.attributes)) {
+            if (!['position', 'normal', 'uv'].includes(attr)) geo.deleteAttribute(attr);
+          }
+          if (!geo.attributes.normal) geo.computeVertexNormals();
+          if (!geo.attributes.uv) {
+            geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+          }
+          const key = m.name || m.uuid;
+          const b = buckets.get(key) ?? { mat: m, geos: [] };
+          b.geos.push(geo.toNonIndexed());
+          buckets.set(key, b);
+        }
+      });
+
+      const out = new THREE.Group();
+      out.name = name;
+      let tris = 0;
+      for (const [matName, b] of buckets) {
+        let merged = BufferGeometryUtils.mergeGeometries(b.geos, false);
+        if (!merged) { log.push(`! could not merge ${matName}`); continue; }
+        merged = BufferGeometryUtils.mergeVertices(merged, 1e-5);
+        const src = b.mat;
+        const mat = new THREE.MeshStandardMaterial({
+          name: matName,
+          color: src.color ? src.color.clone() : new THREE.Color(0xffffff),
+          roughness: src.userData?.backdrop ? 0.88 : 0.62,
+          metalness: 0,
+          side: THREE.FrontSide,
+          transparent: !!src.transparent,
+          opacity: src.opacity ?? 1,
+        });
+        if (src.normalMap?.image?.width) {
+          mat.normalMap = bakeTexture(src.normalMap, cap);
+        }
+        if (src.map?.image?.width) {
+          const baked = bakeTexture(src.map, cap);
+          if (baked) {
+            mat.map = baked;
+            mat.map.colorSpace = THREE.SRGBColorSpace;
+            // A textured material is normally tinted white so the map speaks
+            // for itself; the backdrop is the exception and keeps its knock-back.
+            if (!src.userData?.backdrop) mat.color.setHex(0xffffff);
+            const file = decodeURIComponent((src.map.name || '').replace(/\.[^.]+$/, '')).toLowerCase();
+            const normal = NORMALS[file];
+            if (normal) {
+              const n = await new Promise((r) => texLoader.load(normal, r, undefined, () => r(null)));
+              if (n?.image) {
+                mat.normalMap = bakeTexture(n, cap);
+                log.push(`${matName}: + normal map ${normal}`);
+              }
+            }
+            log.push(`${matName}: ${src.map.image.width}x${src.map.image.height} -> ${baked.image.width}x${baked.image.height}`);
+          }
+        } else if (src.map) {
+          log.push(`${matName}: texture missing, keeping flat colour #${mat.color.getHexString()}`);
+        }
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.name = matName;
+        tris += (merged.index ? merged.index.count : merged.attributes.position.count) / 3;
+        out.add(mesh);
+      }
+
+      // Sit the part on its own origin: centred in x/z, base at y = 0. The prop
+      // placer measures from the bounding box, so this only makes the numbers
+      // in the layout table read as what they are.
+      const box = new THREE.Box3().setFromObject(out);
+      const c = box.getCenter(new THREE.Vector3());
+      const shift = new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z);
+      for (const m of out.children) m.geometry.applyMatrix4(shift);
+      out.updateMatrixWorld(true);
+      const after = new THREE.Box3().setFromObject(out);
+      const size = after.getSize(new THREE.Vector3());
+      log.push(`${out.children.length} meshes, ${Math.round(tris)} tris, ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`);
+
+      new GLTFExporter().parse(out, (buf) => {
+        const u8 = new Uint8Array(buf);
+        let s = '';
+        for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+        resolve({ glb: btoa(s), log });
+      }, reject, { binary: true });
+    } catch (e) { reject(String(e)); }
+  }, undefined, (e) => reject(String(e)));
+});
+window.__ready = true;
+</script>

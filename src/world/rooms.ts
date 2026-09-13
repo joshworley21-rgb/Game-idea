@@ -340,44 +340,19 @@ export function buildPressRoom(): RoomBuild {
 
   rectShell(group, W, D, H, { floor: 0x4a4238, wall: 0xd9cfc0, carpet: 0x27364f });
 
-  // The backdrop and the podium.
+  // The backdrop, the seal and the cameras are the briefing room kit's now —
+  // four columns, five louvred panels and the White House emblem, placed from
+  // PROPS_BY_ROOM.press. What stays here is a flat blue board behind them, so
+  // the wall does not show through the gaps between the bays.
   const backdrop = place(
     group,
-    new THREE.BoxGeometry(6.4, 2.9, 0.12),
-    standard(0x1b3358, 0.85),
+    new THREE.BoxGeometry(8.4, 2.95, 0.08),
+    standard(0x16294a, 0.9),
     0,
-    1.6,
-    -D / 2 + 0.3,
+    1.5,
+    -D / 2 + 0.16,
   );
   backdrop.receiveShadow = true;
-  for (let i = 0; i < 4; i++) {
-    place(
-      group,
-      new THREE.BoxGeometry(0.06, 2.9, 0.02),
-      standard(0x2b4a76, 0.8),
-      -2.4 + i * 1.6,
-      1.6,
-      -D / 2 + 0.38,
-    );
-  }
-  const seal = place(
-    group,
-    new THREE.CylinderGeometry(0.5, 0.5, 0.05, 40),
-    metal(PALETTE.brass, 0.35),
-    0,
-    2.1,
-    -D / 2 + 0.4,
-  );
-  seal.rotation.x = Math.PI / 2;
-  const ring = place(
-    group,
-    new THREE.TorusGeometry(0.56, 0.035, 10, 40),
-    metal(0xd8c489, 0.3),
-    0,
-    2.1,
-    -D / 2 + 0.42,
-  );
-  ring.rotation.x = 0;
 
   const podium = new THREE.Group();
   podium.position.set(0, 0, -4.1);
@@ -388,10 +363,8 @@ export function buildPressRoom(): RoomBuild {
   top.rotation.x = -0.14;
   const crest = place(podium, new THREE.CylinderGeometry(0.2, 0.2, 0.04, 32), metal(PALETTE.brass, 0.3), 0, 0.72, 0.26);
   crest.rotation.x = Math.PI / 2;
-  for (const side of [-1, 1]) {
-    const mic = place(podium, new THREE.CylinderGeometry(0.008, 0.008, 0.34, 8), metal(0x2a2a2a, 0.5), side * 0.1, 1.36, 0.05);
-    mic.rotation.set(-0.5, 0, side * 0.22);
-  }
+  // The two cylinders that used to stand in for microphones are gone: the kit
+  // has a real gooseneck, and it sits on the lectern from the prop manifest.
   const colliders: Footprint[] = [{ minX: -0.45, maxX: 0.45, minZ: -4.4, maxZ: -3.8 }];
 
   // Seven rows of seven seats, and a press corps in most of them.
@@ -419,11 +392,8 @@ export function buildPressRoom(): RoomBuild {
   const riser = place(group, new THREE.BoxGeometry(W - 1.4, 0.45, 1.6), standard(0x33302b, 0.85), 0, 0.225, D / 2 - 1.3);
   riser.receiveShadow = true;
   colliders.push({ minX: -(W - 1.4) / 2, maxX: (W - 1.4) / 2, minZ: D / 2 - 2.1, maxZ: D / 2 - 0.5 });
-  for (const x of [-2.4, 0, 2.4]) {
-    const cam = place(group, new THREE.BoxGeometry(0.3, 0.24, 0.5), standard(0x1b1b1b, 0.5), x, 1.62, D / 2 - 1.3);
-    cam.castShadow = true;
-    place(group, new THREE.CylinderGeometry(0.03, 0.05, 1.0, 8), metal(0x222222, 0.5), x, 0.95, D / 2 - 1.3);
-  }
+  // Three box-and-stick cameras stood on the riser until the kit brought real
+  // ones, which come from the prop manifest and stand on it at the same marks.
 
   sconces(group, [
     [-W / 2 + 0.3, -3],
@@ -439,7 +409,9 @@ export function buildPressRoom(): RoomBuild {
   group.add(key, key.target);
   group.add(new THREE.PointLight(0xffeccf, 4, 16, 2).translateY(2.9).translateZ(2));
 
-  doorway(group, W / 2 - 0.07, D / 2 - 1.6, -Math.PI / 2);
+  // No `doorway()` here: the kit's panelled double door with its fanlight
+  // stands in that opening instead, and drawing both put one leaf inside the
+  // other.
   const daylight = daylightFor(group, new THREE.Vector3(6, 8, 4), new THREE.Vector3(0, 1, -2));
   daylight.intensity = 0.5;
 

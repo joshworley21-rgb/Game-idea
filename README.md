@@ -68,6 +68,25 @@ rebuilt as low-poly proxies instead.
 The procedural Situation Room that the model replaces is still there, and still
 what you get if the model does not load — the same arrangement the Oval has.
 
+The Briefing Room is dressed from a kit rather than replaced by a model. Sixteen
+parts modelled in 3ds Max — a fluted column, two widths of louvred backdrop
+panel, the White House emblem, a soffit, studio lights, a broadcast camera, a
+monitor, a gooseneck microphone, a laptop, a panelled double door with a
+fanlight, an exit picture, a fire alarm — each centred on its own origin, so the
+room is an arrangement rather than a model. Four columns and five panels make
+the backdrop, the emblem lands on the middle panel because the panels are
+centred and not the columns, three cameras stand on the riser at the back, and
+the game's own lectern and press corps stay exactly where they were. The whole
+kit is 17,454 triangles and 768 KB.
+
+Two things that kit cost a day to learn. Its textures are named by the FBX but
+resolved by basename against the model's own folder, so a pack that keeps them
+in a sibling directory binds nothing and reports no error at all — every
+material simply arrives with no map. And splitting a multi-material mesh needs
+an index built over each group's range rather than a slice of an existing one:
+on non-indexed geometry the naive version keeps the whole mesh for every
+material, which turned a 3,468-triangle camera into 305,184.
+
 **Controls** — a thumb stick to walk, drag anywhere else to look around, and a
 tap opens whatever you're standing at or walks you through the door under your
 feet. You arrive in a room standing up, which is newer than it sounds: five of
