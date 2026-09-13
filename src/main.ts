@@ -56,8 +56,11 @@ class Game {
     this.hud = new Hud(
       () => this.endMonth(),
       () => this.open(() => dashboardPanel(this.engine, this.host)),
+      // A dock chip is the touch equivalent of a number key, so it walks you
+      // to the room the station lives in rather than opening a panel over
+      // whichever room you happen to be standing in.
       (station) => {
-        if (!this.host.isOpen && !this.ended) this.openStation(station);
+        if (!this.host.isOpen && !this.ended) this.goToStation(station);
       },
       () => this.world.sound.toggleMute(),
       () => this.world.toggleFreecam(),
@@ -197,10 +200,12 @@ class Game {
       return;
     }
     if (this.host.isOpen || this.ended) return;
-    const digit = /^Digit([1-8])$/.exec(e.code);
+    // Ten stations, ten keys: 1-9 then 0 for the tenth, the way a game bar does.
+    const digit = /^Digit([0-9])$/.exec(e.code);
     if (digit) {
       e.preventDefault();
-      const station = STATION_ORDER[Number(digit[1]) - 1];
+      const slot = Number(digit[1]);
+      const station = STATION_ORDER[(slot === 0 ? 10 : slot) - 1];
       // A number key now walks you to the room the station is actually in.
       if (station) this.goToStation(station);
       return;

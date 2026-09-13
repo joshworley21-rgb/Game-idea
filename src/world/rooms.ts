@@ -11,6 +11,7 @@ import {
   window_,
 } from "./roomkit.ts";
 import type { CastSlot, Door, Footprint, RoomBuild, StationAnchor } from "./roomkit.ts";
+import type { CrisisTag } from "../game/types.ts";
 
 /**
  * The rooms other than the Oval Office.
@@ -24,6 +25,28 @@ function anchor(id: StationAnchor["id"], x: number, z: number, fx: number, fz: n
     id,
     position: new THREE.Vector3(x, 0, z),
     focus: new THREE.Vector3(fx, 1.05, fz),
+  };
+}
+
+/**
+ * A station whose marker and camera are different points.
+ *
+ * `anchor` puts the camera exactly where the marker is, which is right when
+ * the marker is on the thing you use and wrong when the marker has to stand
+ * clear of it — a chair you sit in, a desk position someone else occupies. The
+ * marker goes where there is floor; the camera goes where your head would be.
+ */
+function seated(
+  id: StationAnchor["id"],
+  marker: { x: number; z: number },
+  camera: { x: number; z: number },
+  focus: { x: number; z: number },
+): StationAnchor {
+  return {
+    id,
+    position: new THREE.Vector3(marker.x, 0, marker.z),
+    camera: new THREE.Vector3(camera.x, 0, camera.z),
+    focus: new THREE.Vector3(focus.x, 1.15, focus.z),
   };
 }
 
@@ -52,6 +75,9 @@ export function buildCabinetRoom(): RoomBuild {
   for (const x of [-3.2, 0, 3.2]) window_(group, windowLights, x, -D / 2 + 0.06, 0, 1.25, 2.4);
   doorway(group, W / 2 - 0.07, 1.4, -Math.PI / 2);
   doorway(group, -W / 2 + 0.07, -1.2, Math.PI / 2);
+  // The stairs down to the Situation Room. On the east wall, clear of the
+  // Oval's door at z = 1.4 and of the portrait at z = -1.0.
+  doorway(group, W / 2 - 0.07, -2.9, -Math.PI / 2);
 
   // The table, and twenty chairs around it.
   const colliders: Footprint[] = [];
@@ -127,6 +153,7 @@ export function buildCabinetRoom(): RoomBuild {
     doors: [
       door("oval", "The Oval Office", W / 2 - 0.9, 1.4, W / 2, 1.4),
       door("press", "The Briefing Room", -W / 2 + 0.9, -1.2, -W / 2, -1.2),
+      door("sitroom", "Down to the Situation Room", W / 2 - 0.9, -2.9, W / 2, -2.9),
     ],
     spawn: new THREE.Vector3(W / 2 - 1.6, 0, 1.4),
     spawnLook: new THREE.Vector3(0, 1.1, 0),
@@ -652,5 +679,495 @@ export function buildStudy(): RoomBuild {
     daylight,
     windowLights,
     fireplace,
+  };
+}
+
+// ------------------------------------------------------ The Situation Room
+
+/**
+ * The Situation Room, in the basement of the West Wing.
+ *
+ * Every other room in the building is above ground and lit through a window.
+ * This one has no daylight at all, and at 2.6m it has the lowest ceiling in
+ * the game — a metre and a half under the Oval's, and lower than the Private
+ * Study, which until now was the smallest space you could stand in. That is
+ * the whole design: you go down into a room that presses on you, and the
+ * light on your face comes off a screen.
+ *
+ * It is the opposite of the Oval on purpose. The Oval is where you decide
+ * what to do with the country; this is where the country happens to you.
+ *
+ * Two things in here are readouts rather than scenery, and are redrawn from
+ * the state through `onState`: the screen wall, which carries one panel per
+ * running situation, and the map wall, which shows the domain heat that until
+ * now the player had no way to see at all.
+ */
+
+/** The screen wall's panels, in draw order left to right. */
+const SCREEN_COUNT = 3;
+
+
+/**
+ * The board's rows, in the order they go on the wall.
+ *
+ * Written as a `Record<CrisisTag, …>` and read back as keys rather than as a
+ * hand-kept array beside it: a new crisis domain then fails to compile until
+ * it has a row, instead of quietly never appearing on the wall.
+ */
+const DOMAIN_LABEL: Record<CrisisTag, string> = {
+  economy: "ECON",
+  labour: "LABOUR",
+  foreign: "FOREIGN",
+  war: "WAR",
+  security: "SECURITY",
+  justice: "JUSTICE",
+  scandal: "SCANDAL",
+  health: "HEALTH",
+  climate: "CLIMATE",
+  politics: "POLITICS",
+  personal: "PERSONAL",
+};
+
+const HEAT_DOMAINS = Object.keys(DOMAIN_LABEL) as CrisisTag[];
+
+/**
+ * One screen's face, drawn to a canvas.
+ *
+ * A dark panel with a heading and a bar, so a war at 80 reads across the room
+ * without anybody saying anything. An idle screen shows a test card rather
+ * than going black, because a dead screen reads as a bug.
+ */
+function screenTexture(
+  thread: { label: string; intensity: number; age: number } | null,
+  idle = "NO ACTIVE SITUATION",
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 288;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#0a1118";
+  ctx.fillRect(0, 0, 512, 288);
+
+  if (!thread) {
+    ctx.strokeStyle = "rgba(90,130,160,0.35)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(24 + i * 62, 40);
+      ctx.lineTo(24 + i * 62, 248);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(140,180,210,0.5)";
+    ctx.font = "500 26px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(idle, 256, 152);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  const hot = thread.intensity > 60;
+  const warm = thread.intensity > 30;
+  const accent = hot ? "#e0654b" : warm ? "#d8b45f" : "#6fbf8b";
+
+  ctx.fillStyle = "rgba(150,190,220,0.55)";
+  ctx.font = "500 20px ui-monospace, monospace";
+  ctx.textAlign = "left";
+  ctx.fillText(`RUNNING · MONTH ${thread.age + 1}`, 28, 46);
+
+  ctx.fillStyle = "#dce8f2";
+  ctx.font = "600 34px Georgia, serif";
+  wrapText(ctx, thread.label, 28, 96, 456, 40);
+
+  // The intensity bar, which is the number the room is actually about.
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(28, 206, 456, 18);
+  ctx.fillStyle = accent;
+  ctx.fillRect(28, 206, 456 * Math.max(0, Math.min(1, thread.intensity / 100)), 18);
+
+  ctx.fillStyle = accent;
+  ctx.font = "600 40px ui-monospace, monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(String(Math.round(thread.intensity)), 484, 192);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** The five wall clocks: label, and the hour its hand points at. */
+const CLOCK_WALL: [string, number][] = [
+  ["LOCAL", 9],
+  ["ZULU", 14],
+  ["LONDON", 14],
+  ["MOSCOW", 17],
+  ["BEIJING", 22],
+];
+
+/** One wall clock: a dial with its capital's name under it. */
+function clockTexture(label: string, hour: number): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 154;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#15181d";
+  ctx.fillRect(0, 0, 128, 154);
+
+  const cx = 64;
+  const cy = 62;
+  const r = 50;
+  ctx.fillStyle = "#e4e8ec";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Twelve ticks, the quarters longer, because that is what reads at 2.2m.
+  ctx.strokeStyle = "#3a4048";
+  for (let i = 0; i < 12; i += 1) {
+    const a = (i / 12) * Math.PI * 2;
+    const inner = i % 3 === 0 ? r - 11 : r - 6;
+    ctx.lineWidth = i % 3 === 0 ? 3 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.sin(a) * inner, cy - Math.cos(a) * inner);
+    ctx.lineTo(cx + Math.sin(a) * (r - 3), cy - Math.cos(a) * (r - 3));
+    ctx.stroke();
+  }
+
+  // The hands sit at the hour given, with the minute hand at :10 on every
+  // face, so the five dials differ by the only thing that should differ.
+  const hourAngle = ((hour % 12) / 12) * Math.PI * 2 + (10 / 60) * (Math.PI / 6);
+  const minuteAngle = (10 / 60) * Math.PI * 2;
+  const hand = (angle: number, length: number, width: number, colour: string) => {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.sin(angle) * length, cy - Math.cos(angle) * length);
+    ctx.stroke();
+  };
+  hand(hourAngle, 26, 5, "#22262c");
+  hand(minuteAngle, 38, 3.5, "#22262c");
+  ctx.fillStyle = "#22262c";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#9fb4cc";
+  ctx.font = "600 20px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(label, cx, 140);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Wraps a heading onto at most two lines, so a long label does not run off. */
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+): void {
+  const words = text.split(" ");
+  let line = "";
+  let lines: string[] = [];
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  lines.push(line);
+  lines = lines.slice(0, 2);
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+}
+
+/**
+ * The map wall: every domain the crisis model tracks, with the hot ones lit.
+ *
+ * `s.heat` decides which crises are likely and has never been on screen. A
+ * board is the cheapest way to make a system the player could only infer into
+ * one they can plan around.
+ */
+function heatTexture(heat: Partial<Record<CrisisTag, number>>): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#0c1219";
+  ctx.fillRect(0, 0, 256, 512);
+
+  // A quiet board is still a board. On the first pass everything but a hot
+  // domain was drawn at 7% white on near-black, so a calm month read from
+  // across the room as an unlit panel hanging on the wall rather than as good
+  // news — the chrome is bright enough now to be legible at zero.
+  ctx.strokeStyle = "rgba(120,160,195,0.35)";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(6, 6, 244, 500);
+
+  ctx.fillStyle = "rgba(175,205,230,0.85)";
+  ctx.font = "600 15px ui-monospace, monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("DOMAIN WATCH", 20, 34);
+  ctx.fillStyle = "rgba(120,160,195,0.35)";
+  ctx.fillRect(20, 42, 216, 1);
+
+  HEAT_DOMAINS.forEach((tag, i) => {
+    const value = Math.max(0, Math.min(100, heat[tag] ?? 0));
+    const y = 62 + i * 39;
+    const hot = value > 55;
+    const warm = value > 25;
+
+    ctx.fillStyle = hot ? "#e0654b" : warm ? "#d8b45f" : "rgba(160,195,222,0.8)";
+    ctx.font = "500 16px ui-monospace, monospace";
+    ctx.fillText(DOMAIN_LABEL[tag], 20, y + 12);
+    ctx.textAlign = "right";
+    ctx.fillText(String(Math.round(value)), 236, y + 12);
+    ctx.textAlign = "left";
+
+    ctx.fillStyle = "rgba(140,180,210,0.18)";
+    ctx.fillRect(20, y + 20, 216, 8);
+    ctx.fillStyle = hot ? "#e0654b" : warm ? "#d8b45f" : "#5c85a5";
+    ctx.fillRect(20, y + 20, Math.max(2, 216 * (value / 100)), 8);
+  });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function buildSituationRoom(): RoomBuild {
+  const group = new THREE.Group();
+  const W = 7.2;
+  const D = 5.4;
+  const H = 2.6;
+
+  // Grey carpet, panelled walls, a dropped ceiling. Nothing in here is
+  // mahogany except the table, because nothing in here is for show.
+  rectShell(group, W, D, H, { floor: 0x2a2d33, wall: 0x7e848d, ceiling: 0x8b9199, carpet: 0x2b3036 });
+
+  const colliders: Footprint[] = [];
+
+  // ------------------------------------------------------------ screen wall
+  const screens: THREE.MeshBasicMaterial[] = [];
+  const screenW = 1.94;
+  const screenH = 1.09;
+  for (let i = 0; i < SCREEN_COUNT; i += 1) {
+    const x = (i - 1) * 2.14;
+    const bezel = place(
+      group,
+      new THREE.BoxGeometry(screenW + 0.08, screenH + 0.08, 0.06),
+      standard(0x15181d, 0.55),
+      x,
+      1.52,
+      -D / 2 + 0.09,
+    );
+    bezel.castShadow = false;
+    const face = new THREE.MeshBasicMaterial({ map: screenTexture(null), toneMapped: false });
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), face);
+    panel.position.set(x, 1.52, -D / 2 + 0.13);
+    group.add(panel);
+    screens.push(face);
+
+    // Each screen throws its own light into the room. This is the only light
+    // in here that moves, and it is what makes the room feel alive.
+    const glow = new THREE.PointLight(0x8fb6d8, 1.6, 5.2, 2);
+    glow.position.set(x, 1.52, -D / 2 + 0.55);
+    group.add(glow);
+  }
+
+  // -------------------------------------------------------------- map wall
+  const heatFace = new THREE.MeshBasicMaterial({ map: heatTexture({}), toneMapped: false });
+  const heatPanel = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 1.64), heatFace);
+  heatPanel.position.set(-W / 2 + 0.07, 1.42, 0);
+  heatPanel.rotation.y = Math.PI / 2;
+  group.add(heatPanel);
+  place(
+    group,
+    new THREE.BoxGeometry(0.06, 1.76, 0.94),
+    standard(0x15181d, 0.55),
+    -W / 2 + 0.04,
+    1.42,
+    0,
+  );
+
+  // ------------------------------------------------------------ watch desk
+  const deskTop = place(
+    group,
+    new THREE.BoxGeometry(0.62, 0.05, 2.4),
+    standard(0x23262c, 0.5),
+    W / 2 - 0.45,
+    0.74,
+    0,
+  );
+  deskTop.castShadow = true;
+  place(group, new THREE.BoxGeometry(0.56, 0.72, 0.06), standard(0x1a1d22, 0.6), W / 2 - 0.45, 0.37, -1.15);
+  place(group, new THREE.BoxGeometry(0.56, 0.72, 0.06), standard(0x1a1d22, 0.6), W / 2 - 0.45, 0.37, 1.15);
+  colliders.push({ minX: W / 2 - 0.78, maxX: W / 2 - 0.12, minZ: -1.2, maxZ: 1.2 });
+
+  // Two chairs at it: the duty officer at the far monitor, you at the near
+  // one. They were one seat once, and the watch station put the camera inside
+  // the officer's head — you arrived nose to nose with your own duty officer.
+  chair(group, W / 2 - 1.05, -0.78, Math.PI / 2, 0x24282e, 0.45);
+  chair(group, W / 2 - 1.05, 0.78, Math.PI / 2, 0x24282e, 0.45);
+
+  // Three monitors along it, angled at whoever is sitting there. They were
+  // unlit boxes to begin with, which in a room this dark read as three holes
+  // in the desk; they carry the situations the wall has no room for, so the
+  // watch desk tells you something the screen wall does not.
+  const deskScreens: THREE.MeshBasicMaterial[] = [];
+  for (const z of [-0.78, 0, 0.78]) {
+    const mon = new THREE.Group();
+    mon.position.set(W / 2 - 0.62, 0.94, z);
+    mon.rotation.y = 0.22;
+    group.add(mon);
+
+    const shell = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.34, 0.56), standard(0x0e1116, 0.4));
+    shell.castShadow = true;
+    mon.add(shell);
+
+    const face = new THREE.MeshBasicMaterial({ map: screenTexture(null, "WATCH · QUIET"), toneMapped: false });
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.28), face);
+    panel.position.set(-0.025, 0, 0);
+    panel.rotation.y = -Math.PI / 2;
+    mon.add(panel);
+    deskScreens.push(face);
+
+    mon.add(new THREE.PointLight(0x8fb6d8, 0.5, 1.9, 2).translateX(-0.25));
+  }
+
+  // --------------------------------------------------------------- table
+  const table = new THREE.Group();
+  group.add(table);
+  colliders.push(boardTable(table, 3.4, 1.5, 0.74));
+
+  // Leather chairs down both long sides. The president's is the one in the
+  // middle of the near side, back to the door, facing the screens.
+  const seats: { x: number; z: number; ry: number }[] = [];
+  for (const x of [-1.16, -0.39, 0.39, 1.16]) {
+    seats.push({ x, z: -1.12, ry: 0 });
+    seats.push({ x, z: 1.12, ry: Math.PI });
+  }
+  for (const s of seats) chair(group, s.x, s.z, s.ry, 0x24282e, 0.45);
+
+  const head = new THREE.Group();
+  head.position.set(0, 0, 1.42);
+  head.rotation.y = Math.PI;
+  group.add(head);
+  place(head, new THREE.BoxGeometry(0.56, 0.92, 0.08), standard(0x2b2119, 0.55), 0, 1.0, -0.24);
+  chair(group, 0, 1.42, Math.PI, 0x2b2119, 0.47);
+
+  // ----------------------------------------------------------- the clocks
+  // Five of them, the way that room really has them: local, Zulu, and three
+  // capitals. It is the one unmistakable thing about a situation room, and the
+  // labels are the whole point of it, so the dial and its label are drawn on
+  // one canvas rather than assembled out of a cylinder and a sprite.
+  CLOCK_WALL.forEach(([label, hour], i) => {
+    const x = -2.0 + i * 1.0;
+    const dial = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.3, 0.36),
+      new THREE.MeshBasicMaterial({ map: clockTexture(label, hour), toneMapped: false }),
+    );
+    dial.position.set(x, 2.24, D / 2 - 0.07);
+    dial.rotation.y = Math.PI;
+    group.add(dial);
+  });
+
+  // ---------------------------------------------------------------- doors
+  doorway(group, 2.4, D / 2 - 0.07, Math.PI, 1.05, 2.35, { steel: true });
+
+  // ---------------------------------------------------------------- light
+  // No daylight, no sconces on the long walls: two recessed downlights over
+  // the table and whatever the screens are throwing.
+  for (const x of [-1.2, 1.2]) {
+    place(group, new THREE.BoxGeometry(0.5, 0.02, 0.5), standard(0xf0f2f4, 0.9), x, H - 0.02, 0);
+    const down = new THREE.SpotLight(0xdfe8f2, 12, 6.5, 0.75, 0.55, 1.7);
+    down.position.set(x, H - 0.08, 0);
+    down.target.position.set(x, 0.74, 0);
+    down.castShadow = true;
+    down.shadow.mapSize.set(1024, 1024);
+    group.add(down, down.target);
+  }
+  // A dim cold fill so the corners are not black.
+  group.add(new THREE.PointLight(0x9fb4cc, 1.5, 9, 2).translateY(2.1));
+
+  // ----------------------------------------------------------------- cast
+  // A duty officer at the watch desk at all hours, and the four secretaries
+  // whose departments own a crisis round the near end of the table. The far
+  // end stays empty: this is a working room, not a full cabinet.
+  const cast: CastSlot[] = [
+    {
+      role: "aide",
+      index: 0,
+      position: new THREE.Vector3(W / 2 - 1.05, 0, -0.78),
+      rotationY: Math.PI / 2,
+      pose: "sit-forward",
+    },
+  ];
+  seats.filter((s) => s.z < 0).forEach((s, i) => {
+    cast.push({
+      role: "cabinet",
+      index: i,
+      position: new THREE.Vector3(s.x, 0, s.z + (s.ry === 0 ? -0.14 : 0.14)),
+      rotationY: s.ry,
+      pose: i % 2 === 0 ? "sit-forward" : "sit",
+    });
+  });
+
+  return {
+    id: "sitroom",
+    group,
+    anchors: [
+      // The marker on the carpet is behind the president's chair, where there
+      // is floor to stand on; the camera it seats you in is the chair itself.
+      // Written as one point, the station put you 0.6m behind your own chair
+      // back, looking at it.
+      seated("brief", { x: 0, z: 2.15 }, { x: 0, z: 1.3 }, { x: 0, z: -1.1 }),
+      // Likewise the watch seat, which was the duty officer's seat: you
+      // arrived inside his head. You take the near monitor, he keeps the far.
+      seated(
+        "watch",
+        { x: W / 2 - 1.6, z: 0.78 },
+        { x: W / 2 - 1.62, z: 0.72 },
+        { x: W / 2 - 0.5, z: 0.55 },
+      ),
+    ],
+    doors: [door("cabinet", "Up to the Cabinet Room", 2.4, D / 2 - 0.95, 2.4, D / 2)],
+    spawn: new THREE.Vector3(2.4, 0, D / 2 - 1.5),
+    spawnLook: new THREE.Vector3(0, 1.3, -1.6),
+    colliders,
+    cast,
+    clamp: rectClamp(W, D, 0.45),
+    onState: (s) => {
+      // One screen per running situation, most intense first, so the worst
+      // thing in the country is always the one on the left.
+      const running = [...s.threads].sort((a, b) => b.intensity - a.intensity);
+      screens.forEach((face, i) => {
+        face.map?.dispose();
+        face.map = screenTexture(running[i] ?? null);
+        face.needsUpdate = true;
+      });
+      // The desk picks up where the wall runs out, so a fourth situation is
+      // not invisible just because the wall only holds three.
+      deskScreens.forEach((face, i) => {
+        face.map?.dispose();
+        face.map = screenTexture(running[SCREEN_COUNT + i] ?? null, "WATCH · QUIET");
+        face.needsUpdate = true;
+      });
+
+      heatFace.map?.dispose();
+      heatFace.map = heatTexture(s.heat);
+      heatFace.needsUpdate = true;
+    },
   };
 }

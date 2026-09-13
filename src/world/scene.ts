@@ -3,7 +3,14 @@ import { MODEL_URL } from "./modelUrl.ts";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { SeatRig, seatsForRoom } from "./seats.ts";
 import { buildOffice, OVAL_MODEL_POSE } from "./office.ts";
-import { buildCabinetRoom, buildCapitol, buildPressRoom, buildResidence, buildStudy } from "./rooms.ts";
+import {
+  buildCabinetRoom,
+  buildCapitol,
+  buildPressRoom,
+  buildResidence,
+  buildSituationRoom,
+  buildStudy,
+} from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
 import type { Door, RoomBuild, RoomId } from "./roomkit.ts";
 import { CharacterAnimator } from "./character.ts";
@@ -21,7 +28,15 @@ import { ovalModelAnchors, ovalModelDoors } from "./ovalModelLayout.ts";
 import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
 import { applyViewport, measureViewport } from "./viewport.ts";
-import { OVAL_GRADE, CABINET_GRADE, CAPITOL_GRADE, PRESS_GRADE, RESIDENCE_GRADE, STUDY_GRADE } from "./postfx.ts";
+import {
+  OVAL_GRADE,
+  CABINET_GRADE,
+  CAPITOL_GRADE,
+  PRESS_GRADE,
+  RESIDENCE_GRADE,
+  SITROOM_GRADE,
+  STUDY_GRADE,
+} from "./postfx.ts";
 import type { Grade } from "./postfx.ts";
 import type { GameState, StationId } from "../game/types.ts";
 
@@ -35,6 +50,8 @@ export const STATION_ROOM: Record<StationId, RoomId> = {
   press: "press",
   family: "residence",
   rest: "study",
+  brief: "sitroom",
+  watch: "sitroom",
 };
 
 /** Per-room grade, so each space has its own mood and not just its own lights. */
@@ -45,6 +62,19 @@ const ROOM_GRADES: Record<RoomId, Grade> = {
   press: PRESS_GRADE,
   residence: RESIDENCE_GRADE,
   study: STUDY_GRADE,
+  sitroom: SITROOM_GRADE,
+};
+
+/**
+ * How much of the studio environment map a room gets.
+ *
+ * The scene's IBL is a bright white box, which is what you want in six rooms
+ * with windows in them and exactly wrong in the one without: at full strength
+ * it lit the Situation Room's walls like a showroom and the screens, which are
+ * supposed to be the only light in there, read as dark rectangles.
+ */
+const ROOM_ENV_INTENSITY: Partial<Record<RoomId, number>> = {
+  sitroom: 0.3,
 };
 
 const ROOM_PRESENTATION: Record<RoomId, {
@@ -59,6 +89,9 @@ const ROOM_PRESENTATION: Record<RoomId, {
   press: { horizontalFov: 76, exposure: 0.98, fogNear: 14, fogFar: 34 },
   residence: { horizontalFov: 74, exposure: 1.12, fogNear: 13, fogFar: 32 },
   study: { horizontalFov: 70, exposure: 1.08, fogNear: 10, fogFar: 25 },
+  // The tightest frame and the nearest fog in the game: 7.2 x 5.4m under a
+  // 2.6m ceiling, and the room is supposed to feel like it.
+  sitroom: { horizontalFov: 72, exposure: 0.94, fogNear: 8, fogFar: 20 },
 };
 
 export class World {
@@ -317,7 +350,9 @@ export class World {
                 ? buildPressRoom()
                 : id === "residence"
                   ? buildResidence()
-                  : buildStudy();
+                  : id === "study"
+                    ? buildStudy()
+                    : buildSituationRoom();
       room.group.visible = false;
       this.scene.add(room.group);
       this.rooms.set(id, room);
@@ -352,6 +387,7 @@ export class World {
 
     const presentation = ROOM_PRESENTATION[id];
     this.renderer.toneMappingExposure = presentation.exposure;
+    this.scene.environmentIntensity = ROOM_ENV_INTENSITY[id] ?? 1;
     if (this.scene.fog instanceof THREE.Fog) {
       this.scene.fog.near = presentation.fogNear;
       this.scene.fog.far = presentation.fogFar;
@@ -398,6 +434,10 @@ export class World {
 
   syncPeople(state: GameState | null): void {
     this.state = state;
+    // Rooms whose fittings are a readout redraw here, before the cast
+    // fingerprint short-circuits: the Situation Room's screens and map wall
+    // move with `threads` and `heat`, which change without the cast changing.
+    if (state) this.current.onState?.(state);
     const key = castFingerprint(this.current.id, state);
     if (key === this.castKey) return;
     this.castKey = key;

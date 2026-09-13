@@ -1,5 +1,6 @@
+import { crisisCompetence } from "./cabinet.ts";
 import { childrenOf, spouseOf } from "./family.ts";
-import type { FamilyMember, GameState, OfficeAction, StationId } from "./types.ts";
+import type { CrisisTag, FamilyMember, GameState, OfficeAction, StationId } from "./types.ts";
 
 /** Fixed order, used for the number-key shortcuts and the HUD legend. */
 export const STATION_ORDER: StationId[] = [
@@ -11,6 +12,8 @@ export const STATION_ORDER: StationId[] = [
   "press",
   "family",
   "rest",
+  "brief",
+  "watch",
 ];
 
 export const STATION_INFO: Record<StationId, { name: string; blurb: string }> = {
@@ -45,6 +48,14 @@ export const STATION_INFO: Record<StationId, { name: string; blurb: string }> = 
   rest: {
     name: "The Private Study",
     blurb: "Sleep, the physician, and the hour that belongs to you.",
+  },
+  brief: {
+    name: "The Situation Table",
+    blurb: "What the agencies know this morning, and which way it is trending.",
+  },
+  watch: {
+    name: "The Watch Floor",
+    blurb: "The situations that are still running, and the only place you can work them.",
   },
 };
 
@@ -489,8 +500,127 @@ export function residenceActions(state: GameState): OfficeAction[] {
   ];
 }
 
+/**
+ * The Situation Room's two stations, generated from what is actually running.
+ *
+ * Neither can be written down in `ACTIONS`, for the same reason the residence
+ * evenings cannot: the brief is about whichever domain is hottest this month,
+ * and the watch floor offers one line per situation you happen to have open.
+ */
+export function situationActions(state: GameState): OfficeAction[] {
+  return [...briefAction(state), ...watchActions(state)];
+}
+
+/**
+ * How each domain is named in a sentence, and by its keys the domains to scan.
+ *
+ * Read back as keys rather than kept as a second array: a new crisis domain
+ * then fails to compile until it is named here, instead of quietly never
+ * being the thing the morning brief is about.
+ */
+export const DOMAIN_NAME: Record<CrisisTag, string> = {
+  economy: "the economy",
+  labour: "labour",
+  foreign: "the alliance",
+  war: "the war",
+  security: "security",
+  justice: "the courts",
+  scandal: "the scandal",
+  health: "public health",
+  climate: "the climate",
+  politics: "the Hill",
+  personal: "you",
+};
+
+export const HEAT_DOMAINS = Object.keys(DOMAIN_NAME) as CrisisTag[];
+
+/** The domain the agencies are most worried about this morning. */
+function hottestDomain(s: GameState): { tag: CrisisTag; heat: number } | null {
+  let best: { tag: CrisisTag; heat: number } | null = null;
+  for (const tag of HEAT_DOMAINS) {
+    const heat = s.heat[tag] ?? 0;
+    if (!best || heat > best.heat) best = { tag, heat };
+  }
+  return best && best.heat > 8 ? best : null;
+}
+
+/**
+ * The President's Daily Brief. Named for whatever is actually hottest, and it
+ * cools that domain a little: getting ahead of a thing is most of the value
+ * of being told about it early.
+ */
+function briefAction(s: GameState): OfficeAction[] {
+  const hot = hottestDomain(s);
+  if (!hot) return [];
+  const name = DOMAIN_NAME[hot.tag];
+  return [
+    {
+      id: "daily-brief",
+      station: "brief",
+      label: `Take the morning brief on ${name}`,
+      detail:
+        "Forty minutes, no aides, and the version with the sources in it. You will not enjoy all of it.",
+      ap: 1,
+      cooldown: 1,
+      effects: { "nation.security": 1, "personal.stress": 1 },
+      consequence: { heats: { [hot.tag]: -12 } },
+      resultText:
+        `They walk you through it twice. You come out knowing what is coming in ${name}, ` +
+        "which is not the same as being able to stop it, and is worth more than it sounds.",
+    },
+  ];
+}
+
+/**
+ * One line per running situation.
+ *
+ * A `Thread` drifts upward unless something eases it, and until now the only
+ * thing that could was a crisis happening to roll the right way — the player
+ * watched a war get worse with no way to touch it. This is the way to touch
+ * it, and how well it goes is the department's competence, not yours.
+ */
+function watchActions(s: GameState): OfficeAction[] {
+  return s.threads.map((thread) => {
+    const competence = crisisCompetence(s, thread.tags ?? []);
+    const easeBy = Math.round(6 + competence / 8);
+    // A department out of its depth makes it worse. At 90 competence that is
+    // barely a risk; at 40 it is one working session in five.
+    const risk = Math.max(0, Math.min(0.3, (70 - competence) / 120));
+    return {
+      id: `work-${thread.id}`,
+      station: "watch" as StationId,
+      label: `Work it: ${thread.label}`,
+      detail:
+        `Running at ${Math.round(thread.intensity)}, ${thread.age + 1} month${thread.age === 0 ? "" : "s"} in. ` +
+        "An afternoon on one thing, with the people whose job it is.",
+      ap: 1,
+      cooldown: 1,
+      // Two stress, not three, and three on a bad afternoon rather than five.
+      // At the original numbers the room was a burnout machine: a president
+      // who worked every situation ended the term early in three runs out of
+      // six, against none before the room existed.
+      effects: { "personal.stress": 2 },
+      consequence: { eases: { id: thread.id, by: easeBy } },
+      risk,
+      onFail: { "personal.stress": 3, "politics.capital": -2 },
+      failConsequence: { escalates: { id: thread.id, by: 5 } },
+      failText:
+        "Four hours in the room and it moves the wrong way. Somebody was working from a picture " +
+        "of the situation that was two weeks old, and nobody in the room knew it.",
+      resultText:
+        "You stay on the one thing until it has actually moved. It is the least presidential " +
+        "afternoon of the month and it is the one that counts.",
+    };
+  });
+}
+
 export function actionsFor(state: GameState, station: StationId): OfficeAction[] {
-  const pool = station === "family" ? [...ACTIONS, ...residenceActions(state)] : ACTIONS;
+  const pool =
+    station === "family"
+      ? [...ACTIONS, ...residenceActions(state)]
+      : station === "brief" || station === "watch"
+        ? [...ACTIONS, ...situationActions(state)]
+        : ACTIONS;
   return pool.filter((a) => {
     if (a.station !== station) return false;
     if (a.available && !a.available(state)) return false;

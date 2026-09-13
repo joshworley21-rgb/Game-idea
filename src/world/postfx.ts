@@ -123,6 +123,26 @@ export const STUDY_GRADE: Grade = {
   temperature: -0.08,
 };
 
+/**
+ * The Situation Room: the only room in the building with no daylight in it.
+ *
+ * Everything else is graded around a window. Here the light is screens and two
+ * recessed downlights, so the grade goes the other way — blacks lifted the way
+ * a monitor lifts them in a dark room, saturation pulled down to what a cold
+ * fluorescent leaves, and the heaviest vignette in the game, because the
+ * ceiling is 2.6m and the room should feel like it.
+ */
+export const SITROOM_GRADE: Grade = {
+  lift: [0.004, 0.012, 0.028],
+  gamma: [1.02, 1.0, 0.97],
+  gain: [0.93, 0.97, 1.06],
+  saturation: 0.82,
+  contrast: 0.12,
+  vignette: 0.46,
+  grain: 0.06,
+  temperature: -0.22,
+};
+
 const GradeShader = {
   name: "GradeShader",
   uniforms: {

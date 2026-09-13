@@ -1,10 +1,17 @@
 import * as THREE from "three";
 import { PALETTE, carpetMat, place, plasterMat, standard, weaveMat, woodMat } from "./materials.ts";
-import type { StationId } from "../game/types.ts";
+import type { GameState, StationId } from "../game/types.ts";
 import type { Pose } from "./character.ts";
 
 /** Every room the president moves through. */
-export type RoomId = "oval" | "cabinet" | "capitol" | "press" | "residence" | "study";
+export type RoomId =
+  | "oval"
+  | "cabinet"
+  | "capitol"
+  | "press"
+  | "residence"
+  | "study"
+  | "sitroom";
 
 export interface StationAnchor {
   id: StationId;
@@ -60,6 +67,12 @@ export interface RoomBuild {
   /** Anchors for positional sound, when the room has any. */
   fireplace?: THREE.Object3D;
   clockSpot?: THREE.Object3D;
+  /**
+   * Called whenever the game state changes, for a room whose fittings are a
+   * readout rather than scenery — the Situation Room's screens and map wall
+   * are drawn from `threads` and `heat` and have to be redrawn when those move.
+   */
+  onState?: (s: GameState) => void;
 }
 
 export const ROOM_INFO: Record<RoomId, { name: string; blurb: string }> = {
@@ -69,6 +82,10 @@ export const ROOM_INFO: Record<RoomId, { name: string; blurb: string }> = {
   press: { name: "The Briefing Room", blurb: "Forty-nine seats and a podium with your seal on it." },
   residence: { name: "The Residence", blurb: "Upstairs. The people who knew you before any of this." },
   study: { name: "The Private Study", blurb: "A door off the Oval, and the only hour that is yours." },
+  sitroom: {
+    name: "The Situation Room",
+    blurb: "No windows, a low ceiling, and every screen showing something you have to answer for.",
+  },
 };
 
 // ------------------------------------------------------------ shared pieces
@@ -206,38 +223,66 @@ export function window_(
 }
 
 /** A panelled door in a wall, which is what a room exit looks like. */
-export function doorway(root: THREE.Group, x: number, z: number, ry: number, w = 1.05, h = 2.35): void {
-  const casing = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, h + 0.12, 0.12), standard(PALETTE.trim, 0.75));
+export function doorway(
+  root: THREE.Group,
+  x: number,
+  z: number,
+  ry: number,
+  w = 1.05,
+  h = 2.35,
+  opts: { steel?: boolean } = {},
+): void {
+  // Every door in the building is panelled mahogany with a brass knob, which
+  // is right everywhere the public is admitted and wrong for the one room
+  // below ground: that one is a steel leaf with a lever, and it should read as
+  // a different kind of door from across the room.
+  const steel = opts.steel === true;
+
+  const casing = new THREE.Mesh(
+    new THREE.BoxGeometry(w + 0.2, h + 0.12, 0.12),
+    steel ? standard(0x484d55, 0.55) : standard(PALETTE.trim, 0.75),
+  );
   casing.position.set(x, (h + 0.12) / 2, z);
   casing.rotation.y = ry;
   root.add(casing);
 
-  const leaf = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), woodMat(PALETTE.mahogany, { repeat: 1, planks: 2 }));
+  const leafMat = steel
+    ? new THREE.MeshStandardMaterial({ color: 0x666c75, roughness: 0.42, metalness: 0.75 })
+    : woodMat(PALETTE.mahogany, { repeat: 1, planks: 2 });
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), leafMat);
   leaf.position.set(x, h / 2, z);
   leaf.rotation.y = ry;
   leaf.translateZ(0.05);
   leaf.castShadow = true;
   root.add(leaf);
 
-  for (const dy of [-0.45, 0.45]) {
-    const panel = new THREE.Mesh(
-      new THREE.BoxGeometry(w - 0.26, h / 2 - 0.3, 0.02),
-      standard(0x4a2f1c, 0.7),
-    );
-    panel.position.set(x, h / 2 + dy * h * 0.42, z);
-    panel.rotation.y = ry;
-    panel.translateZ(0.09);
-    root.add(panel);
+  if (!steel) {
+    for (const dy of [-0.45, 0.45]) {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(w - 0.26, h / 2 - 0.3, 0.02),
+        standard(0x4a2f1c, 0.7),
+      );
+      panel.position.set(x, h / 2 + dy * h * 0.42, z);
+      panel.rotation.y = ry;
+      panel.translateZ(0.09);
+      root.add(panel);
+    }
   }
-  const knob = new THREE.Mesh(
-    new THREE.SphereGeometry(0.045, 12, 10),
-    new THREE.MeshStandardMaterial({ color: PALETTE.brass, roughness: 0.3, metalness: 0.85 }),
-  );
-  knob.position.set(x, 1.02, z);
-  knob.rotation.y = ry;
-  knob.translateX(w / 2 - 0.14);
-  knob.translateZ(0.1);
-  root.add(knob);
+
+  const handle = steel
+    ? new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.04, 0.22),
+        new THREE.MeshStandardMaterial({ color: 0x9aa1aa, roughness: 0.35, metalness: 0.8 }),
+      )
+    : new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 12, 10),
+        new THREE.MeshStandardMaterial({ color: PALETTE.brass, roughness: 0.3, metalness: 0.85 }),
+      );
+  handle.position.set(x, 1.02, z);
+  handle.rotation.y = ry;
+  handle.translateX(w / 2 - 0.14);
+  handle.translateZ(0.1);
+  root.add(handle);
 }
 
 /** A plain upright chair, used by the dozen. */

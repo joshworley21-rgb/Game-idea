@@ -17,7 +17,7 @@ allow installs from unknown sources when Android asks, and open it — no
 network connection needed once it's installed. See [Android](#android) below
 for the details, including how to build it yourself.
 
-You walk six rooms in first person, and each one does what that room really
+You walk seven rooms in first person, and each one does what that room really
 does. Doors on the floor take you between them; the station chips along the
 bottom take you straight to a station, wherever it lives.
 
@@ -31,11 +31,22 @@ bottom take you straight to a station, wherever it lives.
 | **The Briefing Room** | The Press Pool | Addresses, hostile interviews, rallies, campaign swings |
 | **The Residence** | Upstairs | Your family by name: their evenings, and what they are carrying |
 | **The Private Study** | Yourself | Sleep debt, fitness, the physician, and an hour that is yours |
+| **The Situation Room** | The Situation Table | The morning brief: what the hottest domain is doing, and one day of your attention spent cooling it |
+| | The Watch Floor | Every crisis still running, worked one at a time, with your national security team's competence deciding whether it eases or escalates |
 
 The rooms are not empty. Your six named secretaries are round the Cabinet
 table, your family is upstairs, a press corps fills the briefing room, and the
 House chamber holds a hundred members seated in their five faction blocks. They
 breathe, blink, shift their weight, and turn to look at you when you walk in.
+
+The Situation Room is downstairs from the Cabinet Room and is the one room with
+no window in it — no daylight, no fireplace, two recessed downlights and three
+screens that are the brightest things in the frame. It is also the only room
+whose fittings are a readout rather than a set: the three screens are drawn from
+the running threads, worst first, with each one's intensity and drift on it, and
+the board on the wall to your left is the six crisis domains ranked by heat, redrawn
+every time the month turns. Nothing in it is decoration. If the room looks calm,
+the country is calm.
 
 **Controls** — a thumb stick to walk, drag anywhere else to look around, and a
 tap opens whatever you're standing at or walks you through the door under your
@@ -45,12 +56,21 @@ but the Oval opened with the camera lying on the carpet, looking up at the
 underside of the Cabinet table. The station chips, the dashboard and ending the month are all buttons in
 the HUD. Everything is reachable from a thumb alone.
 
+A station chip walks you to the room its station is in, the same as the number
+key for it — 1 through 9, then 0 for the tenth. The chips did not, until the
+Situation Room arrived: they opened the station's panel over whatever room you
+happened to be standing in, and only the number keys moved you. Nobody noticed
+for eight stations, because the Oval and the Cabinet Room are where a player
+already is most of the time. The ninth and tenth stations are in a room you
+have never been in when the game starts, so a chip that did not walk you there
+was a chip that appeared to do nothing at all.
+
 The dock carries two rows: every station on the first, the month's controls on
 the second. They shared one row once, which wanted about 1350px and meant that
 on a laptop you saw three stations and the other five — the Capitol, the
 briefing room, the residence and the study — sat behind a horizontal scroll
 with no scrollbar, no fade and no arrow. Four of the six rooms, invisible. On a
-phone the rail still scrolls, because eight chips would wrap to four rows, but
+phone the rail still scrolls, because ten chips would wrap to five rows, but
 it gets the full width of the dock and a fade on whichever end has more behind
 it.
 
@@ -616,10 +636,27 @@ model has broken the difficulty curve:
 
 ```
 idle          legacy 43.5  approval 46.1  debt 102.8  health 39.5  marriage 29.2  bills 0    arcs 3.0  earlyEnd 1/6
-workaholic    legacy 49.5  approval 48.5  debt 101.8  health 32.5  marriage 27.0  bills 6.0  arcs 2.7  earlyEnd 0/6
-balanced      legacy 59.3  approval 52.5  debt 101.5  health 87.8  marriage 81.2  bills 7.3  arcs 2.2  earlyEnd 0/6
-family-first  legacy 54.5  approval 46.8  debt 100.3  health 94.7  marriage 90.5  bills 0    arcs 2.0  earlyEnd 0/6
+workaholic    legacy 50.0  approval 48.7  debt 100.7  health 22.0  marriage 24.2  bills 6.3  arcs 2.7  earlyEnd 1/6
+balanced      legacy 59.2  approval 51.4  debt 102.3  health 87.3  marriage 80.5  bills 6.8  arcs 2.5  earlyEnd 0/6
+family-first  legacy 55.3  approval 50.4  debt 102.3  health 93.5  marriage 89.7  bills 0    arcs 2.2  earlyEnd 0/6
 ```
+
+Three of those four now walk down to the Situation Room, and it shows: working
+situations personally is worth a little legacy and a lot of health. The
+workaholic gained half a point of legacy for ten points of health and a term
+that ends early in one run out of six, where it used to be none. That is the
+trade the room is supposed to offer, and it is the reason the room was worth
+putting in the harness: the first version of it, at three stress a session,
+ended the workaholic's term early in *three* runs out of six.
+
+The harness found something worse than a curve problem, too. Both of the
+Situation Room's stations generate their options from state rather than listing
+them statically, and `performAction` looked options up in the static catalogue
+and the residence only — so every button in the room did nothing at all. The
+panel stayed open, no action point was spent, and the situation went on getting
+worse. It read as a UI that had not wired up its click handler; it was a lookup
+missing a third place to search. Nothing about the room's own code was wrong,
+which is exactly why playing the term headlessly is worth more than reading it.
 
 The harness answers arcs as well as crises, which it has to: an arc blocks the
 end of a month exactly as a crisis does, and before it did, `npm run balance`

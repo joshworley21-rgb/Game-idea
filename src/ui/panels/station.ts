@@ -1,4 +1,4 @@
-import { actionCooldownLeft, actionsFor, STATION_INFO } from "../../game/actions.ts";
+import { actionCooldownLeft, actionsFor, DOMAIN_NAME, HEAT_DOMAINS, STATION_INFO } from "../../game/actions.ts";
 import { FACTION_BY_KEY } from "../../game/congress.ts";
 import { describeEffects } from "../../game/effects.ts";
 import { memberById } from "../../game/family.ts";
@@ -84,6 +84,55 @@ export function cabinetRoster(s: GameState): HTMLElement[] {
 }
 
 /** Everything you can do standing at one station, and who you can meet there. */
+/**
+ * What the Situation Room's screens say, in text.
+ *
+ * The room draws the running situations on the wall and the domain heat on the
+ * board beside it. This is the same two things for the panel, so the player who
+ * never turns round still knows what the room knows.
+ */
+function situationBoard(s: GameState): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const running = [...s.threads].sort((a, b) => b.intensity - a.intensity);
+
+  if (running.length) {
+    for (const thread of running) {
+      const trend =
+        thread.drift > 0.5 ? "getting worse" : thread.drift < -0.5 ? "easing" : "holding where it is";
+      out.push(
+        el("div", { class: "option" }, [
+          el("div", { class: "option-top" }, [
+            el("span", { class: "option-label" }, [thread.label]),
+            el("span", { class: "option-cost" }, [`${Math.round(thread.intensity)} · ${trend}`]),
+          ]),
+          el("div", { class: "option-detail" }, [thread.detail]),
+          meter("Intensity", thread.intensity, true),
+        ]),
+      );
+    }
+  } else {
+    out.push(
+      el("div", { class: "option-detail" }, [
+        "Nothing is running. Three screens of test pattern and a duty officer with " +
+          "nothing to tell you, which is the best morning a president gets.",
+      ]),
+    );
+  }
+
+  // The three hottest domains, so the brief has a stated subject even when the
+  // agencies are not worried enough to ask for forty minutes of your day.
+  const hot = HEAT_DOMAINS.map((tag) => ({ tag, heat: s.heat[tag] ?? 0 }))
+    .sort((a, b) => b.heat - a.heat)
+    .slice(0, 3)
+    .filter((d) => d.heat > 0);
+  if (hot.length) {
+    out.push(el("div", { class: "section-title" }, ["Where the pressure is"]));
+    for (const d of hot) out.push(meter(DOMAIN_NAME[d.tag], d.heat, true));
+  }
+
+  return out;
+}
+
 export function stationPanel(
   engine: Engine,
   station: StationId,
@@ -155,6 +204,14 @@ export function stationPanel(
             : "Nothing on the chart your physician wants to talk about yet.",
       ]),
     );
+  }
+
+  // The Situation Room's two stations are the only ones whose panel can be
+  // empty — in a quiet month there is no brief to take and nothing running to
+  // work. The board goes in first, so the panel always says what the room is
+  // showing even when there is nothing in it for you to do.
+  if (station === "brief" || station === "watch") {
+    body.append(el("div", { class: "section-title" }, ["The board"]), ...situationBoard(s));
   }
 
   const conversations = engine.conversationsFor(station);

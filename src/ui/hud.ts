@@ -130,7 +130,7 @@ export class Hud {
       const short = full.replace(/^The /, "");
       const children = this.touch
         ? [el("span", {}, [short])]
-        : [el("kbd", {}, [String(i + 1)]), el("span", {}, [short])];
+        : [el("kbd", {}, [String((i + 1) % 10)]), el("span", {}, [short])];
       this.legend.append(
         el(
           "button",

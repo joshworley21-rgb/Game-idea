@@ -328,6 +328,11 @@ body {
 
 .dock-more svg { display: block; }
 
+/* `display: flex` below outranks the user agent's `[hidden] { display: none }`,
+   so without this the popover is open from the moment the HUD is built — it
+   was, and it sat over the dock swallowing taps meant for the stations. */
+.dock-overflow[hidden] { display: none; }
+
 .dock-overflow {
   position: absolute;
   right: 0;

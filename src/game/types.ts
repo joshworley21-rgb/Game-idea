@@ -388,7 +388,9 @@ export type StationId =
   | "press"
   | "family"
   | "staff"
-  | "rest";
+  | "rest"
+  | "brief"
+  | "watch";
 
 export interface HistoryPoint {
   month: number;

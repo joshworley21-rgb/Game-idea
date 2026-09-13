@@ -1,4 +1,4 @@
-import { ACTIONS, actionCooldownLeft, residenceActions } from "./actions.ts";
+import { ACTIONS, actionCooldownLeft, residenceActions, situationActions } from "./actions.ts";
 import { applyConsequence } from "./crises.ts";
 import { applyEffects, describeEffects } from "./effects.ts";
 import { attend, memberById } from "./family.ts";
@@ -35,10 +35,16 @@ export function performAction(
   actionId: string,
 ): { outcome: Outcome; startedThreads: string[] } | null {
   if (s.phase !== "playing") return null;
-  // The residence's evenings are generated from the family, so they are not
-  // in the static catalogue.
+  // Two stations generate their options from state rather than listing them:
+  // the residence's evenings come from the family, and the Situation Room's
+  // come from whatever is running. Neither is in the static catalogue, and a
+  // lookup that only searched the catalogue and the residence meant every
+  // button in the Situation Room silently did nothing — the panel stayed open,
+  // no action point was spent, and the situation went on getting worse.
   const action =
-    ACTIONS.find((a) => a.id === actionId) ?? residenceActions(s).find((a) => a.id === actionId);
+    ACTIONS.find((a) => a.id === actionId) ??
+    residenceActions(s).find((a) => a.id === actionId) ??
+    situationActions(s).find((a) => a.id === actionId);
   if (!action) return null;
   if (s.ap < action.ap) return null;
   if ((action.capitalCost ?? 0) > s.politics.capital) return null;
