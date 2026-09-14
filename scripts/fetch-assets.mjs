@@ -12,7 +12,7 @@
  *
  * Add an entry to MODELS and re-run `npm run assets` to pull another prop.
  */
-import { mkdir, writeFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -155,18 +155,36 @@ for (const { id, texture = 512, error = 0.005 } of MODELS) {
   }
 }
 
+/**
+ * The heading this script owns. Everything above it is written by hand.
+ *
+ * The rooms are not Poly Haven models — they are converted from a SketchUp
+ * export, a Unity package and an FBX the project owner supplied, and where
+ * they came from is not something this script can know. It used to rewrite
+ * the whole file, so every `npm run assets` silently deleted their credits
+ * and left the page claiming every model in it was CC0, which is false.
+ */
+const PROPS_HEADING = "## Props";
+const DEFAULT_PREAMBLE = "# Model credits";
+
 // Poly Haven is CC0 and requires no attribution; crediting is simply correct.
+const creditsPath = path.join(OUT, "CREDITS.md");
+const existing = await readFile(creditsPath, "utf8").catch(() => null);
+const preamble =
+  existing && existing.includes(PROPS_HEADING)
+    ? existing.slice(0, existing.indexOf(PROPS_HEADING)).trimEnd()
+    : DEFAULT_PREAMBLE;
+
 await writeFile(
-  path.join(OUT, "CREDITS.md"),
+  creditsPath,
   [
-    "# Model credits",
+    preamble,
     "",
-    "Every model here comes from [Poly Haven](https://polyhaven.com), released under",
+    PROPS_HEADING,
+    "",
+    "Every prop here comes from [Poly Haven](https://polyhaven.com), released under",
     "[CC0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no",
     "attribution required. Credited anyway, because the people who made them deserve it.",
-    "",
-    "`OvalOffice.glb` is the full Oval Office model, pulled from the project's GitHub",
-    "Release assets by `npm run assets`.",
     "",
     "Rebuild or extend the set with `npm run assets`.",
     "",
