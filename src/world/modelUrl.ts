@@ -21,3 +21,13 @@ export const MODEL_URL = "models/OvalOffice.glb";
  * rather than living in a GitHub release and being fetched by `npm run assets`.
  */
 export const SITROOM_MODEL_URL = "models/SituationRoom.glb";
+
+/**
+ * The Briefing Room model.
+ *
+ * Committed like the Situation Room's. At 4.1 MB it is the biggest thing in
+ * the repo that is not the Oval, but it is a whole room — 149 placed pieces,
+ * 145,000 triangles and fifty textures — and fetching it at runtime would mean
+ * the press room is the one room in the game that needs a network.
+ */
+export const BRIEFING_MODEL_URL = "models/BriefingRoom.glb";

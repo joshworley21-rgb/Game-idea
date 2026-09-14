@@ -1,0 +1,314 @@
+<!doctype html><meta charset=utf-8><canvas id=c></canvas>
+<script type="importmap">{"imports":{"three":"/three/build/three.module.js","three/addons/":"/three/examples/jsm/","fflate":"/three/examples/jsm/libs/fflate.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+const log = [];
+/** Every placed prefab in the Unity scene: prefab, position, yaw, scale. */
+const scene = await (await fetch('/scene.json')).json();
+/** Every Unity material: base colour, texture filenames, metallic, smoothness. */
+const MATS = await (await fetch('/materials.json')).json();
+/**
+ * Which Unity materials each prefab puts on a renderer.
+ *
+ * Read as a set, not as an order. Unity's m_Materials array is indexed by
+ * submesh and FBXLoader's material array is indexed by its own reading of the
+ * file, and the two orders disagree: the briefing room's seat prefab, which
+ * 54 of the room's chairs are built from, lists wood, metal, fabric where the
+ * FBX has metal, fabric, wood. Trust the order and every chair back is painted
+ * in the grey of the chair's own metal frame.
+ */
+const PREFAB_MATS = await (await fetch('/prefab-materials.json')).json();
+
+/**
+ * Remember which file every texture came from.
+ *
+ * FBXLoader builds its own TextureLoader, and the only place the FBX's choice
+ * of texture file survives is the URL it asks for: the Texture it hands back
+ * is named "Map #1" and its image has no src until the download lands, long
+ * after the geometry has been bucketed. Recording the filename on the way past
+ * is what makes the material matching below possible.
+ */
+const origTextureLoad = THREE.TextureLoader.prototype.load;
+THREE.TextureLoader.prototype.load = function (url, onLoad, onProgress, onError) {
+  const t = origTextureLoad.call(this, url, onLoad, onProgress, onError);
+  t.userData.file = decodeURIComponent(String(url).split('/').pop());
+  return t;
+};
+
+const texLoader = new THREE.TextureLoader().setPath('/Textures/');
+const texCache = new Map();
+function texture(file, srgb) {
+  if (!file) return null;
+  const key = file + (srgb ? '|srgb' : '');
+  if (!texCache.has(key)) {
+    const t = texLoader.load(encodeURIComponent(file));
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.name = file;
+    texCache.set(key, t);
+  }
+  return texCache.get(key);
+}
+
+/** Texture file to use for a submesh the Unity materials do not describe. */
+const FALLBACK_TEX = new Map();
+
+/** Unity's material, as three understands it. */
+function materialFor(name) {
+  const spec = MATS[name];
+  const mat = new THREE.MeshStandardMaterial({ name });
+  if (!spec) {
+    // A pack's prefab can list fewer materials than its FBX has submeshes —
+    // the briefing room's monitors and water bottles both do. The FBX still
+    // names a texture for them, so use it rather than leaving a screen blank.
+    const file = FALLBACK_TEX.get(name);
+    const fallback = file ? texture(file, true) : null;
+    if (fallback) mat.map = fallback;
+    log.push(`! no Unity material for "${name}"${file ? ` (using ${file})` : ''}`);
+    return mat;
+  }
+  mat.color = new THREE.Color(spec.color[0], spec.color[1], spec.color[2]);
+  mat.roughness = 1 - (spec.smoothness ?? 0.5);
+  mat.metalness = spec.metallic ?? 0;
+  const map = texture(spec.map, true);
+  if (map) mat.map = map;
+  const normal = texture(spec.normal, false);
+  if (normal) mat.normalMap = normal;
+  if (spec.color[3] < 0.999) { mat.transparent = true; mat.opacity = spec.color[3]; }
+  return mat;
+}
+
+/** Unity material names, indexed by the texture file they use. */
+const UNITY_BY_TEXTURE = new Map();
+for (const [name, spec] of Object.entries(MATS)) {
+  if (!spec.map) continue;
+  if (!UNITY_BY_TEXTURE.has(spec.map)) UNITY_BY_TEXTURE.set(spec.map, []);
+  UNITY_BY_TEXTURE.get(spec.map).push(name);
+}
+
+/**
+ * Which Unity material belongs on each of an FBX mesh's submeshes.
+ *
+ * Both sides name the texture file they use — the FBX in the load request the
+ * recorder above catches, Unity in its .mat — and that filename is the one
+ * correspondence between "seat 1 fabric" and "chair fabric" that is not a
+ * guess. Matching on it first and dealing the leftovers out in order gets the
+ * untextured slots ("Focus light", "Glass metal") right too, because by then
+ * they are the only ones left to get.
+ */
+function resolveKeys(mats, slotNames) {
+  const spare = [...slotNames];
+  const keys = new Array(mats.length).fill(null);
+  mats.forEach((m, i) => {
+    const file = m?.map?.userData?.file;
+    if (!file) return;
+    const j = spare.findIndex((n) => MATS[n]?.map === file);
+    if (j >= 0) { keys[i] = spare.splice(j, 1)[0]; return; }
+    const anywhere = UNITY_BY_TEXTURE.get(file);
+    if (anywhere?.length) keys[i] = anywhere[0];
+  });
+  // Untextured slots get first refusal on what is left, because a leftover
+  // Unity name is the only thing that can describe them; a textured slot that
+  // missed still has its own texture to fall back on.
+  mats.forEach((m, i) => { if (!keys[i] && !m?.map?.userData?.file) keys[i] = spare.shift() ?? null; });
+  mats.forEach((m, i) => {
+    if (keys[i]) return;
+    keys[i] = spare.shift() ?? m?.name ?? 'unnamed';
+    const file = m?.map?.userData?.file;
+    if (file && !MATS[keys[i]]) FALLBACK_TEX.set(keys[i], file);
+  });
+  return keys;
+}
+
+const fbxLoader = new FBXLoader();
+// FBXLoader matches a texture by basename against the resource path and says
+// nothing when it fails, so without this every material loads and binds no map.
+fbxLoader.setResourcePath('/Textures/');
+const cache = new Map();
+function loadPart(name) {
+  if (!cache.has(name)) {
+    cache.set(name, new Promise((res, rej) =>
+      fbxLoader.load(`/Models/${encodeURIComponent(name)}.fbx`, res, undefined, rej)));
+  }
+  return cache.get(name);
+}
+
+/** Every geometry in the scene, bucketed by the material it will be drawn with. */
+const buckets = new Map();
+let placed = 0, failed = 0;
+
+for (const item of scene) {
+  let src;
+  try { src = await loadPart(item.prefab); } catch (e) { log.push(`! ${item.prefab}: ${e}`); failed++; continue; }
+  const root = src.clone(true);
+  root.scale.set(item.scale[0] * 0.01, item.scale[1] * 0.01, item.scale[2] * 0.01);
+  /**
+   * Use Unity's coordinates unchanged.
+   *
+   * Unity is left-handed with +Z forward and glTF is right-handed with -Z
+   * forward, so the textbook conversion negates z. Do that and every surface
+   * in the room is read from its wrong side: the audience ends up behind the
+   * stage wall, so the presidential seal shows the blank grey back of its
+   * plaque and the podium reads THE WHITE HOUSE backwards. Negating z and
+   * reflecting each prop's geometry to compensate only trades one for the
+   * other — it puts the seal the right way round and mirrors every letter in
+   * the room.
+   *
+   * Taking Unity's numbers as they stand puts the seats at +z looking down
+   * -z, which is where three's camera wants to be anyway, and every prop faces
+   * the room. The room comes out mirrored left-to-right against the Unity
+   * scene, and for a room this symmetrical nobody can tell.
+   */
+  root.position.set(item.pos[0], item.pos[1], item.pos[2]);
+  root.rotation.y = item.yaw * Math.PI / 180;
+  root.updateMatrixWorld(true);
+
+  const assigned = PREFAB_MATS[item.prefab] ?? [];
+  let meshIndex = 0;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const slotNames = assigned[meshIndex] ?? assigned[0] ?? [];
+    meshIndex += 1;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const keys = resolveKeys(mats, slotNames);
+    const groups = o.geometry.groups?.length ? o.geometry.groups : [{ start: 0, count: Infinity, materialIndex: 0 }];
+    for (const g of groups) {
+      const m = mats[g.materialIndex ?? 0] ?? mats[0];
+      if (!m) continue;
+      let geo = o.geometry;
+      if (groups.length > 1) {
+        // Take a copy holding only this group's triangles. Cloning the whole
+        // geometry per group and leaving the range on it multiplies the
+        // triangle count by the number of materials — a 3,468-triangle camera
+        // came out of here at 305,184 before this indexed the range.
+        geo = geo.clone();
+        const idx = geo.getIndex();
+        const total = idx ? idx.count : geo.attributes.position.count;
+        const count = g.count === Infinity ? total - g.start : Math.min(g.count, total - g.start);
+        const range = new Uint32Array(count);
+        for (let i = 0; i < count; i += 1) range[i] = idx ? idx.getX(g.start + i) : g.start + i;
+        geo.clearGroups();
+        geo.setIndex(new THREE.BufferAttribute(range, 1));
+      }
+      geo = geo.clone().applyMatrix4(o.matrixWorld);
+      for (const attr of Object.keys(geo.attributes)) {
+        if (!['position', 'normal', 'uv'].includes(attr)) geo.deleteAttribute(attr);
+      }
+      if (!geo.attributes.uv) {
+        geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+      }
+      // Flip V here rather than flipping the texture.
+      //
+      // TextureLoader hands back flipY = true and glTF requires flipY = false,
+      // and neither the exporter nor a baked canvas carries the difference
+      // through — the image comes out the way it went in. On a vertically
+      // symmetric texture nothing shows; on the backdrop, whose top band is
+      // white and whose UVs sit in exactly that band, the whole wall rendered
+      // white. The UVs are data this converter owns outright, so they are what
+      // gets flipped.
+      const uvAttr = geo.attributes.uv;
+      for (let i = 0; i < uvAttr.count; i += 1) uvAttr.setY(i, 1 - uvAttr.getY(i));
+      uvAttr.needsUpdate = true;
+
+      geo.deleteAttribute('normal');
+      const key = keys[g.materialIndex ?? 0] ?? keys[0] ?? (m.name || 'unnamed');
+      const b = buckets.get(key) ?? [];
+      b.push(geo.toNonIndexed());
+      buckets.set(key, b);
+    }
+  });
+  placed++;
+}
+log.push(`placed ${placed} instances, ${failed} failed, ${buckets.size} materials`);
+
+const out = new THREE.Group();
+out.name = 'UnityRoom';
+let tris = 0;
+for (const [name, geos] of buckets) {
+  let merged = BufferGeometryUtils.mergeGeometries(geos, false);
+  if (!merged) { log.push(`! could not merge ${name}`); continue; }
+  merged = BufferGeometryUtils.mergeVertices(merged, 1e-5);
+  const mesh = new THREE.Mesh(merged, materialFor(name));
+  mesh.name = name;
+  tris += (merged.index ? merged.index.count : merged.attributes.position.count) / 3;
+  out.add(mesh);
+}
+
+/**
+ * Centre the room on its own walls, not on its bounding box.
+ *
+ * A room pack parks scenery outside the walls so there is something to see
+ * through the windows — the briefing room has a tree three metres past the
+ * glazing — and it is in the scene. Measure the bounding box and the centre
+ * comes out over a metre off the architecture, which puts a camera at x = 0 in
+ * the aisle rather than down the middle of the room.
+ */
+const walls = scene.filter((s) => /^Wall \d+$/.test(s.prefab));
+const span = (axis) => {
+  const at = walls.map((s) => s.pos[axis]);
+  return at.length ? (Math.min(...at) + Math.max(...at)) / 2 : 0;
+};
+// Both axes over all four walls, and no special case for which is which: a
+// side wall sits at the room's centre in z and an end wall at its centre in x,
+// so neither pulls the midpoint of the other's axis about.
+const centreX = span(0);
+const centreZ = span(2);
+log.push(`room centre from walls: x ${centreX.toFixed(2)}, z ${centreZ.toFixed(2)}`);
+const box = new THREE.Box3().setFromObject(out);
+const shift = new THREE.Matrix4().makeTranslation(-centreX, -box.min.y, -centreZ);
+for (const m of out.children) m.geometry.applyMatrix4(shift);
+out.updateMatrixWorld(true);
+const after = new THREE.Box3().setFromObject(out);
+const size = after.getSize(new THREE.Vector3());
+log.push(`${out.children.length} meshes, ${Math.round(tris)} triangles`);
+log.push(`room ${size.x.toFixed(2)} x ${size.y.toFixed(2)} x ${size.z.toFixed(2)} m`);
+log.push(`bounds ${after.min.toArray().map((v) => v.toFixed(2))} .. ${after.max.toArray().map((v) => v.toFixed(2))}`);
+
+// Wait for every texture, then redraw each onto a canvas the exporter can read.
+await new Promise((res) => {
+  const all = [...texCache.values()];
+  let waited = 0;
+  const tick = () => {
+    const pending = all.filter((t) => !t.image || !(t.image.width || t.image.naturalWidth));
+    if (!pending.length || waited > 20000) return res(log.push(`${all.length} textures, ${pending.length} missing`));
+    waited += 200; setTimeout(tick, 200);
+  };
+  tick();
+});
+const CAP = 1024;
+for (const m of out.children) {
+  for (const slot of ['map', 'normalMap']) {
+    const t = m.material[slot];
+    if (!t?.image?.width) { if (t) m.material[slot] = null; continue; }
+    const w = t.image.width, h = t.image.height;
+    const s = Math.min(1, CAP / Math.max(w, h));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+    cv.getContext('2d').drawImage(t.image, 0, 0, cv.width, cv.height);
+    const baked = t.clone();
+    baked.image = cv;
+    baked.flipY = false;
+    baked.needsUpdate = true;
+    m.material[slot] = baked;
+  }
+  // The pack's FBXs carry per-face normals, so nothing welds and smooth
+  // shading gives every flat wall a faint quilt. Flat shading is what the
+  // geometry is anyway.
+  m.material.flatShading = true;
+}
+
+window.__log = log;
+window.__glb = () => new Promise((res, rej) => {
+  new GLTFExporter().parse(out, (buf) => {
+    const u8 = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    res(btoa(s));
+  }, rej, { binary: true });
+});
+window.__ready = true;
+</script>

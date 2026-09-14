@@ -93,8 +93,13 @@ export const PRESS_GRADE: Grade = {
   gamma: [1.0, 1.0, 1.0],
   gain: [1.0, 1.0, 1.0],
   saturation: 0.96,
-  contrast: 0.03,
-  vignette: 0.16,
+  // More contrast and a deeper vignette than the neutral grade this started
+  // as. The briefing room model is white plaster from the dado up under a
+  // white ceiling, and a flat grade renders 20m of it as one sheet of paper:
+  // the mouldings, the soffit and the ceiling panels all read at the same
+  // value and the room has no depth in it at all.
+  contrast: 0.09,
+  vignette: 0.3,
   grain: 0.025,
   temperature: 0.0,
 };

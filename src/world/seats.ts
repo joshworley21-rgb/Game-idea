@@ -64,10 +64,16 @@ export function seatsForRoom(room: RoomBuild, overrides: SeatOverrides = {}): Se
 }
 
 function seatForStation(anchor: StationAnchor): Seat {
+  // An anchor is written as a floor position, so the eye goes EYE_HEIGHT above
+  // the floor *there*. For every station but one that floor is y = 0 and this
+  // is the constant it always was; the exception is the Briefing Room podium,
+  // which stands on a half-metre riser, and a president briefing the press
+  // from 1.42m has the lectern across the bottom third of the shot.
+  const at = (anchor.camera ?? anchor.position).clone();
   return {
     id: anchor.id,
     label: anchor.id,
-    position: (anchor.camera ?? anchor.position).clone().setY(EYE_HEIGHT),
+    position: at.setY(at.y + EYE_HEIGHT),
     target: anchor.focus.clone(),
   };
 }

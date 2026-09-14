@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { MODEL_URL, SITROOM_MODEL_URL } from "./modelUrl.ts";
+import { BRIEFING_MODEL_URL, MODEL_URL, SITROOM_MODEL_URL } from "./modelUrl.ts";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { SeatRig, seatsForRoom } from "./seats.ts";
 import { buildOffice, OVAL_MODEL_POSE } from "./office.ts";
@@ -12,7 +12,7 @@ import {
   buildStudy,
 } from "./rooms.ts";
 import { ROOM_INFO } from "./roomkit.ts";
-import type { Door, RoomBuild, RoomId } from "./roomkit.ts";
+import type { CastSlot, Door, RoomBuild, RoomId, StationAnchor } from "./roomkit.ts";
 import { CharacterAnimator } from "./character.ts";
 import { Stations } from "./stations.ts";
 import { Doors } from "./doors.ts";
@@ -32,6 +32,13 @@ import {
   sitroomModelLights,
   sitroomModelSpawn,
 } from "./sitroomModelLayout.ts";
+import {
+  briefingModelAnchors,
+  briefingModelCast,
+  briefingModelDoors,
+  briefingModelLights,
+  briefingModelSpawn,
+} from "./briefingModelLayout.ts";
 import { buildSitroomScreens, type SitroomScreens } from "./sitroomScreens.ts";
 import { Freecam } from "./freecam.ts";
 import { RenderLoop } from "./renderLoop.ts";
@@ -83,6 +90,10 @@ const ROOM_GRADES: Record<RoomId, Grade> = {
  */
 const ROOM_ENV_INTENSITY: Partial<Record<RoomId, number>> = {
   sitroom: 0.3,
+  // The briefing room model is 20m of white plaster and pale ceiling panels
+  // with its own practicals in it. At full strength the IBL adds a second
+  // ceiling's worth of light to that and the walls clip to white.
+  press: 0.4,
 };
 
 const ROOM_PRESENTATION: Record<RoomId, {
@@ -94,12 +105,46 @@ const ROOM_PRESENTATION: Record<RoomId, {
   oval: { horizontalFov: 82, exposure: 1.2, fogNear: 18, fogFar: 44 },
   cabinet: { horizontalFov: 78, exposure: 1.02, fogNear: 16, fogFar: 38 },
   capitol: { horizontalFov: 92, exposure: 1.12, fogNear: 25, fogFar: 62 },
-  press: { horizontalFov: 76, exposure: 0.98, fogNear: 14, fogFar: 34 },
+  // The longest room in the game at 21m, so its fog starts where the other
+  // rooms' ends: a 14m fog near plane put the back wall, the camera platform
+  // and half the press corps behind a grey veil from the podium.
+  press: { horizontalFov: 76, exposure: 0.86, fogNear: 24, fogFar: 60 },
   residence: { horizontalFov: 74, exposure: 1.12, fogNear: 13, fogFar: 32 },
   study: { horizontalFov: 70, exposure: 1.08, fogNear: 10, fogFar: 25 },
   // The tightest frame and the nearest fog in the game: 7.2 x 5.4m under a
   // 2.6m ceiling, and the room is supposed to feel like it.
   sitroom: { horizontalFov: 72, exposure: 0.94, fogNear: 8, fogFar: 20 },
+};
+
+/**
+ * How a room that is a loaded model gives up its layout.
+ *
+ * The model is the room, so where the player stands, where the doors are and
+ * who is sitting where are all facts about it rather than constants written
+ * here. Each room that has a model supplies these four readers; everything
+ * that needs a layout goes through `World.modelLayout` and does not care which
+ * room it is looking at.
+ */
+interface RoomModelLayout {
+  model: THREE.Object3D;
+  anchors: (model: THREE.Object3D) => StationAnchor[] | null;
+  doors: (model: THREE.Object3D) => Door[] | null;
+  spawn: (model: THREE.Object3D) => { position: THREE.Vector3; target: THREE.Vector3 } | null;
+  cast: (model: THREE.Object3D) => CastSlot[] | null;
+}
+
+const SITROOM_LAYOUT = {
+  anchors: sitroomModelAnchors,
+  doors: sitroomModelDoors,
+  spawn: sitroomModelSpawn,
+  cast: sitroomModelCast,
+};
+
+const BRIEFING_LAYOUT = {
+  anchors: briefingModelAnchors,
+  doors: briefingModelDoors,
+  spawn: briefingModelSpawn,
+  cast: briefingModelCast,
 };
 
 export class World {
@@ -144,6 +189,8 @@ export class World {
   private ovalModel: THREE.Object3D | null = null;
   /** The Situation Room model, once it has loaded. */
   private sitroomModel: THREE.Object3D | null = null;
+  /** The Briefing Room model, once it has loaded. */
+  private briefingModel: THREE.Object3D | null = null;
   /** The live panels hung on that model. */
   private sitroomScreens: SitroomScreens | null = null;
   readonly sound = new Sound();
@@ -232,6 +279,7 @@ export class World {
     // screen and the Situation Room is four rooms away, so it should not be
     // competing for the connection while the player is waiting to start.
     this.loadSitroom(SITROOM_MODEL_URL);
+    this.loadBriefing(BRIEFING_MODEL_URL);
   }
 
   /** One frame of simulation, before the frame is drawn. */
@@ -316,6 +364,42 @@ export class World {
       },
       onError: (error) => {
         console.error("Situation Room model failed to load — keeping the procedural room", error);
+      },
+    });
+  }
+
+  /**
+   * Loads the Briefing Room GLB and swaps it in for the procedural stand-in.
+   *
+   * Same deal as the Situation Room: nothing waits on it, and the procedural
+   * briefing room stays on screen if it never arrives. The model brings its
+   * own seven rows of seats and its own backdrop, so the stand-in's press
+   * corps and the briefing room kit go with the stand-in when it is hidden.
+   */
+  private loadBriefing(url: string): void {
+    loadRoomModel(url, "Briefing Room", {
+      onLoaded: (model) => {
+        this.scene.add(model);
+        model.updateMatrixWorld(true);
+        this.briefingModel = model;
+        for (const light of briefingModelLights(model)) model.add(light);
+        model.visible = this.current.id === "press";
+
+        const procedural = this.rooms.get("press");
+        if (procedural) procedural.group.visible = false;
+
+        if (this.current.id === "press") {
+          if (!this.freecamActive) {
+            this.rig?.dispose();
+            this.rig = new SeatRig(this.camera, this.seatsFor(this.current), this.canvas);
+          }
+          this.rebuildMarkers(this.current);
+          this.syncPeople(this.state);
+        }
+        console.log(`Briefing Room model loaded (${model.children.length} meshes)`);
+      },
+      onError: (error) => {
+        console.error("Briefing Room model failed to load — keeping the procedural room", error);
       },
     });
   }
@@ -429,6 +513,21 @@ export class World {
    * wrong set.
    */
   /**
+   * The model a room is drawn from, paired with the functions that read a
+   * layout back out of it.
+   *
+   * Two rooms are a loaded model rather than procedural geometry, and every
+   * caller below wants the same four things from whichever one it is. The Oval
+   * is not here: its markers come from a model but its seat comes from finding
+   * the Resolute desk, so it stays its own case.
+   */
+  private modelLayout(id: RoomId): RoomModelLayout | null {
+    if (id === "sitroom" && this.sitroomModel) return { model: this.sitroomModel, ...SITROOM_LAYOUT };
+    if (id === "press" && this.briefingModel) return { model: this.briefingModel, ...BRIEFING_LAYOUT };
+    return null;
+  }
+
+  /**
    * The seats for a room, taken from its model where one has loaded.
    *
    * A room whose geometry is a model has to seat you in the model, not in the
@@ -436,14 +535,14 @@ export class World {
    * the stand-in's seats put the camera inside the model's furniture.
    */
   private seatsFor(room: RoomBuild): ReturnType<typeof seatsForRoom> {
-    const model = room.id === "sitroom" ? this.sitroomModel : null;
-    if (!model) return seatsForRoom(room);
-    const spawn = sitroomModelSpawn(model);
+    const layout = this.modelLayout(room.id);
+    if (!layout) return seatsForRoom(room);
+    const spawn = layout.spawn(layout.model);
     return seatsForRoom(
       {
         ...room,
-        anchors: sitroomModelAnchors(model) ?? room.anchors,
-        doors: sitroomModelDoors(model) ?? room.doors,
+        anchors: layout.anchors(layout.model) ?? room.anchors,
+        doors: layout.doors(layout.model) ?? room.doors,
         spawn: spawn?.position ?? room.spawn,
         spawnLook: spawn?.target ?? room.spawnLook,
       },
@@ -453,9 +552,9 @@ export class World {
 
   private rebuildMarkers(room: RoomBuild): void {
     const oval = room.id === "oval" ? this.ovalModel : null;
-    const sitroom = room.id === "sitroom" ? this.sitroomModel : null;
-    const anchors = (oval && ovalModelAnchors(oval)) || (sitroom && sitroomModelAnchors(sitroom));
-    const doors = (oval && ovalModelDoors(oval)) || (sitroom && sitroomModelDoors(sitroom));
+    const layout = this.modelLayout(room.id);
+    const anchors = (oval && ovalModelAnchors(oval)) || (layout && layout.anchors(layout.model));
+    const doors = (oval && ovalModelDoors(oval)) || (layout && layout.doors(layout.model));
     this.stations.rebuild(anchors || room.anchors);
     this.doors.rebuild(doors || room.doors);
   }
@@ -465,7 +564,7 @@ export class World {
     if (this.current) this.current.group.visible = false;
     this.current = room;
     // The Oval stays dark until its model has loaded.
-    room.group.visible = !(id === "oval" && this.ovalPending) && !(id === "sitroom" && this.sitroomModel);
+    room.group.visible = !(id === "oval" && this.ovalPending) && !this.modelLayout(id);
 
     const presentation = ROOM_PRESENTATION[id];
     this.renderer.toneMappingExposure = presentation.exposure;
@@ -486,6 +585,7 @@ export class World {
     // The Oval's model is scenery for one room, not for the building.
     if (this.ovalModel) this.ovalModel.visible = id === "oval";
     if (this.sitroomModel) this.sitroomModel.visible = id === "sitroom";
+    if (this.briefingModel) this.briefingModel.visible = id === "press";
 
     this.resize();
     this.rebuildMarkers(room);
@@ -526,8 +626,8 @@ export class World {
     if (key === this.castKey) return;
     this.castKey = key;
     // A room with a model seats its people in the model's own chairs.
-    const model = this.current.id === "sitroom" ? this.sitroomModel : null;
-    const cast = (model && sitroomModelCast(model)) || this.current.cast;
+    const layout = this.modelLayout(this.current.id);
+    const cast = (layout && layout.cast(layout.model)) || this.current.cast;
     buildCast(this.current.id, cast, state, this.people, this.animator);
   }
 

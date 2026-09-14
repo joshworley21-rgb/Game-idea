@@ -66,26 +66,59 @@ there is no edge to collapse that does not delete a whole caster. They are
 rebuilt as low-poly proxies instead.
 
 The procedural Situation Room that the model replaces is still there, and still
-what you get if the model does not load — the same arrangement the Oval has.
+what you get if the model does not load — the same arrangement the Oval has, and
+the same arrangement the Briefing Room below has.
 
-The Briefing Room is dressed from a kit rather than replaced by a model. Sixteen
-parts modelled in 3ds Max — a fluted column, two widths of louvred backdrop
-panel, the White House emblem, a soffit, studio lights, a broadcast camera, a
-monitor, a gooseneck microphone, a laptop, a panelled double door with a
-fanlight, an exit picture, a fire alarm — each centred on its own origin, so the
-room is an arrangement rather than a model. Four columns and five panels make
-the backdrop, the emblem lands on the middle panel because the panels are
-centred and not the columns, three cameras stand on the riser at the back, and
-the game's own lectern and press corps stay exactly where they were. The whole
-kit is 17,454 triangles and 768 KB.
+The Briefing Room is the James S. Brady Press Briefing Room, converted out of a
+Unity asset pack: the blue drape and the seal behind the lectern, seven rows of
+seven chairs, the Brady plaque and the exit sign on the wall you face, five sets
+of glazed double doors down the other, and eight metres of camera platform,
+monitors and equipment racks behind the last row that no photograph of the room
+ever shows. You give the briefing standing at the lectern on the riser, looking
+down the length of it at a press corps in the model's own chairs.
 
-Two things that kit cost a day to learn. Its textures are named by the FBX but
-resolved by basename against the model's own folder, so a pack that keeps them
-in a sibling directory binds nothing and reports no error at all — every
-material simply arrives with no map. And splitting a multi-material mesh needs
-an index built over each group's range rather than a slice of an existing one:
-on non-indexed geometry the naive version keeps the whole mesh for every
-material, which turned a 3,468-triangle camera into 305,184.
+That pack is not a model — it is a scene of 149 placed prefabs, and nothing in
+it is addressed by name. A `.unitypackage` is a gzipped tar of one folder per
+asset GUID; the scene refers to prefabs by GUID, prefabs to materials by GUID
+and materials to textures by GUID, so the first thing
+`scripts/convert-unity-room.mjs` does is rebuild the name table, and everything
+else depends on it.
+
+Two things in that conversion cost a day each, and both of them look at first
+like a texture problem.
+
+The first is which material goes on which submesh. Unity's `m_Materials` array
+is indexed by submesh and three's `FBXLoader` indexes by its own reading of the
+file, and the two orders disagree — the seat prefab that 54 of the room's chairs
+are built from lists wood, metal, fabric where the FBX has metal, fabric, wood.
+Trust the order and every chair back is painted in the grey of the chair's own
+metal frame. The fix is that both sides name the texture *file* they use, and
+that filename is the one correspondence between "seat 1 fabric" and "chair
+fabric" that is not a guess, so the converter matches on it and deals the
+leftovers out in order — which gets the untextured slots right too, because by
+then they are the only ones left to get.
+
+The second is the coordinate system, and the textbook answer is wrong. Unity is
+left-handed with +Z forward and glTF is right-handed with -Z forward, so the
+conversion negates z. Do that and every surface in the room is read from its
+wrong side: the audience ends up behind the stage wall, the presidential seal
+shows the blank grey back of its plaque, and the lectern reads THE WHITE HOUSE
+backwards. Negating z and reflecting each prop's geometry to compensate only
+trades one for the other — it turns the seal the right way round and mirrors
+every letter in the room. Taking Unity's numbers exactly as they stand puts the
+seats at +z looking down -z, which is where three's camera wants to be anyway,
+and every prop faces the room. The room comes out mirrored left-to-right against
+the Unity scene, and in a room this symmetrical nobody can tell.
+
+Worth saying what was not a problem: about ten of the pack's fifty textures are
+a single flat colour stored as a 1024 x 1024 PNG, which reads at a glance like a
+material that has lost its map. The walls, the columns, the doors and the
+ceiling really are painted one colour. Resizing all of them to 512 before
+compression is the difference between a 10 MB room and a 4 MB one.
+
+149 placements and 259,000 triangles go in; 145,000 triangles and 4.1 MB come
+out. The kit of sixteen briefing-room parts that used to dress this room is
+still in the repo and still what the procedural fallback is built from.
 
 **Controls** — a thumb stick to walk, drag anywhere else to look around, and a
 tap opens whatever you're standing at or walks you through the door under your
