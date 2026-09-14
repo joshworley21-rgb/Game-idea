@@ -14,6 +14,12 @@
  *
  * So this keeps the room and throws the estate away:
  *
+ *   0. Flatten the hierarchy first. Everything below treats the estate's parts
+ *      as siblings at the top of the scene, which is what a model that has
+ *      been through `gltf-transform optimize` looks like — but FBX2glTF, which
+ *      is what actually feeds this in CI, hangs the whole estate off a single
+ *      `RootNode`. Developed against the processed asset, this looked for the
+ *      room among the scene's children and found one node called RootNode.
  *   1. Find the room. `Interior01` is the Oval's shell; its world bounds are
  *      the room. Nothing else is assumed about the model's layout.
  *   2. Keep what is in it, plus a margin for the things that belong to a room
@@ -34,7 +40,7 @@
  */
 import { NodeIO, getBounds } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
-import { prune, dedup } from "@gltf-transform/functions";
+import { flatten, prune, dedup } from "@gltf-transform/functions";
 
 /** The node whose bounds define the room. */
 const ROOM_NODE = "Interior01";
@@ -274,6 +280,12 @@ const doc = await io.read(input);
 const root = doc.getRoot();
 const scene = root.listScenes()[0];
 
+// 0. Everything below expects the estate's parts to be siblings at the top of
+// the scene. Flattening bakes each wrapper's transform into its children and
+// reparents them, which is what `optimize` does to the published asset and
+// what FBX2glTF's output needs before any of this can find anything.
+await doc.transform(flatten());
+
 const before = {
   nodes: root.listNodes().length,
   meshes: root.listMeshes().length,
@@ -286,7 +298,12 @@ const before = {
 const roomNode = scene.listChildren().find((n) => n.getName() === ROOM_NODE);
 if (!roomNode) {
   console.error(`::error::no "${ROOM_NODE}" node — cannot locate the room in this model`);
-  console.error("top-level nodes:", scene.listChildren().map((n) => n.getName()).join(", "));
+  // Say where it is if it is in there at all: a room that exists but is not a
+  // child of the scene means the flatten above did not reach it, which is a
+  // different problem from a model that does not contain the room.
+  const deeper = root.listNodes().find((n) => n.getName() === ROOM_NODE);
+  if (deeper) console.error(`"${ROOM_NODE}" exists under "${deeper.getParentNode()?.getName()}" but was not flattened`);
+  console.error("top-level nodes:", scene.listChildren().map((n) => n.getName() || "(unnamed)").join(", "));
   process.exit(1);
 }
 const room = subtreeBounds(roomNode);
