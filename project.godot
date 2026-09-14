@@ -2,6 +2,8 @@
 ; Godot 4 project for the President Simulator port.
 ; This project intentionally lives at the repository root so Godot shares the
 ; same folder as the web build and can import res://public/models directly.
+; The processed GLBs stay in public/models/ and are referenced from there as
+; res://public/models/*.glb -- there is no duplicate copy under godot/models/.
 
 config_version=5
 
@@ -10,3 +12,9 @@ config_version=5
 config/name="President Simulator"
 config/description="A single-player 3D president simulator: govern a modern nation while keeping your health, family and sanity intact."
 config/version="0.1.0"
+run/main_scene="res://godot/scenes/main.tscn"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
