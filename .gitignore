@@ -21,3 +21,6 @@ assets-src/
 # fetches it and CI re-fetches it with FORCE_ASSETS on every build. It has
 # never been committed and at ~12 MB it should not start now.
 public/models/OvalOffice.glb
+
+# Godot 4 editor cache (machine-specific, must not be committed)
+.godot/

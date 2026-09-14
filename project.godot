@@ -1,0 +1,12 @@
+; Engine configuration file.
+; Godot 4 project for the President Simulator port.
+; This project intentionally lives at the repository root so Godot shares the
+; same folder as the web build and can import res://public/models directly.
+
+config_version=5
+
+[application]
+
+config/name="President Simulator"
+config/description="A single-player 3D president simulator: govern a modern nation while keeping your health, family and sanity intact."
+config/version="0.1.0"
