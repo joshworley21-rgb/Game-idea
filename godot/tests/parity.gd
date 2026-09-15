@@ -82,6 +82,24 @@ func _walk_all(node, path: String, out: Array[String]) -> void:
 		for k in keys:
 			_walk_all(node[k], "%s.%s" % [path, k], out)
 
+## The state's leaves, on a basis the TypeScript can be compared against.
+##
+## One key has to come out. A bill's `requires` is a function in the
+## TypeScript and a named string here, because a GDScript Dictionary cannot
+## hold a function — so the walk sees two leaves on this side that do not
+## exist on the other. That is a representational difference, not a
+## behavioural one, and excluding it is what makes the digest a comparison
+## rather than a record of what this engine happens to do. The requirements
+## themselves are checked by name in _bills, so nothing goes unwatched.
+func _comparable(state: Dictionary) -> Array[String]:
+	var all: Array[String] = []
+	_walk_all(state, "", all)
+	var out: Array[String] = []
+	for leaf in all:
+		if not leaf.contains(".requires$"):
+			out.append(leaf)
+	return out
+
 ## FNV-1a, 32-bit, matching the JavaScript reference.
 func _fnv1a(text: String) -> int:
 	var h := 0x811c9dc5
@@ -105,6 +123,8 @@ func _init() -> void:
 	_endings()
 	_crises()
 	_arcs()
+	_bills()
+	_term()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -851,3 +871,155 @@ func _arcs() -> void:
 	_check("cannot answer twice", ArcsData.answer_arc(h, Rng.new(2), str(choice["id"])).is_empty(), true)
 	_check("cannot resolve a spent arc",
 		ArcsData.resolve_arc(h, Rng.new(2), "arc-treasury-feud", str(choice["id"])).is_empty(), true)
+
+
+func _term() -> void:
+	print("the whole term: forty-eight months through EngineMonth.end_month")
+	# The one that matters. Every other section tests a piece; this runs a
+	# complete presidency from the swearing-in to the concession or the
+	# second inaugural, through the same entry point the engine calls, and
+	# hashes the entire state after every single month.
+	#
+	# It is set up exactly as engine.newGame does, in engine.newGame's order,
+	# because the order is load-bearing: the run's Rng is seeded from the
+	# state's seed and then drawn on by the sim context, the bill catalogue,
+	# the cabinet, the family and the first headlines before the first month
+	# begins. Move any of those and every month after it differs.
+	#
+	# Nothing answers the crises, so they pile up on the desk exactly as they
+	# would for a president who never opens it. That is deliberate: it keeps
+	# the run free of the verb layer, which is not ported yet, while still
+	# exercising the crisis roll, the pressure weighting and the way an
+	# unanswered crisis feeds next month's stress.
+	var s := StateData.create_initial_state("blue", "", 24601)
+	var rng := Rng.new(int(s["seed"]))
+	var ctx := Sim.create_sim_context(rng)
+	s["bills"] = BillsData.bill_catalog()
+	s["cabinet"] = People.create_cabinet(rng)
+	s["family"] = People.create_family(rng, float(s["personal"]["age"]))
+	NewsData.push_news(s, NewsData.generate_news(s, rng))
+	_check("a budget is due in month 1", EngineMonth.is_budget_pending(s), true)
+
+	var rows: Array[String] = []
+	var ending := {}
+	var with_arc: Array[String] = []
+	var asked: Array[String] = []
+	var with_outcome: Array[String] = []
+	var with_crisis := 0
+	var seen_crises := {}
+	for i in 60:
+		if not ending.is_empty():
+			break
+		var r := EngineMonth.end_month(s, ctx, rng)
+		var ids: Array[String] = []
+		for c in (r["crises"] as Array):
+			ids.append(str(c["id"]))
+			seen_crises[c["id"]] = true
+		var leaves := _comparable(s)
+		var month_label := "m%d" % int(r["report"]["month"])
+		var outcomes: Array = r["outcomes"]
+		var arc: Dictionary = r["arc"]
+		rows.append("|".join([
+			month_label,
+			"o%d" % outcomes.size(),
+			"c" + ("+".join(ids) if not ids.is_empty() else "-"),
+			"a" + str(arc.get("id", "-")),
+			"q%s" % ("true" if r["askReelection"] else "false"),
+			"n%d" % (r["report"]["notes"] as Array).size(),
+			"d%d" % (r["report"]["deltas"] as Array).size(),
+			"f%.6f" % float(r["report"]["deficit"]),
+			"h%d" % _fnv1a("\n".join(leaves)),
+		]))
+		if not arc.is_empty():
+			with_arc.append(month_label)
+		if r["askReelection"]:
+			asked.append(month_label)
+		if not outcomes.is_empty():
+			with_outcome.append("%so%d" % [month_label, outcomes.size()])
+		if not ids.is_empty():
+			with_crisis += 1
+		if not (r["ending"] as Dictionary).is_empty():
+			ending = r["ending"]
+
+	_check("a full term ran", rows.size(), 48)
+	_check("term digest", _fnv1a("\n".join(rows)), 1586125103)
+	_check("phase", s["phase"], "ended")
+	_check("month after the term", int(s["month"]), 49)
+
+	# The shape of the presidency this seed produced, named rather than only
+	# hashed, so a failure says what changed about the country.
+	_check("months with a crisis", with_crisis, 35)
+	var kinds: Array = seen_crises.keys()
+	kinds.sort()
+	_check("distinct crises", " ".join(kinds),
+		"anniversary bank-run border-surge child child-name-trading cyberattack"
+		+ " health-scare hurricane marriage opioid outbreak primary-threat shooting"
+		+ " spouse-career standoff strike wildfire")
+	_check("the one arc that arrived", " ".join(with_arc), "m9")
+	# Asked once, in the month s.month crosses 34, and never again.
+	_check("asked about re-election", " ".join(asked), "m33")
+	# m21 is the midterms (they run once s.month has rolled to 22); m37 is a
+	# week at Walter Reed.
+	_check("months with something to show", " ".join(with_outcome), "m21o1 m37o1")
+	_check("one health episode", int(s["counters"].get("healthEpisodes", 0)), 1)
+
+	_check("ending id", ending["id"], "reelected")
+	_check("ending title", ending["title"], "Four More Years")
+	_check("ending legacy", int(ending["legacy"]), 46)
+	_check("ending grade", ending["grade"], "D")
+	_check("re-elected", ending["reelected"], true)
+	_check("ending blurb", _fnv1a(str(ending["blurb"])), 545854312)
+
+	var final_leaves := _comparable(s)
+	_check("final leaves", final_leaves.size(), 1027)
+	_check("final digest", _fnv1a("\n".join(final_leaves)), 2125011318)
+	_check("news is capped at 60", (s["news"] as Array).size(), 60)
+	_check("a month of history each", (s["history"] as Array).size(), 48)
+
+
+func _bills() -> void:
+	print("bills: the two that are gated on the state of the country")
+	# The TypeScript writes these as `requires: (s) => ...` functions; the
+	# port names the requirement and evaluates it in bill_requires. That is
+	# the one place the two catalogues differ in shape, so it is the one
+	# place that needs saying out loud.
+	var cat := BillsData.bill_catalog()
+	var gated: Array[String] = []
+	for b in cat:
+		if not str(b.get("requires", "")).is_empty():
+			gated.append("%s:%s" % [b["id"], b["requires"]])
+	_check("which bills are gated", " ".join(gated),
+		"deficit-framework:deficit emergency-relief:relief")
+
+	var b_def := {}
+	var b_rel := {}
+	for b in cat:
+		if b["id"] == "deficit-framework":
+			b_def = b
+		elif b["id"] == "emergency-relief":
+			b_rel = b
+
+	var s := StateData.create_initial_state("blue", "", 7)
+	# The deficit framework needs debt over 95% of GDP.
+	s["nation"]["debtToGdp"] = 95.0
+	_check("deficit gate, at the line", BillsData.bill_requires(s, b_def), false)
+	s["nation"]["debtToGdp"] = 95.01
+	_check("deficit gate, over it", BillsData.bill_requires(s, b_def), true)
+
+	# Relief needs unrest over 55 OR unemployment over 7 -- either, not both.
+	s["nation"]["unrest"] = 55.0
+	s["nation"]["unemployment"] = 7.0
+	_check("relief gate, neither", BillsData.bill_requires(s, b_rel), false)
+	s["nation"]["unrest"] = 55.01
+	_check("relief gate, unrest alone", BillsData.bill_requires(s, b_rel), true)
+	s["nation"]["unrest"] = 20.0
+	s["nation"]["unemployment"] = 7.01
+	_check("relief gate, unemployment alone", BillsData.bill_requires(s, b_rel), true)
+
+	# An ungated bill is always available.
+	var plain := {}
+	for b in cat:
+		if str(b.get("requires", "")).is_empty():
+			plain = b
+			break
+	_check("an ungated bill is open", BillsData.bill_requires(s, plain), true)
