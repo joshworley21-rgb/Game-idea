@@ -196,8 +196,9 @@ static func midterm_text(result: Dictionary) -> String:
 	return "Your party loses seats in both chambers. Every vote from here is harder than the last one was."
 
 
+## Writes a line to the log. No cap here on purpose: the TypeScript trims the
+## log to 120 entries in the engine's own log() and nowhere else, so trimming
+## it at the point of writing would quietly drop lines the engine keeps.
 static func _log(s: Dictionary, kind: String, text: String) -> void:
 	var log_lines: Array = s["log"]
 	log_lines.push_front({"month": int(s["month"]), "text": text, "kind": kind})
-	if log_lines.size() > 120:
-		log_lines.resize(120)

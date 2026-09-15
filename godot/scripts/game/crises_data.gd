@@ -101,10 +101,12 @@ static func _bill_passed(s: Dictionary, bill_id: String) -> bool:
 	return false
 
 
-## How likely `id` is right now. Zero means it cannot fire.
+## The crisis's own pressure expression, before heat and feeds.
 ##
-## The ten `gated` crises return zero on purpose: they are consequences, not
-## events, and only reach the player when something unlocks them.
+## This is `c.pressure(s)` and nothing else — crisis_pressure is what turns it
+## into the number the roll actually uses. The ten gated crises return zero
+## here because their expression is literally `() => 0`; what makes them
+## reachable is the gated bonus in crisis_pressure, not this.
 static func pressure_for(id: String, s: Dictionary) -> float:
 	var n: Dictionary = s["nation"]
 	var sec: Dictionary = n["sectors"]
@@ -193,8 +195,8 @@ static func pressure_for(id: String, s: Dictionary) -> float:
 				+ maxf(0.0, 55.0 - float(pol["party"])) * 0.06)
 		"court-vacancy":
 			return 0.5
-		# Consequences, not events. They arrive because something unlocked
-		# them, never because the country drifted into them.
+		# Consequences, not events: their expression is zero, and they reach
+		# the player through crisis_pressure's unlock and feed paths instead.
 		"war-casualties", "anti-war-protests", "coalition-strain", \
 		"unemployment-spiral", "general-strike", "cover-up-unravels", \
 		"inquiry", "impeachment-push", "court-defeat":
@@ -271,8 +273,43 @@ static func by_id(id: String) -> Dictionary:
 	return {}
 
 
+## How likely `c` is right now, all in.
+##
+## Three things sit on top of the crisis's own expression, and leaving any of
+## them out changes which crises a term can contain at all:
+##
+##   feed  -- a running situation can name the crises it makes more likely.
+##           A war feeds war-casualties, anti-war-protests and
+##           coalition-strain; a scandal feeds the leak, the resignation and
+##           the impeachment push.
+##
+##   the gate -- a `gated` crisis is a consequence, not an event. Its own
+##           expression is zero, so it stays out of the pool until something
+##           unlocks it or a situation feeds it — and once one does, it gets
+##           a flat 0.85 to fire on, because at that point it is not waiting
+##           on the country drifting anywhere.
+##
+##   heat  -- a domain that has been in the news stays in the news. Each of
+##           the crisis's tags contributes its heat over 70, and the total
+##           multiplies the base rather than adding to it, so trouble
+##           clusters instead of arriving evenly.
 static func crisis_pressure(s: Dictionary, c: Dictionary) -> float:
-	return pressure_for(str(c["id"]), s)
+	var feed := 0.0
+	for t in (s["threads"] as Array):
+		var feeds: Array = t.get("feeds", [])
+		if feeds.has(c["id"]):
+			feed += float(t["intensity"]) / 45.0
+
+	var gated: bool = c.get("gated", false)
+	if gated and feed == 0.0 and not (s["unlocked"] as Array).has(c["id"]):
+		return 0.0
+
+	var heat := 0.0
+	for tag in (c["tags"] as Array):
+		heat += maxf(0.0, float(s["heat"].get(tag, 0.0))) / 70.0
+
+	var base := pressure_for(str(c["id"]), s) + (0.85 if gated else 0.0)
+	return maxf(0.0, base * (1.0 + heat) + feed)
 
 
 ## Crises that could fire this month: off cooldown, and under real pressure.

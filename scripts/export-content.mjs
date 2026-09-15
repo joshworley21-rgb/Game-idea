@@ -20,6 +20,7 @@
 import { writeFile } from "node:fs/promises";
 import { CRISES } from "../src/game/crises.ts";
 import { ARCS } from "../src/game/arcs.ts";
+import { CONVERSATIONS } from "../src/game/conversations.ts";
 
 function gdString(value) {
   return `"${value
@@ -106,6 +107,49 @@ const TABLES = [
       "          arriving with a question, so the brief names them.",
     ],
   },
+  {
+    entries: CONVERSATIONS,
+    noun: "conversations",
+    className: "ConversationsTable",
+    constName: "CONVERSATIONS",
+    source: "src/game/conversations.ts and src/game/conversations/",
+    owner: "ConversationsData",
+    out: "godot/scripts/game/conversations_table.gd",
+    // `available` reads the state; an option's `requires` reads the path
+    // taken so far through the meeting, which is a different signature and
+    // so a different match in ConversationsData.
+    handPorted: ["available", "requires"],
+    required: [],
+    // ConversationsData.option_requires is keyed on the option id alone,
+    // without the beat, which is only sound while ids are unique inside a
+    // meeting. If that ever stops being true, two options in different beats
+    // would share one gate and the export has to fail rather than ship it.
+    invariant: (entries) => {
+      for (const c of entries) {
+        const seen = new Map();
+        for (const [beatKey, beat] of Object.entries(c.beats)) {
+          for (const o of beat.options) {
+            if (seen.has(o.id)) {
+              throw new Error(
+                `conversation ${c.id}: option id "${o.id}" appears in both ` +
+                  `beat "${seen.get(o.id)}" and beat "${beatKey}". ` +
+                  `ConversationsData.option_requires keys on the option id ` +
+                  `alone, so ids must be unique within a meeting.`,
+              );
+            }
+            seen.set(o.id, beatKey);
+          }
+        }
+      }
+    },
+    notes: [
+      "available -- the two meetings gated to the opening of the term, in",
+      "             ConversationsData.available_for.",
+      "requires  -- the options that only open if you said something earlier,",
+      "             in ConversationsData.option_requires. These read the path",
+      "             through the meeting, not the state.",
+    ],
+  },
 ];
 
 for (const t of TABLES) {
@@ -120,14 +164,24 @@ for (const t of TABLES) {
       }
     }
   }
+  if (t.invariant) t.invariant(t.entries);
 
   const body = t.entries
     .map((e) => `\t${gdValue(e, `${t.noun}(${e.id})`, 1, handPorted)},`)
     .join("\n");
-  const dynamic = {};
-  for (const field of t.handPorted) {
-    dynamic[field] = t.entries.filter((e) => typeof e[field] === "function").map((e) => e.id);
-  }
+  // Count hand-ported fields wherever they occur, not only at the top level:
+  // a conversation option's `requires` is three levels down, and reporting
+  // zero of them would make it look like there was nothing to hand-port.
+  const dynamic = Object.fromEntries(t.handPorted.map((f) => [f, []]));
+  const countFns = (node, label) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach((v) => countFns(v, label));
+    for (const [k, v] of Object.entries(node)) {
+      if (typeof v === "function") dynamic[k]?.push(label);
+      else countFns(v, label);
+    }
+  };
+  for (const e of t.entries) countFns(e, e.id);
 
   const notes = t.notes.map((l) => `##   ${l}`).join("\n");
   const out = `class_name ${t.className}

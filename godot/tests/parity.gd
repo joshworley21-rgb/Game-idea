@@ -100,6 +100,19 @@ func _comparable(state: Dictionary) -> Array[String]:
 			out.append(leaf)
 	return out
 
+## One outcome, as a single number: its title, tone, text and the effect list
+## exactly as the player is shown it. The effect list is ordered, and the
+## order is part of what is being checked — describe_effects walks the effects
+## Dictionary in insertion order, so a verb that assembles its "shown" map in
+## the wrong order reads differently on screen even with identical numbers.
+func _outcome_hash(o: Dictionary) -> int:
+	if o.is_empty():
+		return 0
+	var bits: Array[String] = []
+	for e in (o["effects"] as Array):
+		bits.append("%s/%s" % [e["text"], "true" if e["good"] else "false"])
+	return _fnv1a("%s|%s|%s|%s" % [o["title"], o["tone"], o["text"], ",".join(bits)])
+
 ## FNV-1a, 32-bit, matching the JavaScript reference.
 func _fnv1a(text: String) -> int:
 	var h := 0x811c9dc5
@@ -125,6 +138,7 @@ func _init() -> void:
 	_arcs()
 	_bills()
 	_term()
+	_play()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -723,6 +737,78 @@ func _crises() -> void:
 		srows.append("%s=%s" % [c["id"], _f(CrisesData.crisis_pressure(cs, c))])
 	_check("pressures under strain", _fnv1a(";".join(srows)), 701637822)
 
+	print("crises: the gate, the feed and the heat")
+	# These three are what crisis_pressure adds on top of a crisis's own
+	# expression, and all three were missing from the first port: it treated
+	# crisis_pressure as nothing but the expression. Nothing caught it,
+	# because a term where no crisis is ever answered never unlocks anything
+	# and never accumulates heat — so the ten gated crises, which are the
+	# consequences of the war you started and the cover-up you authorised,
+	# were simply unreachable, and the Godot build could not contain them.
+	var g := func() -> Dictionary:
+		return StateData.create_initial_state("blue", "", 500)
+	var war := CrisesData.by_id("war-casualties")
+
+	# Untouched, a gated crisis is not in the pool at all.
+	var gs: Dictionary = g.call()
+	_check("gated, untouched", _f(CrisesData.crisis_pressure(gs, war)), "0.000000")
+	var pool_has := func(state: Dictionary, id: String) -> bool:
+		for c in CrisesData.eligible_crises(state):
+			if c["id"] == id:
+				return true
+		return false
+	_check("gated, out of the pool", pool_has.call(gs, "war-casualties"), false)
+
+	# Unlocked by something the player did, it gets the flat 0.85 to fire on:
+	# at that point it is not waiting on the country drifting anywhere.
+	gs = g.call()
+	gs["unlocked"].append("war-casualties")
+	_check("unlocked", _f(CrisesData.crisis_pressure(gs, war)), "0.850000")
+	_check("unlocked, in the pool", pool_has.call(gs, "war-casualties"), true)
+
+	# Or fed by a situation that is still running, without any unlock: a war
+	# names the three crises it makes likelier, and at intensity 60 each
+	# picks up 60/45 on top of the gated 0.85.
+	gs = g.call()
+	gs["threads"].append({"id": "war", "label": "The War", "intensity": 60.0,
+		"drift": -1.0, "tags": ["war"], "age": 0,
+		"feeds": ["war-casualties", "anti-war-protests", "coalition-strain"]})
+	_check("fed at 60", _f(CrisesData.crisis_pressure(gs, war)), "2.183333")
+	_check("fed: anti-war-protests",
+		_f(CrisesData.crisis_pressure(gs, CrisesData.by_id("anti-war-protests"))), "2.183333")
+	_check("fed: coalition-strain",
+		_f(CrisesData.crisis_pressure(gs, CrisesData.by_id("coalition-strain"))), "2.183333")
+	# A gated crisis the war does not name stays shut.
+	_check("not fed: inquiry",
+		_f(CrisesData.crisis_pressure(gs, CrisesData.by_id("inquiry"))), "0.000000")
+
+	# Heat multiplies rather than adds, so trouble clusters in a domain that
+	# has already been in the news instead of arriving evenly.
+	gs = g.call()
+	var hurricane := CrisesData.by_id("hurricane")
+	_check("hurricane, cold", _f(CrisesData.crisis_pressure(gs, hurricane)), "3.898351")
+	gs["heat"]["climate"] = 70.0
+	_check("hurricane, climate heat 70", _f(CrisesData.crisis_pressure(gs, hurricane)),
+		"7.796703")
+	gs["heat"]["climate"] = 140.0
+	_check("hurricane, heat 140", _f(CrisesData.crisis_pressure(gs, hurricane)),
+		"11.695054")
+
+	gs = g.call()
+	gs["unlocked"].append("war-casualties")
+	gs["heat"]["war"] = 35.0
+	gs["heat"]["security"] = 70.0
+	gs["threads"].append({"id": "war", "label": "w", "intensity": 90.0, "drift": 0.0,
+		"tags": ["war"], "age": 0, "feeds": ["war-casualties"]})
+	# war-casualties is tagged war and foreign, so only the war heat counts.
+	_check("unlocked, fed and hot", _f(CrisesData.crisis_pressure(gs, war)), "3.275000")
+
+	# Negative heat is floored at zero per tag, not subtracted.
+	gs = g.call()
+	gs["heat"]["climate"] = -50.0
+	_check("negative heat does not reduce", _f(CrisesData.crisis_pressure(gs, hurricane)),
+		"3.898351")
+
 	# apply_consequence, all five levers, including starting a situation that
 	# is already running -- which deepens it rather than stacking a second.
 	var cc := StateData.create_initial_state("blue", "", 9001)
@@ -1023,3 +1109,158 @@ func _bills() -> void:
 			plain = b
 			break
 	_check("an ungated bill is open", BillsData.bill_requires(s, plain), true)
+
+
+func _play() -> void:
+	print("playing: a president who actually does the job, for a full term")
+	# _term runs a presidency where nothing is ever answered. This one runs
+	# the other kind, through Verbs: the budget signed every year it is due,
+	# every crisis on the desk answered, a meeting taken whenever one is open,
+	# a bill sent to the floor whenever there is capital for it, and the
+	# leftover action points spent.
+	#
+	# It is the only test that exercises the verbs against a state that has
+	# been through the month tick, which is where they actually run. A verb
+	# tested on a fresh state proves the arithmetic; this proves the two
+	# halves still fit together after four years of each changing the other.
+	var s := StateData.create_initial_state("blue", "", 31337)
+	var rng := Rng.new(int(s["seed"]))
+	var ctx := Sim.create_sim_context(rng)
+	s["bills"] = BillsData.bill_catalog()
+	s["cabinet"] = People.create_cabinet(rng)
+	s["family"] = People.create_family(rng, float(s["personal"]["age"]))
+	NewsData.push_news(s, NewsData.generate_news(s, rng))
+
+	var rows: Array[String] = []
+	var ending := {}
+
+	for month in 60:
+		if not ending.is_empty():
+			break
+
+		if EngineMonth.is_budget_pending(s):
+			var budget := {}
+			for k in CoreData.BUDGET_KEYS:
+				budget[k] = roundf(float(s["enacted"][k]) * 1.02)
+			var o := Verbs.sign_budget(s, budget, float(s["nation"]["taxRate"]) + 0.25)
+			rows.append("budget|%d|%d" % [int(s["month"]), _outcome_hash(o)])
+
+		# Crises, cheapest affordable choice each time.
+		var guard := 0
+		while not (s["pendingCrises"] as Array).is_empty() and guard < 6:
+			guard += 1
+			var crisis := CrisesData.by_id(str(s["pendingCrises"][0]))
+			var choice: Dictionary = crisis["choices"][0]
+			for c in (crisis["choices"] as Array):
+				if Verbs.affordable(s, crisis, c):
+					choice = c
+					break
+			var r := Verbs.resolve_crisis(s, rng, crisis, str(choice["id"]))
+			var started: Array = r.get("startedThreads", [])
+			rows.append("crisis|%d|%s|%s|%d|%s" % [int(s["month"]), crisis["id"],
+				choice["id"], _outcome_hash(r.get("outcome", {})), "+".join(started)])
+
+		# A meeting, if one is open and affordable.
+		for conv in ConversationsTable.CONVERSATIONS:
+			if not ConversationsData.available_for(str(conv["id"]), s):
+				continue
+			if ActionsData.action_cooldown_left(s, conv) > 0:
+				continue
+			if int(s["ap"]) < int(conv["ap"]):
+				continue
+			var started_conv := Verbs.start_conversation(s, str(conv["id"]))
+			if started_conv.is_empty():
+				continue
+			var active := Verbs.active_conversation(started_conv["conversation"],
+				started_conv["beat"])
+			var steps := 0
+			var res := {}
+			while steps < 10:
+				steps += 1
+				var opts := ConversationsData.options_for(str(conv["id"]), active["beat"],
+					active["path"])
+				if opts.is_empty():
+					break
+				# Always the first option the meeting offers, so the path is
+				# the same in both engines without a second random stream.
+				res = Verbs.choose_conversation_option(s, rng, active, str(opts[0]["id"]))
+				if res.is_empty() or not (res["beat"] as Dictionary).is_empty():
+					if res.is_empty():
+						break
+					continue
+				break
+			var path_str := ">".join(res.get("path", []) as Array) if not res.is_empty() else "undefined"
+			var failed_str := ("true" if res["failed"] else "false") if not res.is_empty() else "undefined"
+			rows.append("meet|%d|%s|%s|%s|%d" % [int(s["month"]), conv["id"], path_str,
+				failed_str, _outcome_hash(res.get("outcome", {}))])
+			break
+
+		# A bill, if there is capital for one.
+		var bill := {}
+		for b in (s["bills"] as Array):
+			if b.get("status", "") == "passed":
+				continue
+			if not BillsData.bill_requires(s, b):
+				continue
+			if float(s["politics"]["capital"]) < float(b["capitalCost"]) + 5.0:
+				continue
+			if int(s["ap"]) < 1:
+				continue
+			bill = b
+			break
+		if not bill.is_empty():
+			var o := Verbs.propose_bill(s, rng, str(bill["id"]), 5.0)
+			rows.append("bill|%d|%s|%d" % [int(s["month"]), bill["id"], _outcome_hash(o)])
+
+		# Whatever action points are left.
+		for id in ["brief", "rest-sleep", "call-donors"]:
+			if int(s["ap"]) < 1:
+				break
+			var r := Verbs.perform_action(s, rng, id)
+			if not r.is_empty():
+				rows.append("act|%d|%s|%d" % [int(s["month"]), id,
+					_outcome_hash(r["outcome"])])
+
+		var mr := EngineMonth.end_month(s, ctx, rng)
+		var ids: Array[String] = []
+		for c in (mr["crises"] as Array):
+			ids.append(str(c["id"]))
+		rows.append("month|%d|%s|%s|h%d" % [int(mr["report"]["month"]),
+			"+".join(ids) if not ids.is_empty() else "-",
+			str((mr["arc"] as Dictionary).get("id", "-")),
+			_fnv1a("\n".join(_comparable(s)))])
+		if not (mr["ending"] as Dictionary).is_empty():
+			ending = mr["ending"]
+
+	_check("events", rows.size(), 144)
+	_check("play digest", _fnv1a("\n".join(rows)), 2374623442)
+
+	# What four years of actually governing produced, named as well as hashed.
+	_check("bills passed", int(s["counters"]["billsPassed"]), 4)
+	_check("bills failed", int(s["counters"]["billsFailed"]), 10)
+	_check("crises handled", int(s["counters"]["crisesHandled"]), 30)
+	_check("legislated spending", _f(s["counters"]["legislatedSpending"]), "250.000000")
+	var passed: Array[String] = []
+	for b in (s["bills"] as Array):
+		if b.get("status", "") == "passed":
+			passed.append(str(b["id"]))
+	_check("which bills", " ".join(passed), "prek veterans pandemic chips-ai")
+	var flags: Array = s["flags"].keys()
+	flags.sort()
+	_check("flags set", " ".join(flags),
+		"addressed:house budget1 budget13 budget25 budget37 budget:signed"
+		+ " met:cabinet reelectionAsked")
+	var threads: Array[String] = []
+	for t in (s["threads"] as Array):
+		threads.append("%s@%.1f" % [t["id"], float(t["intensity"])])
+	_check("situations still running", " ".join(threads),
+		"fire-season@30.0 alliance-drift@43.2")
+
+	_check("ending id", ending["id"], "reelected")
+	_check("ending legacy", int(ending["legacy"]), 53)
+	_check("ending grade", ending["grade"], "C")
+	_check("ending blurb", _fnv1a(str(ending["blurb"])), 620781888)
+	_check("final month", int(s["month"]), 49)
+	var final_leaves := _comparable(s)
+	_check("final leaves", final_leaves.size(), 1211)
+	_check("final digest", _fnv1a("\n".join(final_leaves)), 3839738242)
