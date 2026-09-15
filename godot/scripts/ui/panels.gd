@@ -122,6 +122,10 @@ func close() -> void:
 const PANEL_WIDTH := 560
 const CONTENT_WIDTH := PANEL_WIDTH - UiTheme.XL * 2
 
+## Big enough to read a mood from across a phone, small enough that the face
+## is not the panel.
+const PORTRAIT_PX := 76
+
 
 ## Who this is from, and what it is. The eyebrow is the only accent in a
 ## panel, which is what makes it read as a label rather than as more text.
@@ -240,14 +244,29 @@ func meeting_beat(state: Dictionary, conv: Dictionary, beat: Dictionary,
 		path: Array, first: bool) -> void:
 	show_panel(func(body: VBoxContainer):
 		var who := Speaker.resolve(beat.get("speaker", {}), state)
-		_header(body, str(conv["label"]), str(who["name"]))
+		# The face, and who it belongs to, on one line. A portrait is the
+		# fastest thing on the panel to read and the mood is drawn into it,
+		# so you know how this is going before you have read a word.
+		var head := HBoxContainer.new()
+		head.add_theme_constant_override("separation", UiTheme.MD)
+		body.add_child(head)
+		var face := Portrait.new(str(who["seed"]), str(who["mood"]),
+			int(who["age"]), str(who["dress"]))
+		face.custom_minimum_size = Vector2(PORTRAIT_PX, PORTRAIT_PX)
+		head.add_child(face)
+		var names := VBoxContainer.new()
+		names.add_theme_constant_override("separation", 2)
+		names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(names)
+		names.add_child(UiTheme.eyebrow(str(conv["label"]), UiTheme.ACCENT))
+		names.add_child(UiTheme.label(str(who["name"]), UiTheme.DISPLAY))
 		var caption: Array[String] = []
 		if not str(who["title"]).is_empty():
 			caption.append(str(who["title"]))
-		# The mood is in the caption because with no portrait it is the only
-		# thing on screen saying how this is going.
+		# The mood stays in the caption as well as in the face: it is the one
+		# thing on the panel a reader might want in words.
 		caption.append(str(who["mood"]))
-		body.add_child(UiTheme.label(" · ".join(caption), UiTheme.CAPTION,
+		names.add_child(UiTheme.label(" · ".join(caption), UiTheme.CAPTION,
 			UiTheme.FAINT))
 		# The intro sets the room, and only belongs on the way in.
 		if first and not str(conv.get("intro", "")).is_empty():

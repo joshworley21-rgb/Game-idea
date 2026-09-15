@@ -32,6 +32,37 @@ extends SceneTree
 ##   EOF
 
 var _failures := 0
+## The section currently running, cleared by the section itself when it
+## reaches the end. Anything left here means it did not.
+var _running := ""
+
+## Every section, in the order they run.
+const SECTIONS := [
+	"_rng",
+	"_rounding",
+	"_state",
+	"_blocs",
+	"_actions",
+	"_fiscal",
+	"_sim",
+	"_family",
+	"_news",
+	"_news_distressed",
+	"_month_flow",
+	"_endings",
+	"_crises",
+	"_arcs",
+	"_bills",
+	"_term",
+	"_play",
+	"_engine",
+	"_chief",
+	"_speaker",
+	"_campaign",
+	"_ui",
+	"_portraits",
+	"_world",
+]
 
 
 func _check(what: String, got, want) -> void:
@@ -123,29 +154,18 @@ func _fnv1a(text: String) -> int:
 
 
 func _init() -> void:
-	_rng()
-	_rounding()
-	_state()
-	_blocs()
-	_actions()
-	_fiscal()
-	_sim()
-	_family()
-	_news()
-	_news_distressed()
-	_month_flow()
-	_endings()
-	_crises()
-	_arcs()
-	_bills()
-	_term()
-	_play()
-	_engine()
-	_chief()
-	_speaker()
-	_campaign()
-	_ui()
-	_world()
+	# Called by name rather than in a row, so a section that dies part-way
+	# through is caught. A runtime error in GDScript unwinds to the caller
+	# without raising, so before this the suite ran the rest of its
+	# sections and printed "all checks passed" over the top of a section
+	# that had stopped at its third check. It happened, and the only
+	# reason it was noticed was a stray SCRIPT ERROR line in the output.
+	for section in SECTIONS:
+		_running = section
+		call(section)
+		if not _running.is_empty():
+			_failures += 1
+			printerr("  FAIL  %s stopped part-way — a runtime error, not a failed check" % section)
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -164,6 +184,7 @@ func _rng() -> void:
 	]
 	for i in golden.size():
 		_check("draw %d" % i, _f(rng.next()), golden[i])
+	_running = ""
 
 
 func _state() -> void:
@@ -184,6 +205,7 @@ func _state() -> void:
 		_check("%s/%d numbers" % [case["party"], case["seed"]], numbers.size(), 78)
 		_check("%s/%d digest" % [case["party"], case["seed"]],
 			_fnv1a(";".join(numbers)), case["digest"])
+	_running = ""
 
 
 func _blocs() -> void:
@@ -210,6 +232,7 @@ func _blocs() -> void:
 		weak.append(str(def["key"]))
 	lines.append(",".join(weak))
 	_check("ten-month drift digest", _fnv1a(";".join(lines)), 304653099)
+	_running = ""
 
 
 func _actions() -> void:
@@ -218,6 +241,7 @@ func _actions() -> void:
 	var want := {"desk": 3, "press": 2, "budget": 0, "staff": 2, "floor": 1, "phone": 3, "rest": 5}
 	for station in ["desk", "press", "budget", "staff", "floor", "phone", "rest"]:
 		_check(station, ActionsData.actions_for(a, station).size(), want[station])
+	_running = ""
 
 
 func _fiscal() -> void:
@@ -229,6 +253,7 @@ func _fiscal() -> void:
 	_check("deficit", _f(StateData.annual_deficit(f)), "1780.795063")
 	_check("approval target", _f(Sim.approval_target(f)), "50.808796")
 	_check("potential growth", _f(Sim.potential_growth(f)), "1.933208")
+	_running = ""
 
 
 func _sim() -> void:
@@ -279,6 +304,7 @@ func _sim() -> void:
 	_check("final unrest", _f(st2["nation"]["unrest"]), "26.299752")
 	_check("final debt/GDP", _f(st2["nation"]["debtToGdp"]), "107.180516")
 	_check("final marriage", _f(st2["personal"]["marriage"]), "47.026654")
+	_running = ""
 
 
 func _family() -> void:
@@ -309,6 +335,7 @@ func _family() -> void:
 	_check("strain cleared", not sp.has("strain"), true)
 	_check("marriage follows the spouse", _f(fs["personal"]["marriage"]), "59.532000")
 	_check("note", ";".join(fnotes), "Things have settled down for Samuel.")
+	_running = ""
 
 
 func _news() -> void:
@@ -336,6 +363,7 @@ func _news() -> void:
 	for n in (ns["news"] as Array):
 		nrows.append("%d|%s|%s|%s" % [int(n["month"]), n["tone"], n["source"], n["headline"]])
 	_check("news digest", _fnv1a("\n".join(nrows)), 3541467704)
+	_running = ""
 
 
 func _news_distressed() -> void:
@@ -369,6 +397,7 @@ func _news_distressed() -> void:
 	_check("distressed rows", drows.size(), 12)
 	_check("distressed digest", _fnv1a("\n".join(drows)), 506102734)
 	_check("the 7.25 tie", drows[3].ends_with("7.3%; manufacturing towns hit hardest"), true)
+	_running = ""
 
 
 func _month_flow() -> void:
@@ -491,6 +520,7 @@ func _month_flow() -> void:
 	_check("physical note", ";".join(prep["notes"]),
 		"The physical found something: atrial fibrillation.")
 	_check("physical text", _fnv1a(str(pev["text"])), 2735608622)
+	_running = ""
 
 
 func _endings() -> void:
@@ -665,6 +695,7 @@ func _endings() -> void:
 		var e := EndingsData.build_ending(x, Rng.new(1),
 			{"id": "x", "title": "x", "blurb": "B"})
 		_check("coda: %s" % row[0], _fnv1a(str(e["blurb"]).substr(3)), row[5])
+	_running = ""
 
 
 func _crises() -> void:
@@ -834,6 +865,7 @@ func _crises() -> void:
 	_check("age set on start", int(cc["threads"][0]["age"]), 0)
 	_check("unlocks do not duplicate", ",".join(cc["unlocked"]), "war-casualties,inquiry")
 	_check("heat is capped", _f(cc["heat"]["war"]), "100.000000")
+	_running = ""
 
 
 func _arcs() -> void:
@@ -964,6 +996,7 @@ func _arcs() -> void:
 	_check("cannot answer twice", ArcsData.answer_arc(h, Rng.new(2), str(choice["id"])).is_empty(), true)
 	_check("cannot resolve a spent arc",
 		ArcsData.resolve_arc(h, Rng.new(2), "arc-treasury-feud", str(choice["id"])).is_empty(), true)
+	_running = ""
 
 
 func _term() -> void:
@@ -1068,6 +1101,7 @@ func _term() -> void:
 	_check("final digest", _fnv1a("\n".join(final_leaves)), 2125011318)
 	_check("news is capped at 60", (s["news"] as Array).size(), 60)
 	_check("a month of history each", (s["history"] as Array).size(), 48)
+	_running = ""
 
 
 func _bills() -> void:
@@ -1116,6 +1150,7 @@ func _bills() -> void:
 			plain = b
 			break
 	_check("an ungated bill is open", BillsData.bill_requires(s, plain), true)
+	_running = ""
 
 
 func _play() -> void:
@@ -1276,6 +1311,7 @@ func _play() -> void:
 	var final_leaves := _comparable(s)
 	_check("final leaves", final_leaves.size(), 1214)
 	_check("final digest", _fnv1a("\n".join(final_leaves)), 323144867)
+	_running = ""
 
 
 func _engine() -> void:
@@ -1415,6 +1451,7 @@ func _engine() -> void:
 	_check("a loaded run continues identically",
 		_fnv1a("\n".join(_comparable(b.state))), _fnv1a("\n".join(_comparable(a.state))))
 	_check("to the same month", int(b.state["month"]), int(a.state["month"]))
+	_running = ""
 
 
 func _rounding() -> void:
@@ -1461,6 +1498,7 @@ func _rounding() -> void:
 		Effects.describe_effects({"nation.growth": 0.15})[0]["text"], "Growth +0.1")
 	_check("a negative half-integer",
 		Effects.describe_effects({"politics.approval": -2.5})[0]["text"], "Approval -2")
+	_running = ""
 
 
 func _chief() -> void:
@@ -1564,6 +1602,7 @@ func _chief() -> void:
 	ob["flags"]["met:cabinet"] = true
 	ob["flags"]["budget:signed"] = true
 	_check("and she stops raising what is done", ids.call(ob), "address-house")
+	_running = ""
 
 
 func _speaker() -> void:
@@ -1633,6 +1672,7 @@ func _speaker() -> void:
 	s["family"][1]["since"] = 9
 	_check("a long wait does not outrank a strain", fs.call(s), "child/Felix")
 	_check("no family at all", fs.call(bare), "spouse/Your family")
+	_running = ""
 
 
 func _campaign() -> void:
@@ -1720,6 +1760,7 @@ func _campaign() -> void:
 		e.state["flags"].get("campaign:high-road", false), true)
 	_check("election night is in the news", e.state["news"][0]["headline"],
 		"You won by four points.")
+	_running = ""
 
 
 func _ui() -> void:
@@ -1915,6 +1956,109 @@ func _ui() -> void:
 	hud.queue_free()
 	panels.queue_free()
 	e.queue_free()
+	_running = ""
+
+
+func _portraits() -> void:
+	print("the faces: the same person every time, and a mood you can read")
+	# Also not a parity check. The web build draws a real 3D head and this
+	# does not, so there is nothing to compare against — what is checkable is
+	# the two things a portrait has to do, and both of them have already been
+	# got wrong once here.
+	var cast := ["Ruth Ellery", "Helen Osei", "Samuel Dubois", "Andre Sandoval",
+		"Marcus Okonkwo", "Charles Brennan", "Priya", "Sofia", "Nora"]
+
+	# One: the same name is always the same person. A secretary who is
+	# somebody else on their second appearance is worse than no portrait.
+	var faces := {}
+	for who in cast:
+		faces[who] = Portrait.new(who, "neutral", 50, "suit")._read_look()
+	for who in cast:
+		_check("%s draws the same face twice" % who,
+			Portrait.new(who, "hostile", 50, "suit")._read_look(), faces[who])
+
+	# And different names are different people. The first version asked one
+	# 32-bit digest for eight bytes by shifting it past its own width, so
+	# four features came back as the same constant for everybody: one tie,
+	# one nose, one eye spacing, one brow. It rendered, and it looked like a
+	# rendering bug rather than an arithmetic one, so it is asserted here.
+	for field in ["skin", "hair", "style", "face", "jaw", "brow_weight",
+			"nose", "eye_gap", "tie"]:
+		var seen := {}
+		for who in cast:
+			seen[faces[who][field]] = true
+		_check("the cast varies in %s" % field, seen.size() > 1, true)
+
+	# Two: a mood is visible. Every mood in the web build's portrait is a
+	# five-degree head turn, and at the size a panel shows a face all seven
+	# render as the same picture. These have to actually differ.
+	var shapes := {}
+	for m in Portrait.MOODS:
+		_check("%s is a known mood" % m, Portrait.MOOD_SHAPE.has(m), true)
+		var key := str(Portrait.MOOD_SHAPE[m])
+		_check("%s is not a repeat of another mood" % m, shapes.has(key), false)
+		shapes[key] = m
+	# The brows are the legible part, so they are what must move.
+	var brows := {}
+	for m in Portrait.MOODS:
+		brows[Portrait.MOOD_SHAPE[m]["brow_inner"]] = true
+	_check("six different brows across seven moods", brows.size() >= 6, true)
+	_check("hostile lowers the inner brow",
+		Portrait.MOOD_SHAPE["hostile"]["brow_inner"] < -0.4, true)
+	_check("concerned raises it",
+		Portrait.MOOD_SHAPE["concerned"]["brow_inner"] > 0.4, true)
+	_check("warm smiles", Portrait.MOOD_SHAPE["warm"]["mouth"] > 0.5, true)
+	_check("tired is mostly eyelid",
+		Portrait.MOOD_SHAPE["tired"]["lid"] > 0.4, true)
+	_check("an unknown mood falls back rather than crashing",
+		Portrait.new("Ruth Ellery", "delighted").mood, "neutral")
+
+	# Age shows: grey comes in, and a child is not a small adult.
+	var young: Dictionary = Portrait.new("Sofia", "neutral", 14, "casual")._read_look()
+	var old: Dictionary = Portrait.new("Sofia", "neutral", 70, "casual")._read_look()
+	_check("grey by seventy", (old["hair"] as Color).v > (young["hair"] as Color).v, true)
+	_check("a fourteen-year-old is drawn as one", young["youth"] > 0.5, true)
+	_check("and a grown-up is not", old["youth"], 0.0)
+	_check("no beard on a child",
+		Portrait.new("Andre Sandoval", "neutral", 12, "casual")._read_look()["beard"], false)
+
+	# Dress shows before the caption is read: nobody turns up in the wrong
+	# clothes for who they are.
+	_check("a suit has a tie",
+		Portrait.new("Helen Osei", "neutral", 54, "suit")._read_look()["has_tie"], true)
+	_check("a jumper does not",
+		Portrait.new("Nora", "neutral", 14, "casual")._read_look()["has_tie"], false)
+	_check("an unknown outfit falls back to a suit",
+		Portrait.new("Nora", "neutral", 14, "spacesuit").dress, "suit")
+
+	# And the meeting panel actually shows one, in the mood of the beat.
+	var panels := Panels.new()
+	root.add_child(panels)
+	var e := GameEngine.new("blue", "President Vance", 77)
+	root.add_child(e)
+	var conv := ConversationsData.by_id("interview")
+	var beat: Dictionary = (conv["beats"] as Dictionary)[conv["startBeat"]]
+	var who := Speaker.resolve(beat.get("speaker", {}), e.state)
+	panels.meeting_beat(e.state, conv, beat, [], true)
+	var face: Portrait = null
+	var stack: Array = [panels]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is Portrait:
+			face = n
+		for c in n.get_children():
+			stack.append(c)
+	_check("the meeting shows a face", face != null, true)
+	if face != null:
+		_check("of the person talking", face.seed_text, str(who["seed"]))
+		_check("in the mood of the beat", face.mood, str(who["mood"]))
+		_check("big enough to read", face.custom_minimum_size.x >= 64.0, true)
+	panels.close()
+	root.remove_child(panels)
+	root.remove_child(e)
+	panels.queue_free()
+	e.queue_free()
+	_running = ""
 
 
 func _world() -> void:
@@ -2037,3 +2181,4 @@ func _world() -> void:
 
 	root.remove_child(w)
 	w.queue_free()
+	_running = ""
