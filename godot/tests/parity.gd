@@ -267,6 +267,126 @@ func _init() -> void:
 	_check("distressed digest", _fnv1a("\n".join(drows)), 506102734)
 	_check("the 7.25 tie", drows[3].ends_with("7.3%; manufacturing towns hit hardest"), true)
 
+	print("month flow: the things a month does outside the economy")
+	# Five paths that only fire under conditions a normal run reaches rarely,
+	# so each is set up deliberately rather than waited for. The rng seeds are
+	# chosen to make the rare branch fire -- that is the point of them.
+
+	var blank_report := func() -> Dictionary:
+		return {"month": 1, "deltas": [], "deficit": 0.0, "revenue": 0.0, "notes": []}
+
+	# A budget you did not sign.
+	var sg := StateData.create_initial_state("blue", "", 700)
+	sg["month"] = 13
+	MonthFlow.run_stopgap(sg)
+	_check("stopgap approval", _f(sg["politics"]["approval"]), "46.818752")
+	_check("stopgap capital", _f(sg["politics"]["capital"]), "57.130581")
+	_check("stopgap flag", sg["flags"].get("budget13", false), true)
+	_check("stopgap news", (sg["news"] as Array).size(), 1)
+	_check("stopgap log", sg["log"][0]["text"],
+		"No budget signed; the government runs on a continuing resolution.")
+
+	# A first family that is never in the same room.
+	var rs := StateData.create_initial_state("blue", "", 700)
+	rs["personal"]["marriage"] = 20.0
+	rs["personal"]["family"] = 24.0
+	rs["family"] = People.create_family(Rng.new(1), 55.0)
+	rs["family"][0]["since"] = 7
+	var rrep: Dictionary = blank_report.call()
+	MonthFlow.run_residence(rs, rrep)
+	_check("absent traditionalists", _f(rs["blocs"]["traditionalists"]), "52.793978")
+	_check("absent suburban", _f(rs["blocs"]["suburban"]), "46.658642")
+	_check("who is waiting", ";".join(rrep["notes"]),
+		"Rosa has been waiting 7 months for an evening.")
+
+	# And one that is visibly close.
+	var cs := StateData.create_initial_state("blue", "", 700)
+	cs["personal"]["marriage"] = 82.0
+	cs["personal"]["family"] = 80.0
+	MonthFlow.run_residence(cs, blank_report.call())
+	_check("close traditionalists", _f(cs["blocs"]["traditionalists"]), "54.193978")
+	_check("close media", _f(cs["politics"]["media"]), "48.176989")
+
+	# The midterms, where seats actually change hands.
+	var ms := StateData.create_initial_state("blue", "", 700)
+	ms["month"] = 22
+	ms["politics"]["approval"] = 44.0
+	var mres := MonthFlow.run_midterms(ms, Rng.new(31))
+	_check("midterm swing", _f(mres["swing"]), "-5.921951")
+	_check("midterm won", mres["won"], false)
+	_check("midterm house", _f(ms["politics"]["house"]), "43.682576")
+	_check("midterm senate", _f(ms["politics"]["senate"]), "43.958014")
+	_check("midterm log", ms["log"][0]["text"], "Midterm elections: losses of 5.9 points.")
+	var fnums: Array[String] = []
+	_walk(ms["factions"], "", fnums)
+	_check("seats after the swing", " ".join(fnums),
+		".conservatives.mood=34.024752 .conservatives.seats=27.960976"
+		+ " .hardliners.mood=32.600666 .hardliners.seats=17.960976"
+		+ " .liberals.mood=66.542167 .liberals.seats=23.039024"
+		+ " .moderates.mood=56.727730 .moderates.seats=22.000000"
+		+ " .progressives.mood=56.897846 .progressives.seats=9.039024")
+
+	# A cabinet coming apart: one resignation and one leak in the same month.
+	# This also re-tests make_secretary, because the replacement is drawn from
+	# the same paired-name loop the draw-order bug was hiding in.
+	var cb := StateData.create_initial_state("blue", "", 700)
+	cb["cabinet"] = People.create_cabinet(Rng.new(700))
+	cb["politics"]["approval"] = 20.0
+	cb["politics"]["scandal"] = 80.0
+	cb["nation"]["unrest"] = 80.0
+	for person in (cb["cabinet"] as Array):
+		if person["office"] != "chief":
+			person["loyalty"] = 12.0
+	var crep: Dictionary = blank_report.call()
+	MonthFlow.run_cabinet(cb, Rng.new(6), crep)
+	_check("cabinet notes", ";".join(crep["notes"]),
+		"Imani Kowalski resigns on principle, in a letter the whole country reads."
+		+ " Priya Rasmussen takes the department."
+		+ ";Someone in the room is talking to the press.")
+	_check("resignations", int(cb["counters"].get("resignations", 0)), 1)
+	_check("leaks", int(cb["counters"].get("leaks", 0)), 1)
+	var cnames: Array[String] = []
+	for person in (cb["cabinet"] as Array):
+		cnames.append(str(person["name"]))
+	_check("cabinet after", ", ".join(cnames),
+		"Ruth Ellery, Yusuf Marchetti, Priya Rasmussen, Claire Calderon,"
+		+ " Charles Sandoval, Samuel Brennan")
+	var cnums: Array[String] = []
+	_walk(cb, "", cnums)
+	_check("cabinet numbers", cnums.size(), 102)
+	_check("cabinet digest", _fnv1a(";".join(cnums)), 975896108)
+
+	# The body, when it has had enough.
+	var bd := StateData.create_initial_state("blue", "", 700)
+	bd["personal"]["sleepDebt"] = 95.0
+	bd["personal"]["health"] = 20.0
+	bd["personal"]["stress"] = 95.0
+	var brep: Dictionary = blank_report.call()
+	var bev := MonthFlow.run_body(bd, Rng.new(7), brep)
+	_check("episode fired", bev.get("title", ""), "Walter Reed")
+	_check("episode health", _f(bd["personal"]["health"]), "11.000000")
+	_check("episode sleep debt", _f(bd["personal"]["sleepDebt"]), "60.000000")
+	_check("a week of the month gone", int(bd["ap"]), 2)
+	_check("episode note", ";".join(brep["notes"]),
+		"You lost a week of the month to a hospital bed.")
+	_check("episode text", _fnv1a(str(bev["text"])), 439316693)
+
+	# The physical, which can only find what you let it look at.
+	var ph := StateData.create_initial_state("blue", "", 700)
+	ph["month"] = 5
+	ph["actionHistory"]["physical"] = 4
+	ph["personal"]["age"] = 68.0
+	ph["personal"]["fitness"] = 20.0
+	ph["personal"]["sleepDebt"] = 80.0
+	ph["personal"]["health"] = 40.0
+	var prep: Dictionary = blank_report.call()
+	var pev := MonthFlow.run_body(ph, Rng.new(6), prep)
+	_check("physical fired", pev.get("title", ""), "The Physical")
+	_check("what it found", ph["personal"].get("condition", ""), "atrial fibrillation")
+	_check("physical note", ";".join(prep["notes"]),
+		"The physical found something: atrial fibrillation.")
+	_check("physical text", _fnv1a(str(pev["text"])), 2735608622)
+
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
