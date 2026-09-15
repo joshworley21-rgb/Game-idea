@@ -33,7 +33,7 @@ static func create_initial_state(party: String, president_name: String, seed: in
 	var budget := {}
 	for key in CoreData.BUDGET_KEYS:
 		var base: float = CoreData.START_BUDGET[key]
-		budget[key] = roundf(_jitter(rng, base, base * 0.08, 0.0))
+		budget[key] = float(Effects.js_round(_jitter(rng, base, base * 0.08, 0.0)))
 
 	var name := president_name.strip_edges()
 	if name.is_empty():
@@ -83,7 +83,7 @@ static func create_initial_state(party: String, president_name: String, seed: in
 			"marriage": _jitter(rng, 74.0, 8.0, 40.0, 95.0),
 			"family": _jitter(rng, 70.0, 8.0, 40.0, 95.0),
 			"integrity": _jitter(rng, 72.0, 7.0, 40.0, 95.0),
-			"age": roundf(_jitter(rng, 56.0, 6.0, 42.0, 70.0)),
+			"age": float(Effects.js_round(_jitter(rng, 56.0, 6.0, 42.0, 70.0))),
 			"sleepDebt": _jitter(rng, 22.0, 7.0, 0.0, 45.0),
 			"fitness": _jitter(rng, 62.0, 9.0, 25.0, 90.0),
 		},

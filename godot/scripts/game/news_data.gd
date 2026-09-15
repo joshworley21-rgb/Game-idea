@@ -115,24 +115,13 @@ static func _matches(id: String, s: Dictionary) -> bool:
 	return false
 
 
-## JavaScript's toFixed breaks a tie upward; C's printf, which "%.1f" uses,
-## breaks it to even. They differ on a value like 4.25 -- "4.3" against "4.2".
-## A headline is a small thing to be careful about, but the parity digest
-## hashes the headline text, and a number that reads differently in the two
-## engines is exactly the kind of divergence this port exists to not have.
-static func _fixed1(v: float) -> String:
-	if v < 0.0:
-		return "-" + _fixed1(-v)
-	return "%.1f" % (floorf(v * 10.0 + 0.5) / 10.0)
-
-
 static func _fill(line: String, s: Dictionary) -> String:
 	return (line
-		.replace("{approval}", str(int(round(float(s["politics"]["approval"])))))
-		.replace("{unemployment}", _fixed1(float(s["nation"]["unemployment"])))
-		.replace("{inflation}", _fixed1(float(s["nation"]["inflation"])))
-		.replace("{growth}", _fixed1(float(s["nation"]["growth"])))
-		.replace("{debt}", str(int(round(float(s["nation"]["debtToGdp"]))))))
+		.replace("{approval}", str(Effects.js_round(float(s["politics"]["approval"]))))
+		.replace("{unemployment}", Effects.js_fixed1(float(s["nation"]["unemployment"])))
+		.replace("{inflation}", Effects.js_fixed1(float(s["nation"]["inflation"])))
+		.replace("{growth}", Effects.js_fixed1(float(s["nation"]["growth"])))
+		.replace("{debt}", str(Effects.js_round(float(s["nation"]["debtToGdp"])))))
 
 
 ## Two headlines a month, and never one the reader saw in the last couple.

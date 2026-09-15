@@ -124,6 +124,7 @@ func _fnv1a(text: String) -> int:
 
 func _init() -> void:
 	_rng()
+	_rounding()
 	_state()
 	_blocs()
 	_actions()
@@ -139,6 +140,7 @@ func _init() -> void:
 	_bills()
 	_term()
 	_play()
+	_engine()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -1212,8 +1214,13 @@ func _play() -> void:
 			var o := Verbs.propose_bill(s, rng, str(bill["id"]), 5.0)
 			rows.append("bill|%d|%s|%d" % [int(s["month"]), bill["id"], _outcome_hash(o)])
 
-		# Whatever action points are left.
-		for id in ["brief", "rest-sleep", "call-donors"]:
+		# Whatever action points are left. These three ids are real ones from
+		# the catalogue, which is worth saying because they were not at first:
+		# an earlier version spent its leftover points on "brief",
+		# "rest-sleep" and "call-donors", none of which exist. Both engines
+		# agreed on finding nothing, so the test passed while exercising only
+		# the not-found path.
+		for id in ["intel-brief", "sleep", "fundraiser"]:
 			if int(s["ap"]) < 1:
 				break
 			var r := Verbs.perform_action(s, rng, id)
@@ -1232,19 +1239,20 @@ func _play() -> void:
 		if not (mr["ending"] as Dictionary).is_empty():
 			ending = mr["ending"]
 
-	_check("events", rows.size(), 144)
-	_check("play digest", _fnv1a("\n".join(rows)), 2374623442)
+	_check("events", rows.size(), 186)
+	_check("play digest", _fnv1a("\n".join(rows)), 4223038482)
 
 	# What four years of actually governing produced, named as well as hashed.
-	_check("bills passed", int(s["counters"]["billsPassed"]), 4)
-	_check("bills failed", int(s["counters"]["billsFailed"]), 10)
+	_check("bills passed", int(s["counters"]["billsPassed"]), 6)
+	_check("bills failed", int(s["counters"]["billsFailed"]), 12)
 	_check("crises handled", int(s["counters"]["crisesHandled"]), 30)
-	_check("legislated spending", _f(s["counters"]["legislatedSpending"]), "250.000000")
+	_check("legislated spending", _f(s["counters"]["legislatedSpending"]), "500.000000")
 	var passed: Array[String] = []
 	for b in (s["bills"] as Array):
 		if b.get("status", "") == "passed":
 			passed.append(str(b["id"]))
-	_check("which bills", " ".join(passed), "prek veterans pandemic chips-ai")
+	_check("which bills", " ".join(passed),
+		"green-grid student-debt prek veterans pandemic chips-ai")
 	var flags: Array = s["flags"].keys()
 	flags.sort()
 	_check("flags set", " ".join(flags),
@@ -1253,14 +1261,198 @@ func _play() -> void:
 	var threads: Array[String] = []
 	for t in (s["threads"] as Array):
 		threads.append("%s@%.1f" % [t["id"], float(t["intensity"])])
-	_check("situations still running", " ".join(threads),
-		"fire-season@30.0 alliance-drift@43.2")
+	_check("situations still running", " ".join(threads), "fire-season@84.6")
 
 	_check("ending id", ending["id"], "reelected")
-	_check("ending legacy", int(ending["legacy"]), 53)
-	_check("ending grade", ending["grade"], "C")
-	_check("ending blurb", _fnv1a(str(ending["blurb"])), 620781888)
+	_check("ending legacy", int(ending["legacy"]), 58)
+	_check("ending grade", ending["grade"], "C+")
+	_check("ending blurb", _fnv1a(str(ending["blurb"])), 3467858252)
 	_check("final month", int(s["month"]), 49)
 	var final_leaves := _comparable(s)
-	_check("final leaves", final_leaves.size(), 1211)
-	_check("final digest", _fnv1a("\n".join(final_leaves)), 3839738242)
+	_check("final leaves", final_leaves.size(), 1214)
+	_check("final digest", _fnv1a("\n".join(final_leaves)), 323144867)
+
+
+func _engine() -> void:
+	print("engine: the seam between the rules and the screen")
+	# GameEngine is deliberately thin — a guard, a call and a signal — so what
+	# is worth testing is not the arithmetic (every other section does that)
+	# but that the signals fire, in the right order, with the right payloads,
+	# and that the guards actually guard.
+	var e := GameEngine.new("blue", "President Vance", 8080)
+	var log_: Array[String] = []
+	e.state_changed.connect(func(_s): log_.append("state"))
+	e.outcome_shown.connect(func(o): log_.append("outcome:%s" % o["title"]))
+	e.crisis_arrived.connect(func(c): log_.append("crisis:%s" % c["id"]))
+	e.arc_arrived.connect(func(a): log_.append("arc:%s" % a["id"]))
+	e.month_reported.connect(func(r): log_.append("report:%d" % int(r["month"])))
+	e.term_ended.connect(func(x): log_.append("ended:%s" % x["id"]))
+	e.reelection_asked.connect(func(): log_.append("reelection"))
+
+	_check("a new game is sworn in", int(e.state["month"]), 1)
+	_check("with a cabinet", (e.state["cabinet"] as Array).size(), 6)
+	_check("and a family", (e.state["family"] as Array).size(), 3)
+	_check("the swearing-in is logged", e.state["log"][1]["text"],
+		"You are sworn in as President of the United States.")
+	_check("so is the cabinet", str(e.state["log"][0]["text"]).begins_with("Cabinet confirmed:"),
+		true)
+	_check("three action points", int(e.state["ap"]), 3)
+	_check("a budget is waiting", e.budget_pending(), true)
+
+	# Every verb emits state after its outcome, so a listener that redraws on
+	# state never paints a screen the outcome has not reached yet.
+	log_.clear()
+	_check("an action runs", e.perform_action("sleep"), true)
+	_check("and says so", " ".join(log_).begins_with("outcome:"), true)
+	_check("state follows the outcome", log_[log_.size() - 1], "state")
+	_check("an action point is spent", int(e.state["ap"]), 2)
+	# The same action twice in a month is a cooldown, not a second briefing.
+	log_.clear()
+	_check("no repeat", e.perform_action("sleep"), false)
+	_check("and nothing was emitted", log_.size(), 0)
+	_check("nor spent", int(e.state["ap"]), 2)
+	_check("an action that does not exist", e.perform_action("no-such-action"), false)
+
+	# The budget guard: it can only be signed in the month it is due.
+	var budget := {}
+	for k in CoreData.BUDGET_KEYS:
+		budget[k] = float(e.state["enacted"][k])
+	log_.clear()
+	_check("the budget signs", e.sign_budget(budget, 18.0), true)
+	_check("once", e.sign_budget(budget, 18.0), false)
+	_check("and it is recorded", e.budget_pending(), false)
+
+	# A crisis on the desk stops the month.
+	e.state["pendingCrises"] = ["hurricane"]
+	var blocked := e.can_end_month()
+	_check("the month is blocked", blocked["ok"], false)
+	_check("and says why", blocked["reason"],
+		"There is a decision on your desk that cannot wait.")
+	log_.clear()
+	e.end_month()
+	_check("end_month does nothing while blocked", log_.size(), 0)
+	_check("a crisis not on the desk cannot be answered",
+		e.resolve_crisis("bank-run", "backstop"), false)
+	_check("nor a choice that is not on the crisis",
+		e.resolve_crisis("hurricane", "no-such-choice"), false)
+	_check("the real one can", e.resolve_crisis("hurricane", "delegate"), true)
+	_check("the desk is clear", (e.state["pendingCrises"] as Array).size(), 0)
+	_check("and it is on the record", int(e.state["counters"]["crisesHandled"]), 1)
+	_check("the month is free", e.can_end_month()["ok"], true)
+
+	# An arc blocks it for the same reason, and with its own wording.
+	e.state["pendingArc"] = "arc-leak-source"
+	_check("an arc blocks too", e.can_end_month()["reason"],
+		"Something you did has caught up with you.")
+	_check("the wrong arc id is refused", e.resolve_arc("arc-child-away", "confront"), false)
+	e.state["pendingArc"] = null
+
+	# A meeting, beat by beat.
+	log_.clear()
+	var started := e.start_conversation("first-cabinet")
+	_check("a meeting starts", started.is_empty(), false)
+	_check("at its opening beat", started["beat"], started["conversation"]["beats"]["open"])
+	_check("it cannot be started twice", e.start_conversation("first-cabinet").is_empty(), true)
+	var steps := 0
+	var res := {}
+	while steps < 10:
+		steps += 1
+		var opts := e.options_for(started["beat"] if steps == 1 else res["beat"], 
+			res.get("path", []))
+		if opts.is_empty():
+			break
+		res = e.choose_conversation_option(str(opts[0]["id"]))
+		if res.is_empty() or (res["beat"] as Dictionary).is_empty():
+			break
+	_check("the meeting closes", (res["beat"] as Dictionary).is_empty(), true)
+	_check("and sets its flag", e.state["flags"].get("met:cabinet", false), true)
+	_check("which closes it for good",
+		ConversationsData.available_for("first-cabinet", e.state), false)
+	_check("an option outside a meeting does nothing",
+		e.choose_conversation_option("anything").is_empty(), true)
+
+	# Standing down is a decision with a price and a payment.
+	var capital_before := float(e.state["politics"]["capital"])
+	e.set_reelection(false)
+	_check("not running", e.state["runningForReelection"], false)
+	_check("which buys you room", float(e.state["politics"]["capital"]) > capital_before, true)
+	_check("and is logged", e.state["log"][0]["text"], "You will not seek a second term.")
+
+	print("save: a run written out and read back")
+	# The save has to survive a JSON round-trip without changing the game. It
+	# is not enough for the numbers to look the same: the run has to continue
+	# identically, which is what the two engines are compared on everywhere
+	# else and is the only thing that actually matters here.
+	var a := GameEngine.new("red", "President Marsh", 4321)
+	for i in 4:
+		a.end_month()
+	var snapshot := SaveGame.serialize(a.state)
+	# Through JSON and back, which is what a real save does.
+	var round_tripped: Dictionary = SaveGame.restore(JSON.parse_string(JSON.stringify(snapshot)))
+
+	_check("month survives as a whole number", typeof(round_tripped["month"]), TYPE_INT)
+	_check("and is right", int(round_tripped["month"]), int(a.state["month"]))
+	_check("the seed survives", int(round_tripped["seed"]), 4321)
+	_check("bills are stored thin", (round_tripped["bills"][0] as Dictionary).keys().size(), 2)
+
+	var b := GameEngine.new("blue", "", 1)
+	b.load_from(round_tripped)
+	_check("bills come back whole", (b.state["bills"] as Array).size(),
+		(a.state["bills"] as Array).size())
+	_check("with their text", b.state["bills"][0].has("title"), true)
+	_check("the president is still theirs", b.state["presidentName"], "President Marsh")
+	_check("and the party", b.state["party"], "red")
+
+	# The real test: play both on from here and see if they stay together.
+	for i in 6:
+		a.end_month()
+		b.end_month()
+	_check("a loaded run continues identically",
+		_fnv1a("\n".join(_comparable(b.state))), _fnv1a("\n".join(_comparable(a.state))))
+	_check("to the same month", int(b.state["month"]), int(a.state["month"]))
+
+
+func _rounding() -> void:
+	print("rounding: the two JavaScript rules the whole port prints through")
+	# Every number the player reads goes through one of these, so getting
+	# either wrong is wrong text on every screen. Both were wrong at first,
+	# and neither was visible in the arithmetic — only in the words.
+	#
+	# toFixed and "%.1f" round the same double and disagree on one thing: a
+	# genuine tie. 0.25 is exactly representable, and JavaScript rounds it
+	# away from zero while C's printf rounds it to even — "0.3" against
+	# "0.2". An effect of exactly +0.25 is ordinary in the crisis tables.
+	#
+	# 0.15 is the other half of it, and the reason js_fixed1 reads the
+	# decimal expansion rather than scaling by ten: 0.15 is really
+	# 0.1499999999999999944 and rounds DOWN, but 0.15 * 10.0 lands on exactly
+	# 1.5 on the way and rounds up.
+	var fixed := {
+		0.05: "0.1", 0.15: "0.1", 0.25: "0.3", 0.35: "0.3", 0.45: "0.5",
+		0.55: "0.6", 0.65: "0.7", 0.75: "0.8", 0.85: "0.8", 0.95: "0.9",
+		0.1: "0.1", 0.2: "0.2", 0.3: "0.3", 0.125: "0.1", 0.0: "0.0",
+		1.05: "1.1", 2.25: "2.3", -0.25: "-0.3", -0.15: "-0.1",
+		-0.35: "-0.3", -0.05: "-0.1", -2.5: "-2.5", 0.999: "1.0",
+		0.9999: "1.0",
+	}
+	for v in fixed:
+		_check("toFixed(1) of %s" % String.num(v, 17), Effects.js_fixed1(v), fixed[v])
+
+	# Math.round breaks a tie toward positive infinity, not away from zero:
+	# Math.round(-2.5) is -2 where GDScript's round(-2.5) is -3. A -2.5 to
+	# approval is an ordinary crisis cost, so this one shows up in play.
+	var rounded := {
+		2.5: 3, -2.5: -2, 3.5: 4, -3.5: -3, 1.5: 2, -1.5: -1, 0.5: 1,
+		-0.5: 0, 0.49999999999999994: 0, 2.4999999999999996: 2,
+		-0.4: 0, 0.4: 0, 99.5: 100, -99.5: -99, 0.0: 0, 7.0: 7,
+	}
+	for v in rounded:
+		_check("Math.round of %s" % String.num(v, 17), Effects.js_round(v), rounded[v])
+
+	# And the two in place, which is where they are actually read.
+	_check("an effect of exactly a quarter",
+		Effects.describe_effects({"nation.growth": 0.25})[0]["text"], "Growth +0.3")
+	_check("and of fifteen hundredths",
+		Effects.describe_effects({"nation.growth": 0.15})[0]["text"], "Growth +0.1")
+	_check("a negative half-integer",
+		Effects.describe_effects({"politics.approval": -2.5})[0]["text"], "Approval -2")

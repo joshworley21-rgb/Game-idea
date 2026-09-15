@@ -53,6 +53,53 @@ const BLOC_LABELS := {
 }
 
 
+## JavaScript's Number.prototype.toFixed(1), which the two engines disagree
+## about in exactly one case.
+##
+## Both round the true binary value, so 0.35 prints as "0.3" in both (0.35 is
+## not 0.35 in a double, it is a hair under). The difference is a genuine tie
+## — a value like 0.25 or 2.5, which IS exactly representable. There
+## JavaScript rounds away from zero and C's printf, which GDScript's "%.1f"
+## uses, rounds to even: "0.3" against "0.2".
+##
+## An effect of exactly +0.25 is not a curiosity in this game; it is the sort
+## of number the crisis and bill tables are full of.
+static func js_fixed1(v: float) -> String:
+	if v < 0.0:
+		# toFixed strips the sign before rounding, so -0.25 prints "-0.3".
+		return "-" + js_fixed1(-v)
+	# Read the double's exact decimal expansion and round half up on it.
+	#
+	# Scaling by ten and flooring looks equivalent and is not: 0.15 is really
+	# 0.1499999999999999944, but 0.15 * 10.0 rounds to exactly 1.5 on the way,
+	# so that method reports 0.2 where JavaScript reports 0.1. "%.20f" gives
+	# the expansion itself, where the second decimal digit settles it.
+	var exact := "%.20f" % v
+	var dot := exact.find(".")
+	var whole := exact.substr(0, dot)
+	var frac := exact.substr(dot + 1)
+	var tenths := int(frac[0])
+	if int(frac[1]) >= 5:
+		tenths += 1
+	if tenths == 10:
+		return "%d.0" % (int(whole) + 1)
+	return "%s.%d" % [whole, tenths]
+
+
+## JavaScript's Math.round, which breaks a tie toward positive infinity rather
+## than away from zero. Math.round(-2.5) is -2; GDScript's round(-2.5) is -3.
+##
+## Negative half-integers are common in the effect tables — a -2.5 to approval
+## is an ordinary thing for a crisis choice to cost — so this is not a corner
+## case either.
+static func js_round(v: float) -> int:
+	# Not floor(v + 0.5): adding 0.5 can round up on its own for a value just
+	# under a half, reporting 1 where JavaScript reports 0. Subtracting the
+	# floor first is exact at these magnitudes.
+	var f := floorf(v)
+	return int(f) if v - f < 0.5 else int(f) + 1
+
+
 static func clamp_path(path: String, value: float) -> float:
 	if BOUNDS.has(path):
 		var b: Array = BOUNDS[path]
@@ -174,6 +221,6 @@ static func describe_effects(effects: Dictionary) -> Array:
 		var delta: float = float(v)
 		var unit: String = "bn" if path == "nation.gdp" else ""
 		var sign: String = "+" if delta > 0.0 else ""
-		var rounded: String = ("%.1f" % delta) if absf(delta) < 1.0 else str(int(round(delta)))
+		var rounded: String = js_fixed1(delta) if absf(delta) < 1.0 else str(js_round(delta))
 		out.append({"text": "%s %s%s%s" % [effect_label(path), sign, rounded, unit], "good": is_good(path, delta)})
 	return out

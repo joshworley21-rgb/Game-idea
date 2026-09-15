@@ -165,8 +165,8 @@ static func run_midterms(s: Dictionary, rng: Rng) -> Dictionary:
 	# Seats actually change hands between the factions.
 	CongressData.apply_midterm_swing(s, swing)
 	var won := swing > 0.0
-	_log(s, "system", "Midterm elections: %s of %.1f points." % [
-		"gains" if won else "losses", absf(swing)])
+	_log(s, "system", "Midterm elections: %s of %s points." % [
+		"gains" if won else "losses", Effects.js_fixed1(absf(swing))])
 	NewsData.push_news(s, [{"month": int(s["month"]),
 		"headline": ("President's party defies history and holds the line at the midterms" if won
 			else "Voters deliver a rebuke: opposition picks up seats in both chambers"),

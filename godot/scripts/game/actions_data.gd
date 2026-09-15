@@ -96,12 +96,12 @@ static func watch_actions(state: Dictionary) -> Array:
 	var out: Array = []
 	for thread in (state.get("threads", []) as Array):
 		var competence := People.crisis_competence(state, thread.get("tags", []))
-		var ease_by := int(round(6.0 + competence / 8.0))
+		var ease_by := Effects.js_round(6.0 + competence / 8.0)
 		var risk := clampf((70.0 - competence) / 120.0, 0.0, 0.3)
 		var age: int = thread.get("age", 0)
 		out.append({
 			"id": "work-" + thread["id"], "station": "watch", "label": "Work it: " + thread["label"],
-			"detail": "Running at " + str(int(round(thread["intensity"]))) + ", " + str(age + 1) + (" month" if age == 0 else " months") + " in. An afternoon on one thing, with the people whose job it is.",
+			"detail": "Running at " + str(Effects.js_round(float(thread["intensity"]))) + ", " + str(age + 1) + (" month" if age == 0 else " months") + " in. An afternoon on one thing, with the people whose job it is.",
 			"ap": 1, "cooldown": 1, "effects": {"personal.stress": 2},
 			"consequence": {"eases": {"id": thread["id"], "by": ease_by}}, "risk": risk,
 			"onFail": {"personal.stress": 3, "politics.capital": -2},

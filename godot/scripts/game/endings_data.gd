@@ -207,7 +207,7 @@ static func build_ending(s: Dictionary, rng: Rng, fail: Dictionary) -> Dictionar
 			"title": fail["title"],
 			"blurb": str(fail["blurb"]) + "\n\n" + _personal_coda(s),
 			"reelected": false,
-			"legacy": int(round(total * 0.6)),
+			"legacy": Effects.js_round(total * 0.6),
 			"grade": grade_for(total * 0.6),
 		}
 
@@ -255,7 +255,7 @@ static func build_ending(s: Dictionary, rng: Rng, fail: Dictionary) -> Dictionar
 		"title": title,
 		"blurb": "\n\n".join(parts),
 		"reelected": reelected if ran else null,
-		"legacy": int(round(total)),
+		"legacy": Effects.js_round(total),
 		"grade": grade_for(total),
 	}
 

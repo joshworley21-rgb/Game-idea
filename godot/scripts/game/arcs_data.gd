@@ -117,10 +117,10 @@ static func brief_for(id: String, s: Dictionary) -> String:
 				% [child["name"], int(child["age"]), child["doing"]])
 		"arc-primary-challenge":
 			return ("A governor has been making calls. Nothing announced, nothing on the record, but three of your own senators have taken the meeting. Your party's patience with %d%% approval has run out."
-				% int(round(float(s["politics"]["approval"]))))
+				% Effects.js_round(float(s["politics"]["approval"])))
 		"arc-unrest-organised":
 			return ("What began as a crowd has become a movement with a name, a bank account and a list of demands. Unrest is at %d and it is no longer weather. It is a constituency."
-				% int(round(float(s["nation"]["unrest"]))))
+				% Effects.js_round(float(s["nation"]["unrest"])))
 		"arc-rival-positioning":
 			var person := People.secretary_with(s, "rival")
 			if person.is_empty():
