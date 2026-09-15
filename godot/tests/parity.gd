@@ -1730,6 +1730,33 @@ func _ui() -> void:
 	# build collapsed to a two-pixel sliver and reported no error at all. The
 	# assertions here are the ones that would have caught it — that a panel
 	# has content, and that the content is the text it was handed.
+	# Text measurement, which the whole layout is built on.
+	#
+	# Godot's Label adds a line_spacing constant on top of the font's own
+	# height, and Font.get_multiline_string_size knows nothing about Labels —
+	# so measuring from the font alone comes out a line short on anything
+	# that wraps. A two-line label sized that way shows one line and an
+	# ellipsis, and nothing reports it. That happened to the Chief of Staff's
+	# line and to every choice description in every panel.
+	var sample := "The desk is yours as of noon. Everything on it was somebody"
+	sample += " else's problem yesterday and is yours now. I have cleared the"
+	sample += " first month so you can find your feet."
+	# Asserted on the arithmetic rather than on a Label, because a Label
+	# outside the scene tree reports the height of ONE line however long its
+	# text is — which is the whole reason this measurement exists.
+	for row in [[720, 2], [520, 2], [300, 4]]:
+		_check("wrapping at %d takes %d lines" % [row[0], row[1]],
+			UiTheme.line_count(sample, UiTheme.CAPTION, row[0]), row[1])
+		_check("and is %d lines tall" % row[1],
+			UiTheme.text_height(sample, UiTheme.CAPTION, row[0]),
+			float(row[1]) * UiTheme.line_height(UiTheme.CAPTION))
+	_check("one line includes the spacing",
+		UiTheme.line_height(UiTheme.CAPTION),
+		ThemeDB.fallback_font.get_height(UiTheme.CAPTION) + UiTheme.LINE_SPACING)
+	# The number this got wrong: the font says 17, a Label needs 20.
+	_check("a caption line is 20, not 17", UiTheme.line_height(UiTheme.CAPTION), 20.0)
+	_check("empty text takes no room", UiTheme.text_height("", UiTheme.BODY, 400), 0.0)
+
 	var hud := Hud.new()
 	var panels := Panels.new()
 	root.add_child(hud)
@@ -1743,6 +1770,18 @@ func _ui() -> void:
 	var stations := [{"id": "desk", "label": "The Resolute Desk"}]
 	hud.render(e.state, Chief.morning_briefing(e.state)["text"], stations)
 	_check("the hud renders", hud.get_child_count() > 0, true)
+	# The chief's line gets the room it was promised, so it wraps rather than
+	# eliding after eight words.
+	_check("the chief has two lines",
+		hud._chief.custom_minimum_size.y,
+		UiTheme.line_height(UiTheme.CAPTION) * Hud.CHIEF_LINES)
+
+	# Action points read as pips, so three of something is counted rather
+	# than read. Spent ones are hollow.
+	_check("three of three", hud._ap.text, "●●●")
+	e.state["ap"] = 1
+	hud.render(e.state, "", stations)
+	_check("one of three", hud._ap.text, "●○○")
 
 	var body_text := func() -> String:
 		var found: Array[String] = []
@@ -1766,8 +1805,10 @@ func _ui() -> void:
 		station_text.contains("the things you can do alone"), true)
 	_check("and an action to take",
 		station_text.contains("Sign an executive order"), true)
+	# The cost is its own right-aligned column now rather than parentheses
+	# tacked onto the label.
 	_check("priced in action points and capital",
-		station_text.contains("(1 AP, 6 capital)"), true)
+		station_text.contains("1 AP · 6 capital"), true)
 	panels.close()
 	_check("and it closes", panels.is_open(), false)
 
@@ -1865,7 +1906,7 @@ func _ui() -> void:
 
 	# The ending carries the grade as well as the prose.
 	panels.ending(EndingsData.build_ending(e.state, Rng.new(3), {}))
-	_check("the ending grades the term", body_text.call().contains("Legacy:"), true)
+	_check("the ending grades the term", body_text.call().contains("LEGACY"), true)
 	panels.close()
 
 	root.remove_child(hud)
