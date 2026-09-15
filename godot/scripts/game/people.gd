@@ -13,21 +13,35 @@ static func clamp01(v: float) -> float:
 	return clampf(v, 0.0, 100.0)
 
 
-static func _draw_name(rng: Rng, pool: Array, taken: Dictionary) -> String:
-	var name: String = str(rng.pick(pool))
-	for i in range(30):
-		if not taken.has(name):
-			break
-		name = str(rng.pick(pool))
-	taken[name] = true
-	return name
+## Two secretaries sharing a name reads as a bug. So does a cabinet holding a
+## Yusuf Nakamura, a Yusuf Osei and a Naomi Osei -- matching the full name only
+## is not enough when there are 24 first names and 20 surnames in the pool, so
+## each half has to be unused as well.
+##
+## Both halves are redrawn together, in one shared loop. Drawing each half in
+## its own retry loop looks equivalent and is not: it takes a different number
+## of values off the stream, which puts every later draw in the run -- the rest
+## of the cabinet, the whole family, every month's economic shock -- on
+## different numbers from the TypeScript.
+static func _draw_full_name(rng: Rng, taken: Dictionary) -> Array:
+	var first: String = str(rng.pick(CoreData.FIRST_NAMES))
+	var last: String = str(rng.pick(CoreData.LAST_NAMES))
+	var tries := 0
+	while (taken.has(first) or taken.has(last)) and tries < 60:
+		first = str(rng.pick(CoreData.FIRST_NAMES))
+		last = str(rng.pick(CoreData.LAST_NAMES))
+		tries += 1
+	return [first, last]
 
 
 static func make_secretary(rng: Rng, office: Dictionary, taken: Dictionary, temperament: String = "technocrat") -> Dictionary:
 	var faction: String = rng.pick(CoreData.FACTIONS)["key"]
-	var first: String = _draw_name(rng, CoreData.FIRST_NAMES, taken)
-	var last: String = _draw_name(rng, CoreData.LAST_NAMES, taken)
+	var halves := _draw_full_name(rng, taken)
+	var first: String = halves[0]
+	var last: String = halves[1]
 	var full := first + " " + last
+	taken[first] = true
+	taken[last] = true
 	taken[full] = true
 	var skew := 8.0 if temperament == "rival" else (-10.0 if temperament == "friend" else 0.0)
 	var warmth := 8.0 if temperament == "friend" else (-14.0 if temperament == "rival" else 0.0)
@@ -201,10 +215,24 @@ static func _life_for(age: int, rng: Rng) -> String:
 	return rng.pick(band["lines"])
 
 
+## One pool, one name. The family draws differently from the cabinet: it has
+## no surnames to keep distinct, so a single retry loop over one pool is the
+## faithful shape here -- see _draw_full_name for why the cabinet cannot use
+## this one.
+static func _draw_one_name(rng: Rng, pool: Array, taken: Dictionary) -> String:
+	var name: String = str(rng.pick(pool))
+	var i := 0
+	while taken.has(name) and i < 30:
+		name = str(rng.pick(pool))
+		i += 1
+	taken[name] = true
+	return name
+
+
 static func create_family(rng: Rng, president_age: float) -> Array:
 	var taken := {}
 	var spouse := {
-		"id": "spouse", "kind": "spouse", "name": _draw_name(rng, CoreData.SPOUSE_FIRST, taken),
+		"id": "spouse", "kind": "spouse", "name": _draw_one_name(rng, CoreData.SPOUSE_FIRST, taken),
 		"age": int(president_age) + rng.range_int(-6, 4), "doing": rng.pick(CoreData.SPOUSE_LIVES),
 		"bond": rng.range_int(68, 80), "since": 0,
 	}
@@ -214,7 +242,7 @@ static func create_family(rng: Rng, president_age: float) -> Array:
 	for i in range(2):
 		var age := elder if i == 0 else younger
 		out.append({
-			"id": "child" + str(i + 1), "kind": "child", "name": _draw_name(rng, CoreData.CHILD_FIRST, taken),
+			"id": "child" + str(i + 1), "kind": "child", "name": _draw_one_name(rng, CoreData.CHILD_FIRST, taken),
 			"age": age, "doing": _life_for(age, rng), "bond": rng.range_int(62, 78), "since": 0,
 		})
 	return out
@@ -311,6 +339,13 @@ static func drift_family(s: Dictionary, rng: Rng, notes: Array) -> void:
 			if st["severity"] <= 0.0:
 				notes.append("Things have settled down for " + member["name"] + ".")
 				member.erase("strain")
+				# `st` is still the erased Dictionary. The TypeScript reads
+				# `member.strain?.severity ?? 0` here, which is 0 once the
+				# strain is gone; leaving `st` bound would instead feed a
+				# small negative severity into the bond target below, which
+				# subtracts a negative and quietly *raises* the bond on the
+				# month a difficulty resolves.
+				st = {}
 		var target: float = 80.0 - minf(float(member.get("since", 0)), 9.0) * 3.0 - (float(st.get("severity", 0.0)) if not st.is_empty() else 0.0) * 0.22 - maxf(0.0, float(s["personal"]["stress"]) - 55.0) * 0.28
 		if member["kind"] == "spouse":
 			target -= maxf(0.0, s["politics"]["scandal"] - 20.0) * 0.2

@@ -153,3 +153,43 @@ static func calendar(month: int) -> Dictionary:
 	var year := (month - 1) / 12 + 1
 	var month_name: String = CoreData.MONTH_NAMES[index]
 	return {"year": year, "monthName": month_name, "label": "%s, Year %d" % [month_name, year]}
+
+
+## True on the month a new fiscal year's budget must be signed.
+static func is_budget_month(month: int) -> bool:
+	return (month - 1) % 12 == 0
+
+
+static func annual_revenue(s: Dictionary) -> float:
+	return float(s["nation"]["gdp"]) * float(s["nation"]["taxRate"]) / 100.0
+
+
+## Interest on the debt is not discretionary; it comes off the top.
+static func debt_service(s: Dictionary) -> float:
+	var n: Dictionary = s["nation"]
+	var debt := float(n["debtToGdp"]) / 100.0 * float(n["gdp"])
+	var rate := (0.026
+		+ maxf(0.0, float(n["inflation"]) - 2.0) * 0.004
+		+ maxf(0.0, float(n["debtToGdp"]) - 90.0) * 0.00012)
+	return debt * rate
+
+
+static func total_discretionary(budget: Dictionary) -> float:
+	var sum := 0.0
+	for k in CoreData.BUDGET_KEYS:
+		sum += float(budget[k])
+	return sum
+
+
+## Permanent spending created by laws, outside the annual appropriations.
+static func legislated_spending(s: Dictionary) -> float:
+	return float(s["counters"].get("legislatedSpending", 0.0))
+
+
+## `budget` defaults to what is actually enacted, not what you proposed. The
+## TypeScript writes that as a default parameter reading another argument,
+## which GDScript cannot express, so callers pass an empty Dictionary to mean
+## "the enacted one".
+static func annual_deficit(s: Dictionary, budget: Dictionary = {}) -> float:
+	var b: Dictionary = budget if not budget.is_empty() else s["enacted"]
+	return total_discretionary(b) + legislated_spending(s) + debt_service(s) - annual_revenue(s)

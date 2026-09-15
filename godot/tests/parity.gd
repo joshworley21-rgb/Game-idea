@@ -126,6 +126,91 @@ func _init() -> void:
 	for station in ["desk", "press", "budget", "staff", "floor", "phone", "rest"]:
 		_check(station, ActionsData.actions_for(a, station).size(), want[station])
 
+	print("fiscal: the budget arithmetic on the opening position, seed 9001")
+	var f := StateData.create_initial_state("blue", "", 9001)
+	_check("revenue", _f(StateData.annual_revenue(f)), "4900.000000")
+	_check("debt service", _f(StateData.debt_service(f)), "891.795063")
+	_check("discretionary", _f(StateData.total_discretionary(f["enacted"])), "5789.000000")
+	_check("deficit", _f(StateData.annual_deficit(f)), "1780.795063")
+	_check("approval target", _f(Sim.approval_target(f)), "50.808796")
+	_check("potential growth", _f(Sim.potential_growth(f)), "1.933208")
+
+	print("sim: two years of the country, hashed month by month")
+	# The month tick is where every ported module finally has to agree at once:
+	# the economy feeds the blocs, the blocs feed approval, approval feeds
+	# stress, stress feeds the family, and the family feeds back into stress
+	# next month. A single transposed coefficient anywhere in that loop is
+	# invisible for a month or two and then compounds, which is exactly the
+	# failure a one-month check does not catch -- so this runs twenty-four.
+	#
+	# It also pins the draw order across modules. simulate_month takes three
+	# draws for the economic shock and then however many drift_family needs,
+	# and drift_family's count depends on how many family members are already
+	# under strain. Get the shock draws wrong and the family diverges; get the
+	# family wrong and every later month's shock does.
+	var rng2 := Rng.new(9001)
+	var st2 := StateData.create_initial_state("blue", "", 9001)
+	st2["cabinet"] = People.create_cabinet(rng2)
+	st2["family"] = People.create_family(rng2, float(st2["personal"]["age"]))
+	var ctx := Sim.create_sim_context(rng2, 1)
+	_check("cycle phase", _f(ctx["cyclePhase"]), "5.255719")
+
+	var months: Array[String] = []
+	for m in range(1, 25):
+		var report: Dictionary = Sim.simulate_month(st2, ctx, rng2, m % 3)
+		var nums: Array[String] = []
+		_walk(st2, "", nums)
+		months.append("|".join([
+			"m%d" % m,
+			"n%d" % nums.size(),
+			"d%.6f" % float(report["deficit"]),
+			"r%.6f" % float(report["revenue"]),
+			"x%d" % (report["deltas"] as Array).size(),
+			"t%d" % (report["notes"] as Array).size(),
+			str(_fnv1a(";".join(nums))),
+		]))
+		st2["month"] = int(st2["month"]) + 1
+	_check("twenty-four month digest", _fnv1a("\n".join(months)), 1764891405)
+
+	var tail: Array[String] = []
+	_walk(st2, "", tail)
+	_check("final numbers", tail.size(), 111)
+	_check("final digest", _fnv1a(";".join(tail)), 1603674458)
+	# Named as well as hashed, so a failure says something about the country
+	# rather than only that it differs.
+	_check("final approval", _f(st2["politics"]["approval"]), "52.499586")
+	_check("final unrest", _f(st2["nation"]["unrest"]), "26.299752")
+	_check("final debt/GDP", _f(st2["nation"]["debtToGdp"]), "107.180516")
+	_check("final marriage", _f(st2["personal"]["marriage"]), "47.026654")
+
+	print("family: the month a difficulty resolves")
+	# A narrow case the twenty-four month run never reaches, because a strain
+	# only shrinks when you have been attending to the person and it takes
+	# several visits to push severity under zero.
+	#
+	# It is here because the bond target reads `member.strain?.severity ?? 0`,
+	# and the obvious GDScript for that -- binding the strain Dictionary once
+	# at the top of the loop -- keeps reading the *erased* strain's severity,
+	# which is now negative. Subtracting a negative raises the bond, so the
+	# month a difficulty resolves would quietly pay a bonus the TypeScript
+	# never gives. Nothing about that looks wrong in a log.
+	var fs := StateData.create_initial_state("blue", "", 4242)
+	var frng := Rng.new(4242)
+	fs["family"] = People.create_family(frng, float(fs["personal"]["age"]))
+	var sp: Dictionary = fs["family"][0]
+	sp["strain"] = {"id": "spouse-alone", "label": "eating alone", "detail": "x",
+		"severity": 1.0, "months": 3}
+	sp["since"] = 0
+	sp["bond"] = 55.0
+	fs["personal"]["stress"] = 60.0
+	fs["politics"]["scandal"] = 10.0
+	var fnotes: Array[String] = []
+	People.drift_family(fs, frng, fnotes)
+	_check("bond the month it settles", _f(sp["bond"]), "59.532000")
+	_check("strain cleared", not sp.has("strain"), true)
+	_check("marriage follows the spouse", _f(fs["personal"]["marriage"]), "59.532000")
+	_check("note", ";".join(fnotes), "Things have settled down for Samuel.")
+
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
