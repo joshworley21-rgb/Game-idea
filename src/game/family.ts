@@ -12,18 +12,18 @@ import type { FamilyMember, GameState, Strain } from "./types.ts";
  * readout, not the model.
  */
 
-const SPOUSE_FIRST = [
+export const SPOUSE_FIRST = [
   "Elena", "Marcus", "Nadia", "David", "Priya", "Jonah", "Claire", "Samuel",
   "Rosa", "Michael", "Ines", "Adam", "Leah", "Nicholas",
 ];
 
-const CHILD_FIRST = [
+export const CHILD_FIRST = [
   "Maya", "Theo", "Aisha", "Danny", "Nora", "Elliot", "Sofia", "Caleb",
   "Ruth", "Jonah", "Cleo", "Isaac", "Mara", "Owen", "Nell", "Felix",
 ];
 
 /** What a spouse gave up, or put on hold, to stand behind you on a stage. */
-const SPOUSE_LIVES = [
+export const SPOUSE_LIVES = [
   "a paediatric surgery practice, now down to one clinic a month",
   "a law school deanship, deferred until the term is over",
   "a novel that has been three chapters from finished for two years",
@@ -33,7 +33,7 @@ const SPOUSE_LIVES = [
 ];
 
 /** What a child is doing with their life, by stage. */
-const CHILD_LIVES: { min: number; max: number; lines: string[] }[] = [
+export const CHILD_LIVES: { min: number; max: number; lines: string[] }[] = [
   {
     min: 7,
     max: 12,
@@ -77,7 +77,7 @@ const CHILD_LIVES: { min: number; max: number; lines: string[] }[] = [
 ];
 
 /** The difficulties a family carries while you are working. */
-interface StrainDef {
+export interface StrainDef {
   id: string;
   kind: "spouse" | "child";
   label: string;
@@ -88,7 +88,7 @@ interface StrainDef {
   weight: number;
 }
 
-const STRAINS: StrainDef[] = [
+export const STRAINS: StrainDef[] = [
   {
     id: "spouse-erasure",
     kind: "spouse",

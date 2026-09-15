@@ -17,7 +17,8 @@
     "assets": "node scripts/fetch-assets.mjs",
     "postinstall": "node scripts/godot-ignore.mjs",
     "godot:test": "${GODOT:-godot4} --headless --path . --import >/dev/null && ${GODOT:-godot4} --headless --path . --script godot/tests/parity.gd",
-    "godot:content": "node --experimental-strip-types --no-warnings scripts/export-content.mjs"
+    "godot:content": "node --experimental-strip-types --no-warnings scripts/export-content.mjs",
+    "cast": "node --experimental-strip-types --no-warnings scripts/export-cast.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

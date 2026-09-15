@@ -34,12 +34,36 @@ static func _member_of_kind(s: Dictionary, kind: String) -> Dictionary:
 	return {}
 
 
+## A beat's speaker field, which the TypeScript types as `string | Speaker`,
+## as a speaker.
+##
+## The bare string is the older shape and five beats still use it — "The
+## room", "The chamber" — for the moments where nobody in particular is
+## talking. In the web build the special case lives in the view, in
+## speakerBlock, so resolveSpeaker never sees a string. That did not survive
+## the port: this function took a typed Dictionary and the panel handed it
+## whatever the beat carried, so a String threw — and a GDScript runtime
+## error unwinds the panel's build callable without raising. The first
+## cabinet meeting reached its fourth beat in month one and drew an empty box
+## with no way out of it.
+##
+## It is handled here rather than in Panels so that both engines have one
+## answer to what a bare string means.
+static func _as_speaker(speaker: Variant) -> Dictionary:
+	if speaker is Dictionary:
+		return speaker
+	if speaker is String:
+		return {"role": "room", "name": speaker}
+	return {}
+
+
 ## Turns a speaker into the person they actually are right now.
 ##
 ## Returns {name, title, seed, age, dress, mood, isPerson}. `age` is -1 for
 ## anyone the simulation does not track an age for; the TypeScript leaves the
 ## field off, which a Dictionary cannot do without the caller having to check.
-static func resolve(speaker: Dictionary, s: Dictionary) -> Dictionary:
+static func resolve(raw: Variant, s: Dictionary) -> Dictionary:
+	var speaker := _as_speaker(raw)
 	var role := str(speaker.get("role", "narrator"))
 	var mood := str(speaker.get("mood", "neutral"))
 

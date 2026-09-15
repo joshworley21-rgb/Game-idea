@@ -78,11 +78,36 @@ function secretaryFor(s: GameState, role: SpeakerRole): Secretary | undefined {
 }
 
 /**
+ * A beat's speaker field, which `Beat` types as `string | Speaker`, as a
+ * Speaker.
+ *
+ * The bare string is the older shape and five beats still use it — "The
+ * room", "The chamber" — for the moments where nobody in particular is
+ * talking. `speakerBlock` catches that case before it ever gets here, so the
+ * web build is fine, but that leaves this function partial for a type it
+ * accepts: a string has no `.role` and no `.name`, and anything calling it
+ * without the UI's guard gets a person called `undefined`.
+ *
+ * The Godot port is what found it. Its resolve() takes a typed Dictionary,
+ * because the special case lived in the view here and did not survive the
+ * translation, so a string threw — and a GDScript runtime error unwinds the
+ * panel's build callable without raising. The first cabinet meeting reached
+ * its fourth beat in month one and drew an empty box with no way out of it.
+ * Handling it in the resolver rather than the view means there is one answer
+ * to what a bare string means, in both engines.
+ */
+function asSpeaker(speaker: string | Speaker): Speaker {
+  if (typeof speaker !== "string") return speaker;
+  return { role: "room", name: speaker };
+}
+
+/**
  * Turns a speaker into the person they actually are right now. A cabinet
  * speaker follows whoever holds the office, so a reshuffle changes who is
  * sitting across the table without rewriting the conversation.
  */
-export function resolveSpeaker(speaker: Speaker, s: GameState): ResolvedSpeaker {
+export function resolveSpeaker(raw: string | Speaker, s: GameState): ResolvedSpeaker {
+  const speaker = asSpeaker(raw);
   const mood = speaker.mood ?? "neutral";
 
   const secretary = secretaryFor(s, speaker.role);

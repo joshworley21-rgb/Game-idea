@@ -27,12 +27,12 @@ export const OFFICES = [
   { key: "health", title: "Health Secretary", domain: "health" },
 ] as const;
 
-const FIRST = [
+export const FIRST = [
   "Margaret", "Daniel", "Ruth", "Marcus", "Eleanor", "Priya", "Thomas", "Grace",
   "Andre", "Helen", "Victor", "Naomi", "Charles", "Rosa", "Edward", "Fiona",
   "Malcolm", "Diane", "Samuel", "Yusuf", "Claire", "Nathan", "Imani", "Walter",
 ];
-const LAST = [
+export const LAST = [
   "Halloran", "Nakamura", "Beaumont", "Osei", "Lindqvist", "Marchetti", "Whitfield",
   "Okonkwo", "Petrov", "Calderon", "Ashworth", "Dubois", "Ferreira", "Kowalski",
   "Sandoval", "Brennan", "Vasquez", "Ellery", "Rasmussen", "Tanaka",

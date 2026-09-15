@@ -1635,6 +1635,24 @@ func _speaker() -> void:
 	_check("a mood on the beat wins", Speaker.resolve(
 		{"role": "press", "name": "N", "title": "T", "mood": "hostile"}, s)["mood"], "hostile")
 
+	# A beat's speaker is `string | Speaker` and five beats still use the
+	# string — "The room", "The chamber", for the moments where nobody in
+	# particular is talking. Nothing handled it. resolve() took a typed
+	# Dictionary, so a String threw, and a GDScript runtime error unwinds the
+	# panel's build callable without raising: the meeting drew an empty box
+	# with no way out of it. It is in the first cabinet meeting, in month one.
+	var room := Speaker.resolve("The room", s)
+	_check("a bare string is the room talking", line.call(room),
+		"The room||The room|-1|suit|neutral|false")
+	_check("and nothing else is", Speaker.resolve(42, s)["name"], "")
+	# Every beat in the catalogue resolves, whichever shape it was written in.
+	for conv in ConversationsTable.CONVERSATIONS:
+		for beat_id in (conv["beats"] as Dictionary):
+			var b: Dictionary = conv["beats"][beat_id]
+			var r := Speaker.resolve(b.get("speaker", {}), s)
+			_check("%s/%s has somebody talking" % [conv["id"], beat_id],
+				str(r["name"]).is_empty(), false)
+
 	# With nobody in the job, every role falls back to the written name — and
 	# to "suit", because the dress rule only knows about the press.
 	var bare := StateData.create_initial_state("blue", "", 606)
@@ -2053,6 +2071,30 @@ func _portraits() -> void:
 		_check("of the person talking", face.seed_text, str(who["seed"]))
 		_check("in the mood of the beat", face.mood, str(who["mood"]))
 		_check("big enough to read", face.custom_minimum_size.x >= 64.0, true)
+	panels.close()
+
+	# The room itself gets no face — inventing one would put a spokesman on a
+	# beat whose whole point is that nobody in particular is speaking — but it
+	# still has to render. It did not: the beat threw on the way in and the
+	# panel came up empty, with no button to leave by.
+	var first_cabinet := ConversationsData.by_id("first-cabinet")
+	var room_beat: Dictionary = (first_cabinet["beats"] as Dictionary)["direction"]
+	_check("a beat written as a bare string exists",
+		room_beat["speaker"] is String, true)
+	panels.meeting_beat(e.state, first_cabinet, room_beat, [], false)
+	var controls := 0
+	var portraits := 0
+	stack = [panels]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is Portrait:
+			portraits += 1
+		elif n is Label or n is Button:
+			controls += 1
+		for c in n.get_children():
+			stack.append(c)
+	_check("the room still renders", controls > 4, true)
+	_check("and is given no face", portraits, 0)
 	panels.close()
 	root.remove_child(panels)
 	root.remove_child(e)

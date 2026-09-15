@@ -237,23 +237,25 @@ func _cost(_state: Dictionary, spec: Dictionary, cooldown: int) -> String:
 ##
 ## The speaker is resolved against the state rather than printed from the
 ## beat, so a meeting written once still names whoever holds the office now.
-## There is no portrait yet — the web build draws one procedurally and that is
-## 300 lines of canvas work — so the name, the office and how they are holding
-## themselves carry it.
+## The face comes first: a portrait is the fastest thing on the panel to read
+## and the mood is drawn into it, so you know how this is going before you
+## have read a word. The room itself has no face, and gets the name alone.
 func meeting_beat(state: Dictionary, conv: Dictionary, beat: Dictionary,
 		path: Array, first: bool) -> void:
 	show_panel(func(body: VBoxContainer):
 		var who := Speaker.resolve(beat.get("speaker", {}), state)
-		# The face, and who it belongs to, on one line. A portrait is the
-		# fastest thing on the panel to read and the mood is drawn into it,
-		# so you know how this is going before you have read a word.
+		# The face, and who it belongs to, on one line.
 		var head := HBoxContainer.new()
 		head.add_theme_constant_override("separation", UiTheme.MD)
 		body.add_child(head)
-		var face := Portrait.new(str(who["seed"]), str(who["mood"]),
-			int(who["age"]), str(who["dress"]))
-		face.custom_minimum_size = Vector2(PORTRAIT_PX, PORTRAIT_PX)
-		head.add_child(face)
+		# "The room" and "The chamber" are not people and are not given a
+		# face. Drawing one would invent a spokesman for a beat whose whole
+		# point is that nobody in particular is speaking.
+		if bool(who.get("isPerson", true)):
+			var face := Portrait.new(str(who["seed"]), str(who["mood"]),
+				int(who["age"]), str(who["dress"]))
+			face.custom_minimum_size = Vector2(PORTRAIT_PX, PORTRAIT_PX)
+			head.add_child(face)
 		var names := VBoxContainer.new()
 		names.add_theme_constant_override("separation", 2)
 		names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
