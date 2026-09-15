@@ -70,6 +70,28 @@ func _fnv1a(text: String) -> int:
 
 
 func _init() -> void:
+	_rng()
+	_state()
+	_blocs()
+	_actions()
+	_fiscal()
+	_sim()
+	_family()
+	_news()
+	_news_distressed()
+	_month_flow()
+	_endings()
+	print("")
+	if _failures == 0:
+		print("parity: all checks passed")
+		quit(0)
+	else:
+		printerr("parity: %d check(s) failed" % _failures)
+		quit(1)
+
+
+
+func _rng() -> void:
 	print("rng: mulberry32 sequence from seed 12345")
 	var rng := Rng.new(12345)
 	var golden := [
@@ -78,6 +100,8 @@ func _init() -> void:
 	for i in golden.size():
 		_check("draw %d" % i, _f(rng.next()), golden[i])
 
+
+func _state() -> void:
 	print("state: every number in the opening position, hashed")
 	# A digest, not a handful of fields.
 	#
@@ -96,6 +120,8 @@ func _init() -> void:
 		_check("%s/%d digest" % [case["party"], case["seed"]],
 			_fnv1a(";".join(numbers)), case["digest"])
 
+
+func _blocs() -> void:
 	print("blocs: ten months of drift against a worsening economy")
 	# The blocs are where the economy becomes politics: each of the eight wants
 	# something different, and approval is their weighted sum. The eight target
@@ -120,12 +146,16 @@ func _init() -> void:
 	lines.append(",".join(weak))
 	_check("ten-month drift digest", _fnv1a(";".join(lines)), 304653099)
 
+
+func _actions() -> void:
 	print("actions: how many each station offers in month 1, seed 4242")
 	var a := StateData.create_initial_state("blue", "", 4242)
 	var want := {"desk": 3, "press": 2, "budget": 0, "staff": 2, "floor": 1, "phone": 3, "rest": 5}
 	for station in ["desk", "press", "budget", "staff", "floor", "phone", "rest"]:
 		_check(station, ActionsData.actions_for(a, station).size(), want[station])
 
+
+func _fiscal() -> void:
 	print("fiscal: the budget arithmetic on the opening position, seed 9001")
 	var f := StateData.create_initial_state("blue", "", 9001)
 	_check("revenue", _f(StateData.annual_revenue(f)), "4900.000000")
@@ -135,6 +165,8 @@ func _init() -> void:
 	_check("approval target", _f(Sim.approval_target(f)), "50.808796")
 	_check("potential growth", _f(Sim.potential_growth(f)), "1.933208")
 
+
+func _sim() -> void:
 	print("sim: two years of the country, hashed month by month")
 	# The month tick is where every ported module finally has to agree at once:
 	# the economy feeds the blocs, the blocs feed approval, approval feeds
@@ -183,6 +215,8 @@ func _init() -> void:
 	_check("final debt/GDP", _f(st2["nation"]["debtToGdp"]), "107.180516")
 	_check("final marriage", _f(st2["personal"]["marriage"]), "47.026654")
 
+
+func _family() -> void:
 	print("family: the month a difficulty resolves")
 	# A narrow case the twenty-four month run never reaches, because a strain
 	# only shrinks when you have been attending to the person and it takes
@@ -211,6 +245,8 @@ func _init() -> void:
 	_check("marriage follows the spouse", _f(fs["personal"]["marriage"]), "59.532000")
 	_check("note", ";".join(fnotes), "Things have settled down for Samuel.")
 
+
+func _news() -> void:
 	print("news: the headlines a term actually prints")
 	# Run alongside the same twenty-four months, because generate_news draws
 	# from the shared stream: get the headline count wrong in one month and
@@ -236,6 +272,8 @@ func _init() -> void:
 		nrows.append("%d|%s|%s|%s" % [int(n["month"]), n["tone"], n["source"], n["headline"]])
 	_check("news digest", _fnv1a("\n".join(nrows)), 3541467704)
 
+
+func _news_distressed() -> void:
 	print("news: a country in trouble, where the numbers get printed")
 	# The calm run never fills a placeholder, so it never tests the
 	# formatting. This one does, and one of its numbers -- unemployment at
@@ -267,6 +305,8 @@ func _init() -> void:
 	_check("distressed digest", _fnv1a("\n".join(drows)), 506102734)
 	_check("the 7.25 tie", drows[3].ends_with("7.3%; manufacturing towns hit hardest"), true)
 
+
+func _month_flow() -> void:
 	print("month flow: the things a month does outside the economy")
 	# Five paths that only fire under conditions a normal run reaches rarely,
 	# so each is set up deliberately rather than waited for. The rng seeds are
@@ -387,10 +427,176 @@ func _init() -> void:
 		"The physical found something: atrial fibrillation.")
 	_check("physical text", _fnv1a(str(pev["text"])), 2735608622)
 
-	print("")
-	if _failures == 0:
-		print("parity: all checks passed")
-		quit(0)
-	else:
-		printerr("parity: %d check(s) failed" % _failures)
-		quit(1)
+
+func _endings() -> void:
+	print("endings: what the term was worth, and how it closed")
+	# The legacy score and the margin, measured on a lived-in state rather
+	# than the opening position: twenty-four months of the same seed 9001 run
+	# the sim section uses.
+	var es := StateData.create_initial_state("blue", "", 9001)
+	var erng := Rng.new(9001)
+	es["cabinet"] = People.create_cabinet(erng)
+	es["family"] = People.create_family(erng, float(es["personal"]["age"]))
+	var ectx := Sim.create_sim_context(erng, 1)
+	for m in range(1, 25):
+		Sim.simulate_month(es, ectx, erng, m % 3)
+		es["month"] = int(es["month"]) + 1
+	var lg := EndingsData.score_legacy(es)
+	var lg_parts: Array[String] = []
+	for k in ["economy", "society", "standing", "politics", "personal", "total"]:
+		lg_parts.append("%s=%s" % [k, _f(lg[k])])
+	_check("legacy breakdown", " ".join(lg_parts),
+		"economy=54.523232 society=52.041286 standing=54.574699"
+		+ " politics=41.696525 personal=52.303780 total=51.227491")
+	_check("grade", EndingsData.grade_for(float(lg["total"])), "C")
+	_check("election margin", _f(EndingsData.election_margin(es)), "11.477600")
+	var dec: Array[String] = []
+	for row in EndingsData.decisive_blocs(es):
+		dec.append("%s:%s" % [row["name"], _f(row["support"])])
+	_check("who decided it", " ".join(dec),
+		"Labour:68.056179 Traditionalists:36.009750 Young:56.061877")
+	_check("no fail state", EndingsData.check_fail_state(es).is_empty(), true)
+	_check("term not over at 25", EndingsData.is_term_over(es), false)
+
+	# Grade boundaries, on the boundary and just under it.
+	for pair in [[88.0, "A+"], [80.0, "A"], [72.0, "B+"], [64.0, "B"], [56.0, "C+"],
+			[48.0, "C"], [40.0, "D"], [0.0, "F"], [87.9999, "A"], [39.9999, "F"]]:
+		_check("grade %s" % str(pair[0]), EndingsData.grade_for(pair[0]), pair[1])
+
+	# The danger streak resets the moment the country stops being on fire.
+	var ds := StateData.create_initial_state("blue", "", 1)
+	ds["politics"]["approval"] = 20.0
+	ds["nation"]["unrest"] = 80.0
+	EndingsData.update_danger_streak(ds)
+	EndingsData.update_danger_streak(ds)
+	_check("streak after two bad months", int(ds["dangerStreak"]), 2)
+	ds["nation"]["unrest"] = 10.0
+	EndingsData.update_danger_streak(ds)
+	_check("streak after a good one", int(ds["dangerStreak"]), 0)
+
+	# The three ways a term ends early.
+	var fails := [
+		["health", {"personal.health": 5.0}, "health", 30, 1647706808],
+		["impeachment", {"politics.scandal": 90.0, "personal.integrity": 20.0},
+			"impeachment", 30, 1028836189],
+		["collapse", {"dangerStreak": 4}, "collapse", 33, 3016900912],
+	]
+	for row in fails:
+		var x := StateData.create_initial_state("blue", "", 9001)
+		x["family"] = People.create_family(Rng.new(9001), 55.0)
+		for path in (row[1] as Dictionary):
+			if path == "dangerStreak":
+				x["dangerStreak"] = row[1][path]
+			else:
+				var bits: PackedStringArray = str(path).split(".")
+				x[bits[0]][bits[1]] = row[1][path]
+		var fail := EndingsData.check_fail_state(x)
+		var e := EndingsData.build_ending(x, Rng.new(5), fail)
+		_check("%s id" % row[0], e["id"], row[2])
+		_check("%s legacy" % row[0], int(e["legacy"]), row[3])
+		_check("%s grade" % row[0], e["grade"], "F")
+		_check("%s reelected" % row[0], e["reelected"], false)
+		_check("%s blurb" % row[0], _fnv1a(str(e["blurb"])), row[4])
+
+	# And the three ways a full term ends.
+	var finishes := [
+		["reelected", "won", "reelected", "Four More Years", 56, 2917928044],
+		["defeated", "lost", "single-term", "A Single Term", 52, 1571371688],
+		["stood down", "none", "single-term", "One Term, By Choice", 55, 2145684193],
+	]
+	for row in finishes:
+		var x := StateData.create_initial_state("blue", "", 9001)
+		x["family"] = People.create_family(Rng.new(9001), 55.0)
+		x["personal"]["marriage"] = 72.0
+		x["personal"]["family"] = 76.0
+		x["personal"]["health"] = 66.0
+		if row[1] == "won":
+			x["politics"]["approval"] = 68.0
+			for k in (x["blocs"] as Dictionary):
+				x["blocs"][k] = 68.0
+		elif row[1] == "lost":
+			x["politics"]["approval"] = 32.0
+			for k in (x["blocs"] as Dictionary):
+				x["blocs"][k] = 40.0
+		else:
+			x["runningForReelection"] = false
+		var e := EndingsData.build_ending(x, Rng.new(11), {})
+		_check("%s id" % row[0], e["id"], row[2])
+		_check("%s title" % row[0], e["title"], row[3])
+		_check("%s legacy" % row[0], int(e["legacy"]), row[4])
+		_check("%s grade" % row[0], e["grade"], "C")
+		_check("%s blurb" % row[0], _fnv1a(str(e["blurb"])), row[5])
+	# Standing down is not the same as losing: reelected is null, not false,
+	# so the ending screen can say "by choice" rather than "defeated".
+	var sd := StateData.create_initial_state("blue", "", 9001)
+	sd["family"] = People.create_family(Rng.new(9001), 55.0)
+	sd["runningForReelection"] = false
+	_check("stood down reelected is null",
+		EndingsData.build_ending(sd, Rng.new(11), {})["reelected"] == null, true)
+
+	# Ties, which decide more of these orderings than they look like they
+	# should: a bloc nobody has touched sits at exactly 50, so an all-tied
+	# board is the ordinary opening position, not a contrived one.
+	#
+	# The TypeScript leans on Array.sort being stable, which it has been
+	# required to be since ES2019. sort_custom is documented as unstable, so
+	# both comparators fall back to the declaration index. Removing that
+	# fallback does not currently fail these checks -- Godot 4.3 sorts eight
+	# elements with an insertion sort that happens to preserve order -- so
+	# the tiebreak is defensive rather than a fix for a live bug. It stays
+	# because "happens to" is doing the work otherwise, and it stops being
+	# true if the list grows or the engine changes its sort. These checks
+	# pin the order either way.
+	var tie := StateData.create_initial_state("blue", "", 1)
+	for k in (tie["blocs"] as Dictionary):
+		tie["blocs"][k] = 50.0
+	var tie_names: Array[String] = []
+	for row in EndingsData.decisive_blocs(tie):
+		tie_names.append(str(row["name"]))
+	_check("decisive, all tied", " ".join(tie_names), "Labour Business Seniors")
+	var weak_names: Array[String] = []
+	for def in BlocsData.weakest_blocs(tie, 3):
+		weak_names.append(str(def["short"]))
+	_check("weakest, all tied", " ".join(weak_names), "Labour Business Seniors")
+
+	# A partial tie: two blocs equally far above the middle, two equally far
+	# below, and four sitting on it.
+	var part := StateData.create_initial_state("blue", "", 1)
+	for k in (part["blocs"] as Dictionary):
+		part["blocs"][k] = 50.0
+	part["blocs"]["suburban"] = 62.0
+	part["blocs"]["business"] = 62.0
+	part["blocs"]["activists"] = 38.0
+	part["blocs"]["young"] = 38.0
+	var part_names: Array[String] = []
+	for row in EndingsData.decisive_blocs(part):
+		part_names.append("%s:%d" % [row["name"], int(row["support"])])
+	_check("decisive, partly tied", " ".join(part_names),
+		"Business:62 Young:38 Suburban:62")
+	var part_weak: Array[String] = []
+	for def in BlocsData.weakest_blocs(part, 4):
+		part_weak.append(str(def["short"]))
+	_check("weakest, partly tied", " ".join(part_weak),
+		"Young Activists Labour Seniors")
+
+	# Every branch of the closing paragraph about the family, by name. The
+	# coda is the last thing the player reads, so each of the six is pinned.
+	var codas := [
+		["both gone", 20.0, 25.0, 5.0, "", 2496496697],
+		["separation", 28.0, 60.0, 5.0, "", 404532644],
+		["children", 60.0, 25.0, 5.0, "", 1790932302],
+		["health", 60.0, 60.0, 30.0, "atrial fibrillation", 3200155895],
+		["all three", 80.0, 80.0, 70.0, "", 2894474750],
+		["tired", 60.0, 60.0, 60.0, "", 911213444],
+	]
+	for row in codas:
+		var x := StateData.create_initial_state("blue", "", 9001)
+		x["family"] = People.create_family(Rng.new(9001), 55.0)
+		x["personal"]["marriage"] = row[1]
+		x["personal"]["family"] = row[2]
+		x["personal"]["health"] = row[3]
+		if not str(row[4]).is_empty():
+			x["personal"]["condition"] = row[4]
+		var e := EndingsData.build_ending(x, Rng.new(1),
+			{"id": "x", "title": "x", "blurb": "B"})
+		_check("coda: %s" % row[0], _fnv1a(str(e["blurb"]).substr(3)), row[5])

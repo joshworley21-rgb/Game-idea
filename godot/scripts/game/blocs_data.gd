@@ -125,8 +125,24 @@ static func drift_blocs(s: Dictionary) -> void:
 
 
 ## Who has left you, for the coalition board and the endings.
+##
+## Ties keep the order CoreData.BLOCS declares them in. JavaScript's sort has
+## been required to be stable since ES2019 and the TypeScript relies on it;
+## sort_custom is documented as unstable, so the declaration index is the
+## tiebreak. Godot 4.3 happens to agree without it -- eight elements go
+## through an insertion sort -- so this is defensive, not a fix. Two blocs
+## sitting on exactly 50 is not a hypothetical: it is where a bloc that has
+## never been touched sits.
 static func weakest_blocs(s: Dictionary, count: int = 3) -> Array:
-	var sorted: Array = CoreData.BLOCS.duplicate()
-	sorted.sort_custom(func(a, b):
-		return float(s["blocs"].get(a["key"], 50.0)) < float(s["blocs"].get(b["key"], 50.0)))
-	return sorted.slice(0, count)
+	var rows: Array = []
+	for i in CoreData.BLOCS.size():
+		rows.append({"i": i, "def": CoreData.BLOCS[i],
+			"v": float(s["blocs"].get(CoreData.BLOCS[i]["key"], 50.0))})
+	rows.sort_custom(func(a, b):
+		if a["v"] == b["v"]:
+			return int(a["i"]) < int(b["i"])
+		return float(a["v"]) < float(b["v"]))
+	var out: Array = []
+	for r in rows.slice(0, count):
+		out.append(r["def"])
+	return out
