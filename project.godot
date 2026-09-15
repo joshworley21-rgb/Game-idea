@@ -23,6 +23,20 @@ config/icon="res://godot/assets/icon.svg"
 window/size/viewport_width=1280
 window/size/viewport_height=720
 
+; Without a stretch mode Godot lays the interface out in real device pixels,
+; so the same overlay that reads on a 1280x720 desktop window is a third of
+; the size on a 2340x1080 phone — which is what the shipping target is. This
+; keeps the layout at 720 high whatever the screen is, and lets the width
+; grow with the aspect ratio rather than letterboxing a phone.
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+; The rooms are wide and the dock runs along the bottom, so landscape. That
+; is 0 in Godot's enum and not 1 — 1 is portrait, which is what this said
+; first, and the only thing that caught it was reading the orientation back
+; out of the built APK.
+window/handheld/orientation=0
+
 [rendering]
 
 ; Forward+ on the desktop, Mobile on Android. Forward+ needs Vulkan and is a
