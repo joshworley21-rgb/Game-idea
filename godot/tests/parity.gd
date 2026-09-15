@@ -211,6 +211,62 @@ func _init() -> void:
 	_check("marriage follows the spouse", _f(fs["personal"]["marriage"]), "59.532000")
 	_check("note", ";".join(fnotes), "Things have settled down for Samuel.")
 
+	print("news: the headlines a term actually prints")
+	# Run alongside the same twenty-four months, because generate_news draws
+	# from the shared stream: get the headline count wrong in one month and
+	# every later month of the simulation is on different numbers.
+	var nrng := Rng.new(9001)
+	var ns := StateData.create_initial_state("blue", "", 9001)
+	ns["cabinet"] = People.create_cabinet(nrng)
+	ns["family"] = People.create_family(nrng, float(ns["personal"]["age"]))
+	var nctx := Sim.create_sim_context(nrng, 1)
+	NewsData.push_news(ns, NewsData.generate_news(ns, nrng))
+	for m in range(1, 25):
+		Sim.simulate_month(ns, nctx, nrng, m % 3)
+		ns["month"] = int(ns["month"]) + 1
+		NewsData.push_news(ns, NewsData.generate_news(ns, nrng))
+	# Four, not forty-eight: the dedupe window is the last four headlines and
+	# a settled country only matches the four-line "quiet week" template, so
+	# most months genuinely print nothing new. That is the TypeScript's
+	# behaviour, and pinning the count is what would catch a port that
+	# accidentally made it generous.
+	_check("headlines kept", (ns["news"] as Array).size(), 4)
+	var nrows: Array[String] = []
+	for n in (ns["news"] as Array):
+		nrows.append("%d|%s|%s|%s" % [int(n["month"]), n["tone"], n["source"], n["headline"]])
+	_check("news digest", _fnv1a("\n".join(nrows)), 3541467704)
+
+	print("news: a country in trouble, where the numbers get printed")
+	# The calm run never fills a placeholder, so it never tests the
+	# formatting. This one does, and one of its numbers -- unemployment at
+	# exactly 7.25 -- is the tie where JavaScript's toFixed rounds up to
+	# "7.3" and C's printf rounds to even and gives "7.2". A plain
+	# "%.1f" prints the wrong headline here.
+	var ds := StateData.create_initial_state("blue", "", 55)
+	ds["politics"]["approval"] = 31.5
+	ds["politics"]["scandal"] = 62.0
+	ds["nation"]["unemployment"] = 7.25
+	ds["nation"]["inflation"] = 5.5
+	ds["nation"]["growth"] = -1.5
+	ds["nation"]["unrest"] = 71.0
+	ds["nation"]["debtToGdp"] = 141.5
+	ds["nation"]["standing"] = 28.0
+	ds["nation"]["sectors"]["healthcare"] = 25.0
+	ds["nation"]["sectors"]["infrastructure"] = 22.0
+	ds["personal"]["marriage"] = 21.0
+	ds["personal"]["health"] = 33.0
+	var drng := Rng.new(55)
+	var drows: Array[String] = []
+	for m in range(1, 7):
+		ds["month"] = m
+		var items := NewsData.generate_news(ds, drng)
+		NewsData.push_news(ds, items)
+		for n in items:
+			drows.append("%d|%s|%s|%s" % [int(n["month"]), n["tone"], n["source"], n["headline"]])
+	_check("distressed rows", drows.size(), 12)
+	_check("distressed digest", _fnv1a("\n".join(drows)), 506102734)
+	_check("the 7.25 tie", drows[3].ends_with("7.3%; manufacturing towns hit hardest"), true)
+
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
