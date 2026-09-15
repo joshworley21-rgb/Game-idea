@@ -21,6 +21,22 @@ assets-src/
 # fetches it and CI re-fetches it with FORCE_ASSETS on every build. It has
 # never been committed and at ~12 MB it should not start now.
 public/models/OvalOffice.glb
+# ...and the import marker Godot writes beside it. The model is not in the
+# repo, so a committed .import would point at a file a fresh clone does not
+# have until `npm run assets` fetches it.
+public/models/OvalOffice.glb.import
 
 # Godot 4 editor cache (machine-specific, must not be committed)
 .godot/
+
+# Godot extracts the textures embedded in each .glb as loose files beside it on
+# import — 221 of them for this model set. They are regenerated from the .glb
+# on any machine that opens the project, so they are build output, not source.
+# The .glb.import files next to them ARE committed: they carry the import
+# settings and the stable UID the scenes reference.
+public/models/*.webp
+public/models/*.webp.import
+public/models/*.png
+public/models/*.png.import
+public/models/*.jpg
+public/models/*.jpg.import

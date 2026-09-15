@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://dhe7tv2w0qpml"
-valid=false
+path="res://.godot/imported/ClassicConsole_01.glb-d62f07ba296c7937c70790fac173a632.scn"
 
 [deps]
 
 source_file="res://public/models/ClassicConsole_01.glb"
+dest_files=["res://.godot/imported/ClassicConsole_01.glb-d62f07ba296c7937c70790fac173a632.scn"]
 
 [params]
 
@@ -17,7 +18,6 @@ nodes/root_name=""
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
-nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
 meshes/create_shadow_meshes=true

@@ -18,3 +18,13 @@ run/main_scene="res://godot/scenes/main.tscn"
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+
+[rendering]
+
+; Forward+ on the desktop, Mobile on Android. Forward+ needs Vulkan and is a
+; gamble on a mid-range phone; the Mobile renderer drops SDFGI, SSAO, SSIL and
+; volumetric fog but keeps real-time shadows and baked lightmaps, which is
+; where this room's lighting is going anyway. The APK is the shipping target,
+; so the phone gets the renderer that runs on it.
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="mobile"

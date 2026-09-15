@@ -12,8 +12,6 @@ extends Node3D
 @export var look_speed: float = 0.0022
 @export var pitch_limit_deg: float = 80.0
 
-@onready var _sun: DirectionalLight3D = $DirectionalLight3D
-
 var _positions: Array[Marker3D] = []
 var _current_index: int = 0
 var _yaw: float = 0.0
@@ -21,6 +19,19 @@ var _pitch: float = 0.0
 
 
 func _ready() -> void:
+	# Resolve the exported references by name if the scene did not supply them.
+	#
+	# A hand-written .tscn stores an exported Node reference as a NodePath, and
+	# it does not reliably resolve on load the way an editor-authored scene
+	# does. Both arrived null here, which fails silently in the worst way: the
+	# marker list falls back to a single default, _snap_to_position() returns
+	# at its own guard, and the camera simply sits wherever the scene file put
+	# it, facing whatever way the scene file left it. Nothing errors.
+	if camera == null:
+		camera = get_node_or_null("Camera3D") as Camera3D
+	if positions_root == null:
+		positions_root = get_node_or_null("CameraPositions") as Node3D
+
 	if positions_root != null:
 		for child in positions_root.get_children():
 			if child is Marker3D:
@@ -33,10 +44,6 @@ func _ready() -> void:
 		add_child(fallback)
 		fallback.global_position = Vector3(0.0, 1.5, 0.0)
 		_positions.append(fallback)
-
-	# Light the room from above so the imported model is readable.
-	if _sun != null:
-		_sun.rotation_degrees = Vector3(-50.0, -35.0, 0.0)
 
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_snap_to_position()
@@ -79,9 +86,19 @@ func _snap_to_position() -> void:
 	if camera == null or _positions.is_empty():
 		return
 	var marker: Marker3D = _positions[_current_index]
-	camera.global_position = marker.global_position
-	_yaw = marker.global_rotation.y
-	_pitch = 0.0
+	camera.global_transform = marker.global_transform
+
+	# Re-derive yaw and pitch from the basis rather than reading the marker's
+	# Euler angles.
+	#
+	# A half-turn about Y has two equally valid Euler decompositions --
+	# (0, PI, 0) and (PI, 0, PI) -- and Godot returns the second. Taking .y
+	# from it gives zero, so the marker that should put the president behind
+	# the lectern facing the room instead faced them at the drape a metre
+	# away, with the seal filling the screen.
+	var forward := -camera.global_transform.basis.z
+	_yaw = atan2(-forward.x, -forward.z)
+	_pitch = asin(clampf(forward.y, -1.0, 1.0))
 	_apply_look()
 
 

@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://nyxadel171o5"
-valid=false
+path="res://.godot/imported/potted_plant_01.glb-379b45a0237166d0a5d285dfebe66620.scn"
 
 [deps]
 
 source_file="res://public/models/potted_plant_01.glb"
+dest_files=["res://.godot/imported/potted_plant_01.glb-379b45a0237166d0a5d285dfebe66620.scn"]
 
 [params]
 
@@ -17,7 +18,6 @@ nodes/root_name=""
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
-nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
 meshes/create_shadow_meshes=true

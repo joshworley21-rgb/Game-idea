@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://cvl1u52pjpia5"
-valid=false
+path="res://.godot/imported/BriefingRoom.glb-d9541270694352d7b06f3d13b995acf5.scn"
 
 [deps]
 
 source_file="res://public/models/BriefingRoom.glb"
+dest_files=["res://.godot/imported/BriefingRoom.glb-d9541270694352d7b06f3d13b995acf5.scn"]
 
 [params]
 
@@ -17,7 +18,6 @@ nodes/root_name=""
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
-nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
 meshes/create_shadow_meshes=true

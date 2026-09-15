@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
+import { godotReady } from "./godot-ready.mjs";
 
 const run = promisify(execFile);
 
@@ -105,6 +106,13 @@ await mkdir(OUT, { recursive: true });
     } else {
       console.log(`downloaded ${(bytes / 1e6).toFixed(2)} MB`);
     }
+    // The release asset is built for three.js, which reads quantized meshes
+    // with no decoder. Godot's glTF importer refuses the whole file. This is
+    // the one model not committed here, so a by-hand pass over public/models
+    // misses it every time — which is how the Oval ended up the only room in
+    // the game that would not open in the editor.
+    const fixed = await godotReady(dest);
+    if (fixed.changed) console.log(`${"".padEnd(30)}dequantized for Godot`);
   } catch (err) {
     console.log(`FAILED: ${err.message}`);
     console.log("  The game will fall back to the procedural Oval Office room.");

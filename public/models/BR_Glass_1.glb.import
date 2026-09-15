@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://qmes3npribai"
-valid=false
+path="res://.godot/imported/BR_Glass_1.glb-cb9c61c10e8b3f09269878d8d5e1be14.scn"
 
 [deps]
 
 source_file="res://public/models/BR_Glass_1.glb"
+dest_files=["res://.godot/imported/BR_Glass_1.glb-cb9c61c10e8b3f09269878d8d5e1be14.scn"]
 
 [params]
 
@@ -17,7 +18,6 @@ nodes/root_name=""
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
-nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
 meshes/create_shadow_meshes=true

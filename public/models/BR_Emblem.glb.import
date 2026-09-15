@@ -4,11 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://pbqfdngfl1ij"
-valid=false
+path="res://.godot/imported/BR_Emblem.glb-c039a773c7c6875c92fd87be769f1df4.scn"
 
 [deps]
 
 source_file="res://public/models/BR_Emblem.glb"
+dest_files=["res://.godot/imported/BR_Emblem.glb-c039a773c7c6875c92fd87be769f1df4.scn"]
 
 [params]
 
@@ -17,7 +18,6 @@ nodes/root_name=""
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
-nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
 meshes/create_shadow_meshes=true

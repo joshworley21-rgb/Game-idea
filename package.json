@@ -7,13 +7,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "postbuild": "node scripts/godot-ignore.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "balance": "node --experimental-strip-types --no-warnings src/tools/balance.ts",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "npm run android:sync && cd android && gradle --no-daemon assembleDebug",
     "android:open": "cap open android",
-    "assets": "node scripts/fetch-assets.mjs"
+    "assets": "node scripts/fetch-assets.mjs",
+    "postinstall": "node scripts/godot-ignore.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
