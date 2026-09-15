@@ -1,20 +1,22 @@
 class_name CrisesTable
 extends RefCounted
-## The crisis table, generated from src/game/crises.ts.
+## The crises table, generated from src/game/crises.ts.
 ##
 ## DO NOT EDIT. Regenerate with:
 ##
-##   node --experimental-strip-types scripts/export-crises.mjs
+##   npm run godot:content
 ##
-## 34 crises. Every field here is plain data. The two that are
+## 34 crises. Every field here is plain data. The fields that are
 ## functions in the TypeScript live in CrisesData instead:
 ##
-##   pressure  -- all 34, in CrisesData.pressure_for
-##   brief     -- 8 residence crises that name a member of your family,
-##                in CrisesData.brief_for: marriage, child, spouse-career, child-school-call, child-name-trading, child-not-well, anniversary, exhaustion
+##   pressure  -- every crisis, in CrisesData.pressure_for. Zero means it
+##                cannot fire, which is how the gated ones stay out.
+##   brief     -- the residence crises that name a member of your family,
+##                in CrisesData.brief_for.
 ##
-## A crisis whose brief is static carries it here; the ones above have no
-## "brief" key at all, which is how CrisesData knows to ask for one.
+## An entry with a static version of one of those fields carries it here; the
+## ones without it have no such key at all, which is how CrisesData knows to
+## generate one.
 
 const CRISES := [
 	{

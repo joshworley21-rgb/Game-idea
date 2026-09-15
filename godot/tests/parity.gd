@@ -104,6 +104,7 @@ func _init() -> void:
 	_month_flow()
 	_endings()
 	_crises()
+	_arcs()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -720,3 +721,133 @@ func _crises() -> void:
 	_check("age set on start", int(cc["threads"][0]["age"]), 0)
 	_check("unlocks do not duplicate", ",".join(cc["unlocked"]), "war-casualties,inquiry")
 	_check("heat is capped", _f(cc["heat"]["war"]), "100.000000")
+
+
+func _arcs() -> void:
+	print("arcs: the consequences that arrive with a face on them")
+	# Same arrangement as the crises: the 12 arcs are generated into ArcsTable
+	# and pinned by a digest over every leaf, while the two fields per arc
+	# that are functions -- `when` and `brief` -- are hand-ported into
+	# ArcsData and tested one at a time.
+	var leaves: Array[String] = []
+	_walk_all(ArcsTable.ARCS, "", leaves)
+	_check("arc count", ArcsTable.ARCS.size(), 12)
+	_check("arc leaves", leaves.size(), 343)
+	_check("arc table digest", _fnv1a("\n".join(leaves)), 1239688672)
+
+	# A presidency where nearly every arc is live at once: a cabinet that has
+	# stopped trusting you, a child who has stopped coming home, a party out
+	# of patience, and two campaign promises with receipts.
+	var a := StateData.create_initial_state("blue", "", 3300)
+	var arng := Rng.new(3300)
+	a["cabinet"] = People.create_cabinet(arng)
+	a["family"] = People.create_family(arng, float(a["personal"]["age"]))
+	a["month"] = 20
+	a["politics"]["scandal"] = 48.0
+	a["politics"]["approval"] = 34.0
+	a["politics"]["party"] = 38.0
+	a["nation"]["unrest"] = 70.0
+	a["personal"]["stress"] = 70.0
+	a["nation"]["sectors"]["education"] = 30.0
+	for c in (a["cabinet"] as Array):
+		if c["office"] != "chief":
+			c["loyalty"] = 40.0
+	for m in (a["family"] as Array):
+		if m["kind"] == "child":
+			m["since"] = 7
+	a["flags"]["campaign:get-ahead"] = true
+	a["flags"]["campaign:base-play"] = true
+
+	var conds: Array[String] = []
+	for arc in ArcsTable.ARCS:
+		conds.append("%s=%s" % [arc["id"],
+			"true" if ArcsData.when_for(str(arc["id"]), a) else "false"])
+	_check("every condition", " ".join(conds),
+		"arc-treasury-feud=true arc-leak-source=true arc-child-away=true"
+		+ " arc-primary-challenge=true arc-unrest-organised=true"
+		+ " arc-rival-positioning=true arc-believer-ultimatum=true"
+		+ " arc-friend-cost=false arc-institutionalist-paper=true"
+		+ " arc-technocrat-starved=true arc-campaign-filing=true"
+		+ " arc-base-play-bill=true")
+	# arc-friend-cost is the one that stays shut: this cabinet has no friend
+	# in it, and an arc about somebody you have known twenty years cannot
+	# fire when there is nobody it could be about.
+	var elig: Array[String] = []
+	for arc in ArcsData.eligible_arcs(a):
+		elig.append(str(arc["id"]))
+	_check("eligible", " ".join(elig),
+		"arc-treasury-feud arc-leak-source arc-child-away arc-primary-challenge"
+		+ " arc-unrest-organised arc-rival-positioning arc-believer-ultimatum"
+		+ " arc-institutionalist-paper arc-technocrat-starved arc-campaign-filing"
+		+ " arc-base-play-bill")
+
+	var briefs := [192523125, 146140831, 3408502186, 3255875673, 55283713,
+		2735687730, 1652067517, 2194568306, 1932378450, 2518330695, 2379255567,
+		823340661]
+	for i in ArcsTable.ARCS.size():
+		_check("brief: %s" % ArcsTable.ARCS[i]["id"],
+			_fnv1a(ArcsData.brief_for(str(ArcsTable.ARCS[i]["id"]), a)), briefs[i])
+
+	# Every fallback: no cabinet, no family, so each brief takes the branch
+	# that has nobody to name. These are the lines a save from before the
+	# cabinet existed would hit, and they are easy to get wrong because
+	# nothing in ordinary play reaches them.
+	var bare := StateData.create_initial_state("blue", "", 3300)
+	bare["month"] = 20
+	bare["flags"]["campaign:lawyer-up"] = true
+	var bare_hashes: Array[String] = []
+	for arc in ArcsTable.ARCS:
+		bare_hashes.append(str(_fnv1a(ArcsData.brief_for(str(arc["id"]), bare))))
+	_check("fallback briefs", ",".join(bare_hashes),
+		"1968178543,57865131,3182846434,2917325184,80861380,901817905,"
+		+ "3663650606,2194568306,3703664083,2475063508,1558314328,823340661")
+	# The filing arc has three briefs behind one id, by which promise you made.
+	var cst := StateData.create_initial_state("blue", "", 3300)
+	cst["flags"]["campaign:counterstory"] = true
+	_check("filing brief, counterstory branch",
+		_fnv1a(ArcsData.brief_for("arc-campaign-filing", cst)), 4220491846)
+
+	# Roughly one month in three, and weighted when it does fire.
+	var picks: Array[String] = []
+	for i in 12:
+		var rolled := ArcsData.roll_arcs(a, Rng.new(i))
+		picks.append(str(rolled["id"]) if not rolled.is_empty() else "-")
+	_check("twelve rolls", " ".join(picks),
+		"arc-treasury-feud - - - - - - arc-treasury-feud arc-believer-ultimatum"
+		+ " arc-campaign-filing - -")
+
+	# The hook path end to end: fire, block the month, answer, unblock.
+	var h := StateData.create_initial_state("blue", "", 3300)
+	h["cabinet"] = a["cabinet"]
+	h["family"] = a["family"]
+	h["month"] = 20
+	h["politics"]["scandal"] = 48.0
+	h["politics"]["approval"] = 34.0
+	h["politics"]["party"] = 38.0
+	h["nation"]["unrest"] = 70.0
+	h["personal"]["stress"] = 70.0
+	h["nation"]["sectors"]["education"] = 30.0
+	h["flags"]["campaign:get-ahead"] = true
+	h["flags"]["campaign:base-play"] = true
+	_check("month is not blocked yet", ArcsData.arc_blocks_month(h), false)
+	var fired := ArcsData.roll_month_arcs(h, Rng.new(0))
+	_check("an arc fired", fired.get("id", ""), "arc-treasury-feud")
+	_check("it is pending", h["pendingArc"], "arc-treasury-feud")
+	_check("and it blocks the month", ArcsData.arc_blocks_month(h), true)
+	_check("pending_arc finds it", ArcsData.pending_arc(h).get("id", ""), "arc-treasury-feud")
+	# At most one at a time: two consequences in one month reads as noise.
+	_check("no second arc", ArcsData.roll_month_arcs(h, Rng.new(0)).is_empty(), true)
+
+	var choice: Dictionary = fired["choices"][0]
+	_check("first choice", choice["id"], "repair")
+	var res := ArcsData.answer_arc(h, Rng.new(2), str(choice["id"]))
+	_check("it did not backfire", res["failed"], false)
+	_check("result text", _fnv1a(str(res["text"])), 2405129693)
+	_check("marked spent", h["flags"].get("arc:arc-treasury-feud", false), true)
+	_check("counted", int(h["counters"]["arcsAnswered"]), 1)
+	_check("month unblocked", h["pendingArc"], null)
+	_check("capital after", _f(h["politics"]["capital"]), "55.597890")
+	# One shot. An arc that has been answered does not come back.
+	_check("cannot answer twice", ArcsData.answer_arc(h, Rng.new(2), str(choice["id"])).is_empty(), true)
+	_check("cannot resolve a spent arc",
+		ArcsData.resolve_arc(h, Rng.new(2), "arc-treasury-feud", str(choice["id"])).is_empty(), true)
