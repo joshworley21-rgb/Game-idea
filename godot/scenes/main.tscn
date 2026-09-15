@@ -10,6 +10,7 @@
 ; the three.js build.
 
 [ext_resource type="Script" path="res://godot/scripts/world/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://godot/scripts/world/game_root.gd" id="3_game"]
 [ext_resource type="PackedScene" path="res://public/models/BriefingRoom.glb" id="2_room"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_main"]
@@ -114,6 +115,12 @@ transform = Transform3D(0.9830, 0, 0.1838, 0, 1, 0, -0.1838, 0, 0.9830, 1.070, 1
 
 [node name="Camera" type="Marker3D" parent="CameraPositions"]
 transform = Transform3D(0.9982, 0, 0.0592, 0, 1, 0, -0.0592, 0, 0.9982, 0.790, 2.140, 7.490)
+
+; The game itself: the engine, the overlay and the panels. It is a plain Node
+; because nothing about it is spatial -- the room is scenery, and this is what
+; is actually being played in front of it.
+[node name="Game" type="Node" parent="."]
+script = ExtResource("3_game")
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.08, 2.01, -7.81)

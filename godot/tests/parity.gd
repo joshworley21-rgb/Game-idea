@@ -144,6 +144,7 @@ func _init() -> void:
 	_chief()
 	_speaker()
 	_campaign()
+	_ui()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -1718,3 +1719,100 @@ func _campaign() -> void:
 		e.state["flags"].get("campaign:high-road", false), true)
 	_check("election night is in the news", e.state["news"][0]["headline"],
 		"You won by four points.")
+
+
+func _ui() -> void:
+	print("the overlay: every panel builds, and shows what it was given")
+	# Not a parity check — there is nothing on the TypeScript side to compare
+	# a Godot Control tree against. It is a smoke test, and it exists because
+	# a layout mistake in GDScript does not raise: the station panel's first
+	# build collapsed to a two-pixel sliver and reported no error at all. The
+	# assertions here are the ones that would have caught it — that a panel
+	# has content, and that the content is the text it was handed.
+	var hud := Hud.new()
+	var panels := Panels.new()
+	root.add_child(hud)
+	root.add_child(panels)
+
+	var e := GameEngine.new("blue", "President Vance", 77)
+	root.add_child(e)
+
+	# The HUD reads state and emits; it never reaches into the engine, so it
+	# can be rendered against any state at all.
+	var stations := [{"id": "desk", "label": "The Resolute Desk"}]
+	hud.render(e.state, Chief.morning_briefing(e.state)["text"], stations)
+	_check("the hud renders", hud.get_child_count() > 0, true)
+
+	var body_text := func() -> String:
+		var found: Array[String] = []
+		var walk_nodes: Array = [panels]
+		while not walk_nodes.is_empty():
+			var n: Node = walk_nodes.pop_back()
+			if n is Label:
+				found.append((n as Label).text)
+			elif n is Button:
+				found.append((n as Button).text)
+			for c in n.get_children():
+				walk_nodes.append(c)
+		return "\n".join(found)
+
+	# A station panel names the room, its blurb, and every action open there.
+	panels.station(e.state, "desk", ActionsData.actions_for(e.state, "desk"))
+	var station_text: String = body_text.call()
+	_check("a panel is open", panels.is_open(), true)
+	_check("the station is named", station_text.contains("The Resolute Desk"), true)
+	_check("with its blurb",
+		station_text.contains("the things you can do alone"), true)
+	_check("and an action to take",
+		station_text.contains("Sign an executive order"), true)
+	_check("priced in action points and capital",
+		station_text.contains("(1 AP, 6 capital)"), true)
+	panels.close()
+	_check("and it closes", panels.is_open(), false)
+
+	# A crisis names itself, its source, and every choice.
+	var hurricane := CrisesData.by_id("hurricane")
+	panels.crisis(e.state, hurricane)
+	var crisis_text: String = body_text.call()
+	_check("the crisis is named", crisis_text.contains("Category 4 Landfall"), true)
+	_check("with who it came from",
+		crisis_text.contains("FEMA / SITUATION ROOM"), true)
+	_check("and the brief", crisis_text.contains("A major hurricane"), true)
+	for choice in (hurricane["choices"] as Array):
+		_check("choice: %s" % choice["id"], crisis_text.contains(str(choice["label"])), true)
+
+	# Two things arriving at once queue rather than stack: the web build
+	# learned that showing them together reads as noise.
+	panels.crisis(e.state, CrisesData.by_id("bank-run"))
+	_check("the second waits its turn",
+		body_text.call().contains("Category 4 Landfall"), true)
+	panels.close()
+	_check("and arrives when the first is dealt with",
+		body_text.call().contains("A Bank Is Failing"), true)
+	panels.close()
+	_check("then the screen is free", panels.is_open(), false)
+
+	# An outcome shows its effects, in the same words the HUD would.
+	panels.outcome({"title": "A Test", "text": "It happened.",
+		"effects": Effects.describe_effects({"politics.approval": 2.5,
+			"nation.unrest": -0.25}), "tone": "neutral"})
+	var outcome_text: String = body_text.call()
+	_check("the outcome is titled", outcome_text.contains("A Test"), true)
+	# +3 and not +2: Math.round breaks a tie toward positive infinity.
+	_check("an effect rounds the way JavaScript does",
+		outcome_text.contains("Approval +3"), true)
+	_check("and a small one keeps its decimal",
+		outcome_text.contains("Unrest -0.3"), true)
+	panels.close()
+
+	# The ending carries the grade as well as the prose.
+	panels.ending(EndingsData.build_ending(e.state, Rng.new(3), {}))
+	_check("the ending grades the term", body_text.call().contains("Legacy:"), true)
+	panels.close()
+
+	root.remove_child(hud)
+	root.remove_child(panels)
+	root.remove_child(e)
+	hud.queue_free()
+	panels.queue_free()
+	e.queue_free()

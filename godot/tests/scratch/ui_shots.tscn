@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+; Scratch scene for looking at the panels. Not part of the game.
+
+[ext_resource type="Script" path="res://godot/tests/scratch/ui_shots.gd" id="1_shots"]
+
+[node name="UiShots" type="Node"]
+script = ExtResource("1_shots")
