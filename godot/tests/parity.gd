@@ -1805,6 +1805,63 @@ func _ui() -> void:
 		outcome_text.contains("Unrest -0.3"), true)
 	panels.close()
 
+	# A meeting, beat by beat, through the same path GameRoot drives.
+	var root_node := GameRoot.new()
+	root.add_child(root_node)
+	var conv := ConversationsData.by_id("interview")
+	# The press station is where the hostile interview lives, and the station
+	# panel has to offer it alongside the actions or it is unreachable.
+	root_node._open_station("press")
+	var press_text := ""
+	var collect := func(from: Node) -> String:
+		var found: Array[String] = []
+		var stack: Array = [from]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			if n is Label:
+				found.append((n as Label).text)
+			elif n is Button:
+				found.append((n as Button).text)
+			for c in n.get_children():
+				stack.append(c)
+		return "\n".join(found)
+	press_text = collect.call(root_node.panels)
+	_check("the press pool offers the meeting",
+		press_text.contains("Sit for a hostile interview"), true)
+	_check("and an action too", press_text.contains("Address the nation"), true)
+
+	root_node._start_meeting("interview")
+	var beat_text: String = collect.call(root_node.panels)
+	_check("the meeting opens", beat_text.contains("The correspondent"), true)
+	_check("with who they are and how it is going",
+		beat_text.contains("Political correspondent · hostile"), true)
+	_check("and the intro, once", beat_text.contains("The lights are already hot"), true)
+	_check("then what she asked", beat_text.contains("unemployment numbers"), true)
+	_check("and what you can say", beat_text.contains("Own the number, explain the plan"), true)
+	# An action point went on it.
+	_check("a meeting costs an hour", int(root_node.engine.state["ap"]), 2)
+
+	root_node._take_a_line("counterattack")
+	var second: String = collect.call(root_node.panels)
+	_check("the meeting moves on", second.contains("whether the cabinet actually agrees"), true)
+	# The intro belongs on the way in and nowhere else.
+	_check("the intro does not repeat",
+		second.contains("The lights are already hot"), false)
+	# Questioning her numbers opens the option that doubles down, and closes
+	# the one that answers straight. That gating is the whole reason a meeting
+	# is not three buttons.
+	_check("what you said opens a door",
+		second.contains("Say the leak is the real story here"), true)
+	_check("and closes another", second.contains("Answer straight"), false)
+
+	root_node._take_a_line("double-down")
+	_check("the meeting ends", root_node._in_meeting, false)
+	var closing: String = collect.call(root_node.panels)
+	_check("and says how it went", closing.length() > 0, true)
+
+	root.remove_child(root_node)
+	root_node.queue_free()
+
 	# The ending carries the grade as well as the prose.
 	panels.ending(EndingsData.build_ending(e.state, Rng.new(3), {}))
 	_check("the ending grades the term", body_text.call().contains("Legacy:"), true)

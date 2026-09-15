@@ -12,6 +12,8 @@ extends CanvasLayer
 ## happened, here is what you can do about it.
 
 signal action_chosen(action_id: String)
+signal meeting_chosen(conversation_id: String)
+signal meeting_option(option_id: String)
 signal crisis_choice(crisis_id: String, choice_id: String)
 signal arc_choice(arc_id: String, choice_id: String)
 signal closed()
@@ -53,10 +55,18 @@ func _init() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_panel.add_child(_scroll)
+	# A margin inside the scroll, not outside it: the vertical scrollbar is
+	# drawn over the scroll container's own rect, so without this the buttons
+	# run underneath it on any panel long enough to scroll — which is most
+	# meetings.
+	var inset := MarginContainer.new()
+	inset.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inset.add_theme_constant_override("margin_right", 12)
+	_scroll.add_child(inset)
 	_body = VBoxContainer.new()
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", 8)
-	_scroll.add_child(_body)
+	inset.add_child(_body)
 
 
 func is_open() -> bool:
@@ -78,12 +88,16 @@ func show_panel(build: Callable) -> void:
 	_fit.call_deferred()
 
 
-const MAX_HEIGHT := 520
+## How much of the screen a panel may take before it starts scrolling. A
+## fraction rather than a number of pixels, because the shipping target is a
+## phone and 520px is most of a phone's short side.
+const MAX_SCREEN_SHARE := 0.74
 
 
 func _fit() -> void:
 	var wanted := _body.get_combined_minimum_size().y
-	_scroll.custom_minimum_size = Vector2(0, minf(wanted, MAX_HEIGHT))
+	var cap := float(_root.size.y) * MAX_SCREEN_SHARE
+	_scroll.custom_minimum_size = Vector2(0, minf(wanted, cap))
 
 
 ## Shows `build` when the screen is free, so two events never stack.
@@ -154,14 +168,30 @@ func _effects(body: VBoxContainer, described: Array) -> void:
 # ------------------------------------------------------------------ panels
 
 ## What you can do at a station, and what it would cost.
-func station(state: Dictionary, station_id: String, actions: Array) -> void:
+##
+## Meetings come first. They are the things that take an hour and change what
+## somebody thinks of you; the actions below them are the things you sign.
+func station(state: Dictionary, station_id: String, actions: Array,
+		meetings: Array = []) -> void:
 	show_panel(func(body: VBoxContainer):
 		var info: Dictionary = ActionsData.STATION_INFO.get(station_id, {})
 		_header(body, "", str(info.get("name", station_id)))
 		_prose(body, str(info.get("blurb", "")))
 		body.add_child(UiTheme.gap(4))
-		if actions.is_empty():
+		if actions.is_empty() and meetings.is_empty():
 			_prose(body, "There is nothing here that needs you this month.")
+		for m in meetings:
+			var cooldown := ActionsData.action_cooldown_left(state, m)
+			var cost := "%d AP" % int(m["ap"])
+			if float(m.get("capitalCost", 0.0)) > 0.0:
+				cost += ", %d capital" % Effects.js_round(float(m["capitalCost"]))
+			if cooldown > 0:
+				cost = "%d month%s" % [cooldown, "" if cooldown == 1 else "s"]
+			var mid := str(m["id"])
+			_choice(body, str(m["label"]), str(m.get("detail", "")), cost,
+				cooldown == 0 and int(state["ap"]) >= int(m["ap"])
+					and float(m.get("capitalCost", 0.0)) <= float(state["politics"]["capital"]),
+				func(): meeting_chosen.emit(mid))
 		for a in actions:
 			var cooldown := ActionsData.action_cooldown_left(state, a)
 			var cost := "%d AP" % int(a["ap"])
@@ -174,6 +204,48 @@ func station(state: Dictionary, station_id: String, actions: Array) -> void:
 				cooldown == 0 and ActionsData.can_afford(state, a),
 				func(): action_chosen.emit(id))
 		_dismiss(body, "Back to the room"))
+
+
+## One beat of a meeting: who is talking, what they said, and what you can say
+## back.
+##
+## The speaker is resolved against the state rather than printed from the
+## beat, so a meeting written once still names whoever holds the office now.
+## There is no portrait yet — the web build draws one procedurally and that is
+## 300 lines of canvas work — so the name, the office and how they are holding
+## themselves carry it.
+func meeting_beat(state: Dictionary, conv: Dictionary, beat: Dictionary,
+		path: Array, first: bool) -> void:
+	show_panel(func(body: VBoxContainer):
+		var who := Speaker.resolve(beat.get("speaker", {}), state)
+		_header(body, str(conv["label"]), str(who["name"]))
+		var title := str(who["title"])
+		var mood := str(who["mood"])
+		if not title.is_empty():
+			# The mood is part of the caption because it is the only thing on
+			# screen saying how this is going.
+			body.add_child(UiTheme.label("%s · %s" % [title, mood], 12, UiTheme.DIM))
+		# The intro sets the room, and only belongs on the way in.
+		if first and not str(conv.get("intro", "")).is_empty():
+			_prose(body, str(conv["intro"]))
+		_prose(body, str(beat["prompt"]))
+		body.add_child(UiTheme.gap(4))
+		for o in ConversationsData.options_for(str(conv["id"]), beat, path):
+			var cost := ""
+			if float(o.get("capitalCost", 0.0)) > 0.0:
+				cost = "%d capital" % Effects.js_round(float(o["capitalCost"]))
+			var oid := str(o["id"])
+			_choice(body, str(o["label"]), str(o.get("detail", "")), cost,
+				float(o.get("capitalCost", 0.0)) <= float(state["politics"]["capital"]),
+				func(): meeting_option.emit(oid))
+		# Leaving early is a real option: whatever was already said still
+		# happened, and the meeting does not un-spend its action point.
+		body.add_child(UiTheme.gap(4))
+		var out := Button.new()
+		out.text = "Let it end there"
+		out.custom_minimum_size = Vector2(0, 36)
+		out.pressed.connect(close)
+		body.add_child(out))
 
 
 ## Something on the desk that will not keep.

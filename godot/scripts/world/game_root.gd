@@ -21,8 +21,19 @@ var engine: GameEngine
 var hud: Hud
 var panels: Panels
 
+## The meeting under way, if there is one. The engine owns the conversation's
+## state; this is only what the screen needs to draw the next beat.
+var _in_meeting := false
+var _meeting: Dictionary = {}
+var _beat: Dictionary = {}
+var _path: Array = []
 
-func _ready() -> void:
+
+## Built in _init rather than _ready, the same as the HUD and the panels:
+## nothing here needs the scene tree, and a headless test has no frame to wait
+## for. It is also what lets the test drive a whole meeting through the same
+## calls the buttons make.
+func _init() -> void:
 	engine = GameEngine.new("blue", "President Vance")
 	add_child(engine)
 
@@ -49,6 +60,14 @@ func _ready() -> void:
 	panels.arc_choice.connect(func(aid, chid):
 		panels.close()
 		engine.resolve_arc(aid, chid))
+	panels.meeting_chosen.connect(_start_meeting)
+	panels.meeting_option.connect(_take_a_line)
+	# Walking out of a meeting is the panel closing, and the engine has to be
+	# told or the next one starts mid-conversation.
+	panels.closed.connect(func():
+		if _in_meeting:
+			_in_meeting = false
+			engine.end_conversation())
 
 	_render(engine.state)
 	# Anything already on the desk when the term opens.
@@ -76,7 +95,37 @@ func _render(state: Dictionary) -> void:
 
 func _open_station(station_id: String) -> void:
 	panels.station(engine.state, station_id,
-		ActionsData.actions_for(engine.state, station_id))
+		ActionsData.actions_for(engine.state, station_id),
+		engine.conversations_for(station_id))
+
+
+func _start_meeting(conversation_id: String) -> void:
+	var started := engine.start_conversation(conversation_id)
+	if started.is_empty():
+		return
+	_in_meeting = true
+	_meeting = started["conversation"]
+	_beat = started["beat"]
+	_path = []
+	panels.meeting_beat(engine.state, _meeting, _beat, _path, true)
+
+
+func _take_a_line(option_id: String) -> void:
+	var result := engine.choose_conversation_option(option_id)
+	if result.is_empty():
+		return
+	_path = result["path"]
+	var next: Dictionary = result["beat"]
+	if not next.is_empty():
+		_beat = next
+		panels.meeting_beat(engine.state, _meeting, _beat, _path, false)
+		return
+	# The meeting is over. The engine has already emitted its outcome, which
+	# the panel host queued behind this one, so closing shows it.
+	_in_meeting = false
+	_meeting = {}
+	_beat = {}
+	panels.close()
 
 
 func _end_month() -> void:

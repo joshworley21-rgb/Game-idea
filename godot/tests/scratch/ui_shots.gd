@@ -39,11 +39,18 @@ func _process(_delta: float) -> void:
 				Sim.simulate_month(_root.engine.state, ctx, rng, 1))
 		24: _save("report")
 		25: _root.panels.close()
-		28: _root.panels.arc(_root.engine.state, ArcsData.by_id("arc-leak-source"))
-		32: _save("arc")
-		33: _root.panels.close()
-		36: _root.panels.ending(EndingsData.build_ending(_root.engine.state, Rng.new(3), {}))
-		40:
+		26: _root._open_station("press")
+		28: _save("press")
+		29: _root._start_meeting("interview")
+		32: _save("meeting")
+		33: _root._take_a_line("counterattack")
+		35: _save("meeting2")
+		36: _root.panels.close()
+		38: _root.panels.arc(_root.engine.state, ArcsData.by_id("arc-leak-source"))
+		42: _save("arc")
+		43: _root.panels.close()
+		46: _root.panels.ending(EndingsData.build_ending(_root.engine.state, Rng.new(3), {}))
+		50:
 			_save("ending")
 			get_tree().quit(0)
 
