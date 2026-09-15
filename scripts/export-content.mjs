@@ -21,6 +21,8 @@ import { writeFile } from "node:fs/promises";
 import { CRISES } from "../src/game/crises.ts";
 import { ARCS } from "../src/game/arcs.ts";
 import { CONVERSATIONS } from "../src/game/conversations.ts";
+import { BRIEFINGS, OBLIGATIONS } from "../src/game/chief.ts";
+import { campaignBeats } from "../src/game/campaign.ts";
 
 function gdString(value) {
   return `"${value
@@ -148,6 +150,60 @@ const TABLES = [
       "requires  -- the options that only open if you said something earlier,",
       "             in ConversationsData.option_requires. These read the path",
       "             through the meeting, not the state.",
+    ],
+  },
+  {
+    entries: BRIEFINGS,
+    noun: "briefings",
+    className: "ChiefTable",
+    constName: "BRIEFINGS",
+    source: "src/game/chief.ts",
+    owner: "Chief",
+    out: "godot/scripts/game/chief_table.gd",
+    handPorted: ["when"],
+    required: ["when"],
+    notes: [
+      "when -- every briefing, in Chief.briefing_applies. The list is ordered",
+      "        from most urgent to least and the first match wins, so the",
+      "        order here is as load-bearing as the conditions are.",
+    ],
+  },
+  {
+    entries: OBLIGATIONS,
+    noun: "obligations",
+    className: "ObligationsTable",
+    constName: "OBLIGATIONS",
+    source: "src/game/chief.ts",
+    owner: "Chief",
+    out: "godot/scripts/game/obligations_table.gd",
+    handPorted: ["done"],
+    required: ["done"],
+    notes: [
+      "done -- whether the obligation has been discharged, in",
+      "        Chief.obligation_done. Each one reads a flag a verb sets.",
+    ],
+  },
+  {
+    // campaignBeats is a function of the party, not a constant: the campaign
+    // is the same shape for both sides and only which bloc counts as "the
+    // base" changes. Both are emitted, keyed by party, so the port does not
+    // have to rebuild the substitution.
+    entries: [
+      { id: "blue", beats: campaignBeats("blue") },
+      { id: "red", beats: campaignBeats("red") },
+    ],
+    noun: "campaigns",
+    className: "CampaignTable",
+    constName: "CAMPAIGNS",
+    source: "src/game/campaign.ts",
+    owner: "Campaign",
+    out: "godot/scripts/game/campaign_table.gd",
+    handPorted: ["requires"],
+    required: [],
+    notes: [
+      "requires -- the one option that only opens if you ran a ground game,",
+      "            in Campaign.option_requires. It reads the path taken so",
+      "            far, not any state: there is no state yet.",
     ],
   },
 ];

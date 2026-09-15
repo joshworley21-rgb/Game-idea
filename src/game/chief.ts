@@ -42,7 +42,7 @@ export function guidanceLevel(s: GameState): GuidanceLevel {
  * These are the things she says at the top of the day. They are not hints —
  * they are her reading the room out loud, which is the job.
  */
-interface Briefing {
+export interface Briefing {
   id: string;
   when: (s: GameState) => boolean;
   /** Only offered at these guidance levels. Absent means always. */
@@ -50,7 +50,7 @@ interface Briefing {
   text: string;
 }
 
-const BRIEFINGS: Briefing[] = [
+export const BRIEFINGS: Briefing[] = [
   // ------------------------------------------------------------- the opening
   {
     id: "first-day",

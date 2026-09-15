@@ -141,6 +141,9 @@ func _init() -> void:
 	_term()
 	_play()
 	_engine()
+	_chief()
+	_speaker()
+	_campaign()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -1456,3 +1459,262 @@ func _rounding() -> void:
 		Effects.describe_effects({"nation.growth": 0.15})[0]["text"], "Growth +0.1")
 	_check("a negative half-integer",
 		Effects.describe_effects({"politics.approval": -2.5})[0]["text"], "Approval -2")
+
+
+func _chief() -> void:
+	print("the chief of staff: what she says, and when")
+	var leaves: Array[String] = []
+	_walk_all(ChiefTable.BRIEFINGS, "", leaves)
+	_check("briefings", ChiefTable.BRIEFINGS.size(), 19)
+	_check("briefing leaves", leaves.size(), 41)
+	_check("briefing digest", _fnv1a("\n".join(leaves)), 3212245957)
+	var ob_leaves: Array[String] = []
+	_walk_all(ObligationsTable.OBLIGATIONS, "", ob_leaves)
+	_check("obligations", ObligationsTable.OBLIGATIONS.size(), 3)
+	_check("obligation digest", _fnv1a("\n".join(ob_leaves)), 1078265014)
+
+	# The order is load-bearing: the first match wins, so a briefing moved up
+	# the list silently takes precedence over everything below it.
+	var order: Array[String] = []
+	for b in ChiefTable.BRIEFINGS:
+		order.append(str(b["id"]))
+	_check("order, most urgent first", " ".join(order),
+		"first-day first-month-cabinet first-month-address no-actions crisis-waiting"
+		+ " arc-waiting unrest-high approval-low scandal-high capital-empty stress-high"
+		+ " health-low family-neglected family-strain cabinet-loyalty threads-running"
+		+ " budget-month election-near quiet")
+
+	var at := func(m: int) -> Dictionary:
+		var x := StateData.create_initial_state("blue", "", 606)
+		x["month"] = m
+		return x
+	for pair in [[1, "full"], [3, "full"], [4, "settled"], [8, "settled"],
+			[9, "distant"], [20, "distant"]]:
+		_check("guidance at month %d" % pair[0], Chief.guidance_level(at.call(pair[0])),
+			pair[1])
+
+	# Month one walks the three opening briefings as each is acknowledged,
+	# and then she has nothing left to say that she has not said.
+	var m1: Dictionary = at.call(1)
+	_check("first morning", Chief.morning_briefing(m1)["id"], "first-day")
+	m1["flags"]["briefed:first-day"] = true
+	_check("then the cabinet", Chief.morning_briefing(m1)["id"], "first-month-cabinet")
+	m1["flags"]["briefed:cabinet"] = true
+	_check("then the House", Chief.morning_briefing(m1)["id"], "first-month-address")
+	m1["flags"]["briefed:address"] = true
+	# The opening three are "full" only, and month 1 is a full-guidance month,
+	# so what is left is the quiet line rather than one of the standing ones.
+	_check("then nothing pressing", Chief.morning_briefing(m1)["id"], "quiet")
+
+	# Every condition, one at a time, from an otherwise quiet month 10. Each
+	# is set up so that only its own briefing can match.
+	var cases := [
+		["quiet", "none"], ["crisis-waiting", "crisis"], ["arc-waiting", "arc"],
+		["no-actions", "spent"], ["unrest-high", "unrest"],
+		["approval-low", "approval"], ["scandal-high", "scandal"],
+		["capital-empty", "capital"], ["stress-high", "stress"],
+		["health-low", "health"], ["family-neglected", "neglect"],
+		["family-strain", "strain"], ["cabinet-loyalty", "loyalty"],
+		["threads-running", "threads"], ["election-near", "election"],
+		["budget-month", "budget"],
+	]
+	for row in cases:
+		var x: Dictionary = at.call(10)
+		match row[1]:
+			"crisis": x["pendingCrises"] = ["hurricane"]
+			"arc": x["pendingArc"] = "arc-leak-source"
+			"spent": x["ap"] = 0
+			"unrest": x["nation"]["unrest"] = 70.0
+			"approval": x["politics"]["approval"] = 30.0
+			"scandal": x["politics"]["scandal"] = 50.0
+			"capital": x["politics"]["capital"] = 10.0
+			"stress": x["personal"]["stress"] = 80.0
+			"health": x["personal"]["health"] = 40.0
+			"neglect":
+				x["family"] = People.create_family(Rng.new(1), 55.0)
+				x["family"][0]["since"] = 6
+			"strain":
+				x["family"] = People.create_family(Rng.new(1), 55.0)
+				x["family"][0]["strain"] = {"id": "x", "label": "l", "detail": "d",
+					"severity": 60.0, "months": 1}
+			"loyalty":
+				x["cabinet"] = People.create_cabinet(Rng.new(1))
+				x["cabinet"][1]["loyalty"] = 20.0
+			"threads":
+				x["threads"] = [
+					{"id": "a", "label": "A", "intensity": 10.0, "drift": 0.0, "tags": [], "age": 0},
+					{"id": "b", "label": "B", "intensity": 10.0, "drift": 0.0, "tags": [], "age": 0}]
+			"election": x["month"] = 42
+			"budget": x["month"] = 13
+		_check("she raises: %s" % row[0], Chief.morning_briefing(x)["id"], row[0])
+
+	_check("a reaction she has", _fnv1a(Chief.reaction("veto")), 2859279276)
+	_check("and one she does not", Chief.reaction("nope"), "")
+
+	var ob: Dictionary = at.call(1)
+	var ids := func(state: Dictionary) -> String:
+		var out: Array[String] = []
+		for o in Chief.outstanding_obligations(state):
+			out.append(str(o["id"]))
+		return " ".join(out)
+	_check("everything is outstanding at first", ids.call(ob),
+		"address-house meet-cabinet first-budget")
+	ob["flags"]["met:cabinet"] = true
+	ob["flags"]["budget:signed"] = true
+	_check("and she stops raising what is done", ids.call(ob), "address-house")
+
+
+func _speaker() -> void:
+	print("speakers: who is actually in the room")
+	var s := StateData.create_initial_state("blue", "", 606)
+	s["cabinet"] = People.create_cabinet(Rng.new(606))
+	s["family"] = People.create_family(Rng.new(606), 55.0)
+	var line := func(r: Dictionary) -> String:
+		return "%s|%s|%s|%d|%s|%s|%s" % [r["name"], r["title"], r["seed"], int(r["age"]),
+			r["dress"], r["mood"], "true" if r["isPerson"] else "false"]
+	var want := {
+		"chief": "Ruth Ellery|Chief of Staff|Ruth Ellery|-1|suit|neutral|true",
+		"treasury": "Thomas Brennan|Treasury Secretary|Thomas Brennan|-1|suit|neutral|true",
+		"state": "Nathan Osei|Secretary of State|Nathan Osei|-1|suit|neutral|true",
+		"defense": "Charles Calderon|Defense Secretary|Charles Calderon|-1|suit|neutral|true",
+		"justice": "Grace Ferreira|Attorney General|Grace Ferreira|-1|suit|neutral|true",
+		"health": "Margaret Rasmussen|Health Secretary|Margaret Rasmussen|-1|suit|neutral|true",
+		"spouse": "Nicholas|your spouse|Nicholas|55|smart|neutral|true",
+		"child": "Nora|your child|Nora|24|casual|neutral|true",
+		"press": "Fallback Name|Fallback Title|Fallback Name|-1|smart|neutral|true",
+		"ally": "Fallback Name|Fallback Title|Fallback Name|-1|suit|neutral|true",
+		# The room and the narrator have no face.
+		"room": "Fallback Name|Fallback Title|Fallback Name|-1|suit|neutral|false",
+		"narrator": "Fallback Name|Fallback Title|Fallback Name|-1|suit|neutral|false",
+	}
+	for role in want:
+		_check("speaker: %s" % role, line.call(Speaker.resolve(
+			{"role": role, "name": "Fallback Name", "title": "Fallback Title"}, s)),
+			want[role])
+	_check("a mood on the beat wins", Speaker.resolve(
+		{"role": "press", "name": "N", "title": "T", "mood": "hostile"}, s)["mood"], "hostile")
+
+	# With nobody in the job, every role falls back to the written name — and
+	# to "suit", because the dress rule only knows about the press.
+	var bare := StateData.create_initial_state("blue", "", 606)
+	for role in ["chief", "spouse", "child"]:
+		var r := Speaker.resolve({"role": role, "name": "Fallback Name",
+			"title": "Fallback Title"}, bare)
+		_check("nobody in the job: %s" % role,
+			"%s|%s|%d|%s|%s" % [r["name"], r["title"], int(r["age"]), r["dress"],
+				"true" if r["isPerson"] else "false"],
+			"Fallback Name|Fallback Title|-1|suit|true")
+
+	var moods := {
+		"They demand an answer": "hostile",
+		"A worried aide": "concerned",
+		"She laughs, dryly": "amused",
+		# "exhausted" does NOT match: the pattern is \bexhaust\b and the word
+		# runs on. Faithful to the TypeScript, and pinned so it stays that way
+		# rather than being quietly "fixed" into a difference.
+		"You are exhausted": "neutral",
+		"A warm welcome": "warm",
+		"Careful, measured words": "guarded",
+		"Nothing in particular": "neutral",
+	}
+	for text in moods:
+		_check("mood of \"%s\"" % text, Speaker.infer_mood(text), moods[text])
+
+	# Whoever is carrying the most, then whoever has waited longest.
+	var fs := func(state: Dictionary) -> String:
+		var r := Speaker.family_speaker(state, Rng.new(1))
+		return "%s/%s" % [r["role"], r["name"]]
+	_check("nobody is struggling: the spouse", fs.call(s), "spouse/Nicholas")
+	s["family"][2]["strain"] = {"id": "x", "label": "l", "detail": "d",
+		"severity": 70.0, "months": 1}
+	_check("somebody is: them", fs.call(s), "child/Felix")
+	s["family"][1]["since"] = 9
+	_check("a long wait does not outrank a strain", fs.call(s), "child/Felix")
+	_check("no family at all", fs.call(bare), "spouse/Your family")
+
+
+func _campaign() -> void:
+	print("the campaign: the six weeks before the oath")
+	var leaves: Array[String] = []
+	_walk_all(CampaignTable.CAMPAIGNS, "", leaves)
+	_check("campaign leaves", leaves.size(), 168)
+	_check("campaign digest", _fnv1a("\n".join(leaves)), 4213801162)
+	_check("intro", _fnv1a(Campaign.INTRO), 1997698894)
+	_check("it starts at the primary", Campaign.START, "primary")
+
+	for party in ["blue", "red"]:
+		var b := Campaign.beats(party)
+		var keys: Array = b.keys()
+		_check("%s beats" % party, " ".join(keys), "primary debate surprise")
+
+	# The campaign is one script with one substitution: which bloc is your
+	# base. Going to the flank in the primary rewards the base and costs the
+	# other side, and which is which is the only thing the party changes.
+	var blue := Campaign.beats("blue")
+	var red := Campaign.beats("red")
+	var blocs_of := func(beats: Dictionary, beat_id: String, option_id: String) -> String:
+		for o in (beats[beat_id]["options"] as Array):
+			if o["id"] == option_id:
+				var parts: Array[String] = []
+				var keys: Array = (o["deltas"]["blocs"] as Dictionary).keys()
+				for k in keys:
+					parts.append("%s=%d" % [k, int(o["deltas"]["blocs"][k])])
+				return " ".join(parts)
+		return "missing"
+	_check("blue base-play", blocs_of.call(blue, "primary", "base-play"),
+		"activists=8 traditionalists=-4")
+	_check("red base-play", blocs_of.call(red, "primary", "base-play"),
+		"traditionalists=8 activists=-4")
+	_check("blue counterpunch", blocs_of.call(blue, "debate", "counterpunch"),
+		"activists=3")
+	_check("red counterpunch", blocs_of.call(red, "debate", "counterpunch"),
+		"traditionalists=3")
+	# And the parts that are the same for both.
+	_check("grassroots is grassroots either way",
+		blocs_of.call(blue, "primary", "grassroots"),
+		blocs_of.call(red, "primary", "grassroots"))
+
+	# The one gated option: you can only point to the fifty diners if you
+	# actually sat in them.
+	var open_ids := func(path: Array) -> String:
+		var out: Array[String] = []
+		for o in Campaign.options_for(blue["debate"], path):
+			out.append(str(o["id"]))
+		return " ".join(out)
+	_check("after a ground game", open_ids.call(["grassroots"]),
+		"ground-game specifics counterpunch high-road")
+	_check("after an air war", open_ids.call(["air-war"]),
+		"specifics counterpunch high-road")
+
+	# Election night adds it all up.
+	var merged := Campaign.merge_deltas([
+		{"approval": 3.0, "blocs": {"labour": 2.0}},
+		{"approval": -1.0, "capital": 5.0, "blocs": {"labour": 1.0, "business": -3.0}},
+		{"party": 4.0, "media": -3.0},
+		{},
+	])
+	_check("merged approval", _f(merged["approval"]), "2.000000")
+	_check("merged capital", _f(merged["capital"]), "5.000000")
+	_check("merged party", _f(merged["party"]), "4.000000")
+	_check("merged media", _f(merged["media"]), "-3.000000")
+	_check("merged labour", _f(merged["blocs"]["labour"]), "3.000000")
+	_check("merged business", _f(merged["blocs"]["business"]), "-3.000000")
+	_check("nothing at all still merges",
+		Campaign.merge_deltas([])["blocs"].is_empty(), true)
+
+	# And the engine lays them over the opening position.
+	var e := GameEngine.new("blue", "President Vance", 9)
+	var approval_before := float(e.state["politics"]["approval"])
+	var labour_before := float(e.state["blocs"]["labour"])
+	e.apply_campaign_result(merged, "You won by four points.", ["grassroots", "high-road"])
+	_check("approval moved", _f(e.state["politics"]["approval"]),
+		_f(approval_before + 2.0))
+	_check("and a bloc with it", _f(e.state["blocs"]["labour"]), _f(labour_before + 3.0))
+	# The path is recorded as flags, which is what lets an arc a year later be
+	# about the promise rather than about the numbers it moved.
+	_check("the promise is on the record",
+		e.state["flags"].get("campaign:grassroots", false), true)
+	_check("and so is the other one",
+		e.state["flags"].get("campaign:high-road", false), true)
+	_check("election night is in the news", e.state["news"][0]["headline"],
+		"You won by four points.")
