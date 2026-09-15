@@ -96,6 +96,30 @@ func _init() -> void:
 		_check("%s/%d digest" % [case["party"], case["seed"]],
 			_fnv1a(";".join(numbers)), case["digest"])
 
+	print("blocs: ten months of drift against a worsening economy")
+	# The blocs are where the economy becomes politics: each of the eight wants
+	# something different, and approval is their weighted sum. The eight target
+	# expressions were dropped in the first pass of the port -- a Dictionary
+	# cannot hold the TypeScript's target(s) function -- which left driftBlocs
+	# with nothing to drift toward, so unemployment could rise and nobody
+	# minded. Ten months with the economy deteriorating exercises all eight.
+	var b := StateData.create_initial_state("blue", "", 2024)
+	var lines: Array[String] = []
+	for _m in 10:
+		BlocsData.drift_blocs(b)
+		b["nation"]["unemployment"] = float(b["nation"]["unemployment"]) + 0.15
+		b["nation"]["inflation"] = float(b["nation"]["inflation"]) + 0.1
+		b["nation"]["growth"] = float(b["nation"]["growth"]) - 0.08
+		var row: Array[String] = []
+		for k in CoreData.BLOC_KEYS:
+			row.append("%.6f" % float(b["blocs"][k]))
+		lines.append(" ".join(row) + "|" + ("%.6f" % BlocsData.coalition_approval(b)))
+	var weak: Array[String] = []
+	for def in BlocsData.weakest_blocs(b, 3):
+		weak.append(str(def["key"]))
+	lines.append(",".join(weak))
+	_check("ten-month drift digest", _fnv1a(";".join(lines)), 304653099)
+
 	print("actions: how many each station offers in month 1, seed 4242")
 	var a := StateData.create_initial_state("blue", "", 4242)
 	var want := {"desk": 3, "press": 2, "budget": 0, "staff": 2, "floor": 1, "phone": 3, "rest": 5}
