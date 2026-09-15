@@ -145,6 +145,7 @@ func _init() -> void:
 	_speaker()
 	_campaign()
 	_ui()
+	_world()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -1873,3 +1874,125 @@ func _ui() -> void:
 	hud.queue_free()
 	panels.queue_free()
 	e.queue_free()
+
+
+func _world() -> void:
+	print("the rooms: where each station puts you, and what it looks like")
+	# Also not a parity check. It exists because the room table is a hundred
+	# hand-entered numbers and the last time this game had hand-entered camera
+	# transforms two of them were silently transposed — the president ended up
+	# facing a drape a metre away with the seal filling the screen, and
+	# nothing errored. Seats here are an eye point and a look-at point, and
+	# what is checkable about those is that they are inside the room and
+	# pointing across it.
+	for room_id in Rooms.ROOMS:
+		var def: Dictionary = Rooms.ROOMS[room_id]
+		var seats: Array = def["seats"]
+		_check("%s has seats" % room_id, seats.size() > 0, true)
+		var ceiling := float(def["ceiling"])
+		var seen := {}
+		for s in seats:
+			var eye: Vector3 = s["eye"]
+			var look: Vector3 = s["look"]
+			_check("%s/%s is a new seat" % [room_id, s["id"]], seen.has(s["id"]), false)
+			seen[s["id"]] = true
+			# Standing on the floor, under the ceiling, at something like
+			# human eye height.
+			_check("%s/%s eye height" % [room_id, s["id"]],
+				eye.y > 0.9 and eye.y < ceiling - 0.4, true)
+			# Looking at something, not at itself: a look-at point on top of
+			# the eye makes look_at() produce garbage silently.
+			_check("%s/%s looks somewhere" % [room_id, s["id"]],
+				eye.distance_to(look) > 1.0, true)
+			# And looking across the room rather than at the floor or sky.
+			var pitch: float = absf(look.y - eye.y) / eye.distance_to(look)
+			_check("%s/%s is roughly level" % [room_id, s["id"]], pitch < 0.35, true)
+
+	# Every station has a room, and every station's seat exists in it.
+	for station in ActionsData.STATION_ORDER:
+		var room_id := Rooms.room_for(station)
+		_check("%s has a room" % station, Rooms.ROOMS.has(room_id), true)
+		var seat := Rooms.seat_for(station)
+		var found := false
+		for s in (Rooms.ROOMS[room_id]["seats"] as Array):
+			if s["id"] == seat:
+				found = true
+		_check("%s has a seat in it" % station, found, true)
+
+	# And the World actually puts the camera there.
+	var w := World.new()
+	root.add_child(w)
+	w.enter_room("oval")
+	_check("the oval opens", w.current_room(), "oval")
+	w.take_seat("desk")
+	var behind_the_desk := w.camera.position
+	# The Resolute Desk measures z -3.64..-2.41, so behind it is further -z
+	# than that, and the room runs to -5.64.
+	_check("behind the desk, not on it", behind_the_desk.z < -3.64, true)
+	_check("and not through the wall", behind_the_desk.z > -5.64, true)
+	# Facing into the room means facing +z, and the camera looks down its
+	# own -Z, so its basis z must point at -z.
+	_check("facing the room", w.camera.transform.basis.z.z < 0.0, true)
+
+	w.take_seat("fire")
+	_check("the fireplace end is the other end",
+		w.camera.position.z > behind_the_desk.z, true)
+	_check("and it faces back", w.camera.transform.basis.z.z > 0.0, true)
+
+	w.enter_room("sitroom")
+	_check("and the situation room opens", w.current_room(), "sitroom")
+	w.take_seat("head")
+	_check("under a low ceiling", w.camera.position.y < 2.51, true)
+	# A seat that does not exist falls back rather than dropping the camera
+	# at the origin, which would put it inside the table.
+	w.take_seat("no-such-seat")
+	_check("an unknown seat falls back",
+		w.camera.position.is_equal_approx(Vector3.ZERO), false)
+
+	# Looking around. The seat is the anchor: a drag turns the head, not the
+	# chair, and taking a seat puts it back.
+	w.enter_room("oval")
+	w.take_seat("desk")
+	var seated := w.camera.position
+	var facing := w.camera.transform.basis.z
+	_check("nothing turned yet", w.look_offset(), Vector2.ZERO)
+
+	var drag := func(dx: float, dy: float) -> void:
+		var down := InputEventMouseButton.new()
+		down.button_index = MOUSE_BUTTON_LEFT
+		down.pressed = true
+		w._unhandled_input(down)
+		var move := InputEventMouseMotion.new()
+		move.relative = Vector2(dx, dy)
+		w._unhandled_input(move)
+		var up := InputEventMouseButton.new()
+		up.button_index = MOUSE_BUTTON_LEFT
+		up.pressed = false
+		w._unhandled_input(up)
+
+	drag.call(100.0, 0.0)
+	_check("a drag turns the head", w.look_offset().x != 0.0, true)
+	_check("but does not move the chair", w.camera.position, seated)
+	_check("and it is a different view", w.camera.transform.basis.z != facing, true)
+
+	# A long drag stops at the limit rather than spinning all the way round:
+	# a seat is a point of view, not a free camera.
+	drag.call(100000.0, 100000.0)
+	var turned := w.look_offset()
+	_check("yaw stops", absf(turned.x) <= 75.001, true)
+	_check("pitch stops", absf(turned.y) <= 42.001, true)
+	# A drag with nothing held down does nothing, which is what stops the
+	# room turning when the pointer crosses it on the way to a button.
+	var stray := InputEventMouseMotion.new()
+	stray.relative = Vector2(500.0, 0.0)
+	w._unhandled_input(stray)
+	_check("a stray pointer does not turn it", w.look_offset(), turned)
+
+	# And taking a seat puts the view back where the seat points, so a
+	# station always opens on the view it was chosen for.
+	w.take_seat("desk")
+	_check("a seat resets the head", w.look_offset(), Vector2.ZERO)
+	_check("facing the way it did", w.camera.transform.basis.z, facing)
+
+	root.remove_child(w)
+	w.queue_free()

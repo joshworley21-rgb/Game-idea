@@ -45,6 +45,7 @@ const SELF_ROWS := [
 ]
 
 var _date: Label
+var _room: Label
 var _power: Label
 var _chief: Label
 var _nation_box: VBoxContainer
@@ -74,8 +75,9 @@ func _init() -> void:
 	top.add_theme_constant_override("separation", 6)
 	root.add_child(top)
 	_date = UiTheme.label("", 19)
+	_room = UiTheme.label("", 12, UiTheme.ACCENT)
 	_power = UiTheme.label("", 14, UiTheme.DIM)
-	top.add_child(_card([_date, _power]))
+	top.add_child(_card([_room, _date, _power]))
 
 	# Under it, the Chief of Staff, because her line is the one thing on
 	# screen that tells you what to do about any of the rest.
@@ -161,6 +163,13 @@ static func _band(v: float, good: float, bad: float, higher_is_better: bool) -> 
 	if higher_is_better:
 		return UiTheme.GOOD if v >= good else (UiTheme.WARN if v >= bad else UiTheme.BAD)
 	return UiTheme.GOOD if v <= good else (UiTheme.WARN if v <= bad else UiTheme.BAD)
+
+
+## Says where the president is standing. The room is not part of the game
+## state — it is where you happen to be — so it is set on its own rather than
+## read out of render().
+func set_room(room_name: String) -> void:
+	_room.text = room_name.to_upper()
 
 
 ## Redraws everything from the state. Cheap enough to call on every change.

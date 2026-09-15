@@ -18,6 +18,7 @@ extends Node
 const DOCK := ["desk", "budget", "staff", "floor", "phone", "press", "family", "rest"]
 
 var engine: GameEngine
+var world: World
 var hud: Hud
 var panels: Panels
 
@@ -37,6 +38,9 @@ func _init() -> void:
 	engine = GameEngine.new("blue", "President Vance")
 	add_child(engine)
 
+	world = World.new()
+	add_child(world)
+
 	hud = Hud.new()
 	add_child(hud)
 	panels = Panels.new()
@@ -49,6 +53,7 @@ func _init() -> void:
 	engine.month_reported.connect(func(r): panels.report(engine.state, r))
 	engine.term_ended.connect(func(e): panels.ending(e))
 
+	world.room_entered.connect(func(_id, room_name): hud.set_room(room_name))
 	hud.station_chosen.connect(_open_station)
 	hud.end_month_pressed.connect(_end_month)
 	panels.action_chosen.connect(func(id):
@@ -68,6 +73,12 @@ func _init() -> void:
 		if _in_meeting:
 			_in_meeting = false
 			engine.end_conversation())
+
+	# A president starts behind the desk. The HUD is told directly because it
+	# was built after the signal would have fired.
+	world.enter_room(Rooms.room_for("desk"))
+	world.take_seat(Rooms.seat_for("desk"))
+	hud.set_room(str(Rooms.ROOMS[world.current_room()]["name"]))
 
 	_render(engine.state)
 	# Anything already on the desk when the term opens.
@@ -94,6 +105,10 @@ func _render(state: Dictionary) -> void:
 
 
 func _open_station(station_id: String) -> void:
+	# Go there first, then open the panel: the room behind the scrim is the
+	# room the decision is being made in.
+	world.enter_room(Rooms.room_for(station_id))
+	world.take_seat(Rooms.seat_for(station_id))
 	panels.station(engine.state, station_id,
 		ActionsData.actions_for(engine.state, station_id),
 		engine.conversations_for(station_id))

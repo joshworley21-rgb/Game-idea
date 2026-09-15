@@ -1,128 +1,22 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=2 format=3]
 
-; The Briefing Room, lit as an interior.
+; The scene is deliberately almost empty.
 ;
-; Every transform below is derived from the room's own walls, not authored by
-; eye: src/world/briefingModelLayout.ts measures the model's `wall` mesh at
-; x -4.22..4.14, z -10.41..10.39 with the floor at y 0.02, and places the
-; podium, the seating and the doors as offsets from that box. The same offsets
-; are used here, so the markers and lights land on the same features they do in
-; the three.js build.
+; It used to hold the Briefing Room, seven hand-written lights, three camera
+; markers and an Environment — about sixty numbers, authored by hand in this
+; file. Two of those numbers were wrong in ways nothing reported: the marker
+; transforms were transposed, because Godot reads a Transform3D's nine floats
+; as basis ROWS and they were written as columns, and the regex that produced
+; them once dropped "transform = " and left a bare Transform3D(...) that broke
+; scene parsing from that line down.
+;
+; All of it now lives in godot/scripts/world/rooms.gd as measurements and
+; look-at points, built by World at runtime. A look-at point is a place in the
+; room; it cannot be transposed, and it is obvious when it is wrong.
 
-[ext_resource type="Script" path="res://godot/scripts/world/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://godot/scripts/world/game_root.gd" id="3_game"]
-[ext_resource type="PackedScene" path="res://public/models/BriefingRoom.glb" id="2_room"]
+[ext_resource type="Script" path="res://godot/scripts/world/game_root.gd" id="1_game"]
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_main"]
-sky_top_color = Color(0.462, 0.588, 0.776, 1)
-sky_horizon_color = Color(0.686, 0.702, 0.73, 1)
-ground_bottom_color = Color(0.13, 0.14, 0.16, 1)
-ground_horizon_color = Color(0.686, 0.702, 0.73, 1)
+[node name="Main" type="Node"]
 
-[sub_resource type="Sky" id="Sky_main"]
-sky_material = SubResource("ProceduralSkyMaterial_main")
-
-[sub_resource type="Environment" id="Environment_main"]
-background_mode = 2
-sky = SubResource("Sky_main")
-; Ambient from a colour, not from the sky. The sky stays as the background so
-; the glazing on the -x wall has something behind it, but letting it light the
-; room as well put a full outdoor hemisphere inside a briefing room: the walls
-; and ceiling are white plaster and they clipped to pure white.
-ambient_light_source = 2
-ambient_light_color = Color(0.588, 0.639, 0.718, 1)
-ambient_light_energy = 0.35
-tonemap_mode = 3
-tonemap_exposure = 0.72
-tonemap_white = 4.0
-
-[node name="Main" type="Node3D"]
-script = ExtResource("1_main")
-camera = NodePath("Camera3D")
-positions_root = NodePath("CameraPositions")
-
-[node name="Room" type="Node3D" parent="." instance=ExtResource("2_room")]
-
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_main")
-
-; Daylight through the glazed -x wall, which runs z -8.75..8.96 at x -3.96.
-; Weak, because it is a basement-level room and the practicals below do the work.
-[node name="Sun" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.342, 0.545, -0.766, 0, 0.815, 0.579, 0.940, -0.198, 0.279, 0, 6, 0)
-light_color = Color(1, 0.968, 0.906, 1)
-light_energy = 0.45
-shadow_enabled = true
-
-; The key on the lectern, from the tilted housings the pack models above it.
-[node name="KeyLight" type="SpotLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.8325, 0.5540, 0, -0.5540, 0.8325, -0.080, 3.520, -4.590)
-light_color = Color(1, 0.957, 0.886, 1)
-light_energy = 3.2
-shadow_enabled = true
-spot_range = 11.0
-spot_angle = 38.0
-spot_angle_attenuation = 0.5
-
-; A wash on the drape, so the seal reads from the back of a 21m room.
-[node name="DrapeWash" type="SpotLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.8638, 0.5039, 0, -0.5039, 0.8638, -0.080, 3.820, -8.010)
-light_color = Color(0.863, 0.902, 1, 1)
-light_energy = 2.2
-spot_range = 8.0
-spot_angle = 46.0
-spot_angle_attenuation = 0.7
-
-; The recessed cans down the seating.
-[node name="Practicals" type="Node3D" parent="."]
-
-[node name="Lamp1" type="OmniLight3D" parent="Practicals"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 3.42, -3.91)
-light_color = Color(1, 0.941, 0.847, 1)
-light_energy = 1.0
-omni_range = 11.0
-
-[node name="Lamp2" type="OmniLight3D" parent="Practicals"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 3.42, 0.09)
-light_color = Color(1, 0.941, 0.847, 1)
-light_energy = 1.0
-omni_range = 11.0
-
-[node name="Lamp3" type="OmniLight3D" parent="Practicals"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 3.42, 4.09)
-light_color = Color(1, 0.941, 0.847, 1)
-light_energy = 1.0
-omni_range = 11.0
-
-[node name="Lamp4" type="OmniLight3D" parent="Practicals"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.04, 3.42, 7.59)
-light_color = Color(1, 0.941, 0.847, 1)
-light_energy = 1.0
-omni_range = 11.0
-
-; Where the player stands. Three distinct vantage points: behind the lectern,
-; a real seat from the model's own 7x7 grid, and the broadcast platform at the
-; back. The three.js build's door seat is not one of them -- it stands 0.55m
-; from the press seat and faces a blank wall, because there it is a plaque you
-; tap to change room, not somewhere to look from.
-[node name="CameraPositions" type="Node3D" parent="."]
-
-[node name="Podium" type="Marker3D" parent="CameraPositions"]
-transform = Transform3D(-1.0000, 0, -0.0000, 0, 1, 0, 0.0000, 0, -1.0000, -0.080, 2.010, -7.810)
-
-[node name="Press" type="Marker3D" parent="CameraPositions"]
-transform = Transform3D(0.9830, 0, 0.1838, 0, 1, 0, -0.1838, 0, 0.9830, 1.070, 1.270, -1.040)
-
-[node name="Camera" type="Marker3D" parent="CameraPositions"]
-transform = Transform3D(0.9982, 0, 0.0592, 0, 1, 0, -0.0592, 0, 0.9982, 0.790, 2.140, 7.490)
-
-; The game itself: the engine, the overlay and the panels. It is a plain Node
-; because nothing about it is spatial -- the room is scenery, and this is what
-; is actually being played in front of it.
 [node name="Game" type="Node" parent="."]
-script = ExtResource("3_game")
-
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.08, 2.01, -7.81)
-current = true
-fov = 72.0
+script = ExtResource("1_game")
