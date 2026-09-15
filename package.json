@@ -15,7 +15,8 @@
     "android:apk": "npm run android:sync && cd android && gradle --no-daemon assembleDebug",
     "android:open": "cap open android",
     "assets": "node scripts/fetch-assets.mjs",
-    "postinstall": "node scripts/godot-ignore.mjs"
+    "postinstall": "node scripts/godot-ignore.mjs",
+    "godot:test": "${GODOT:-godot4} --headless --path . --script godot/tests/parity.gd"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
