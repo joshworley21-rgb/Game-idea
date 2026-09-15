@@ -40,3 +40,10 @@ public/models/*.png
 public/models/*.png.import
 public/models/*.jpg
 public/models/*.jpg.import
+
+# Godot build output. The Android APK is ~147 MB — over GitHub's 100 MB file
+# limit — so it is a CI artifact rather than a committed file. See
+# .github/workflows/build-godot-apk.yml and releases/README.md.
+/releases/Oval.apk
+/releases/Oval.apk.idsig
+/releases/oval.x86_64

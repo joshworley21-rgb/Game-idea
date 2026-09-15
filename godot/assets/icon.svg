@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- The Oval: the room the game is named after, seen from above. -->
+  <rect width="128" height="128" rx="26" fill="#11161f"/>
+  <ellipse cx="64" cy="64" rx="40" ry="30" fill="none" stroke="#c8a34a" stroke-width="3"/>
+  <ellipse cx="64" cy="64" rx="31" ry="22" fill="none" stroke="#c8a34a" stroke-width="1.5" opacity="0.55"/>
+  <!-- Thirteen stars across the top of the ring, as an arc rather than a count. -->
+  <g fill="#e9edf2">
+    <circle cx="44" cy="45" r="2"/><circle cx="54" cy="41" r="2"/><circle cx="64" cy="40" r="2"/>
+    <circle cx="74" cy="41" r="2"/><circle cx="84" cy="45" r="2"/>
+  </g>
+  <!-- The desk. -->
+  <rect x="50" y="62" width="28" height="9" rx="2" fill="#8a5a2b"/>
+  <rect x="53" y="71" width="22" height="4" rx="1" fill="#6f4622"/>
+</svg>

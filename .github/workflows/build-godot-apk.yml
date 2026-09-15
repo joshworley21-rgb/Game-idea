@@ -1,0 +1,132 @@
+name: Build Godot APK
+
+# The Godot build's APK. The other workflow (build-apk.yml) builds the
+# Capacitor wrapper around the web build; this one builds the Godot port,
+# which is a different game binary from the same repository.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "godot/**"
+      - "public/models/**"
+      - "project.godot"
+      - "export_presets.cfg"
+      - ".github/workflows/build-godot-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-godot-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.3
+  GODOT_RELEASE: stable
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        run: sdkmanager "build-tools;34.0.0" "platform-tools" "platforms;android-34"
+
+      # The engine and its export templates are ~1.2 GB together and neither
+      # changes between runs, so they are cached on the version string.
+      - name: Cache Godot and export templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-bin
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}
+
+      - name: Install Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/godotengine/godot/releases/download"
+          V="${GODOT_VERSION}-${GODOT_RELEASE}"
+          mkdir -p ~/godot-bin
+          curl -fsSL -o /tmp/godot.zip \
+            "${BASE}/${V}/Godot_v${V}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot-bin
+          mv ~/godot-bin/Godot_v${V}_linux.x86_64 ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+          curl -fsSL -o /tmp/templates.tpz \
+            "${BASE}/${V}/Godot_v${V}_export_templates.tpz"
+          mkdir -p ~/.local/share/godot/export_templates
+          unzip -q /tmp/templates.tpz -d /tmp/tpl
+          mv /tmp/tpl/templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}"
+
+      # A debug keystore, generated fresh each run. It is a debug build: the
+      # key exists so Android will install the APK at all, and signing a debug
+      # build with a key anybody could regenerate is the point of it.
+      - name: Create debug keystore
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.android
+          keytool -genkeypair -v -keystore ~/.android/debug.keystore \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      # Godot reads the SDK path and the keystore from editor settings, which
+      # a CI runner has none of. Writing the file is how the headless exporter
+      # is told where they are.
+      - name: Point Godot at the SDK
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.config/godot
+          cat > ~/.config/godot/editor_settings-${GODOT_VERSION}.tres <<TRES
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_SDK_ROOT}"
+          export/android/debug_keystore = "${HOME}/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          TRES
+
+      # Twice on purpose. The first pass resolves import order — a scene that
+      # references a model imported later in the same pass comes back empty —
+      # and the second settles it. This is the same thing npm run godot:test
+      # does before running.
+      - name: Import
+        run: |
+          ~/godot-bin/godot --headless --path . --import
+          ~/godot-bin/godot --headless --path . --import
+
+      - name: Parity tests
+        run: ~/godot-bin/godot --headless --path . --script godot/tests/parity.gd
+
+      - name: Export
+        run: |
+          mkdir -p releases
+          ~/godot-bin/godot --headless --path . --export-debug "Android" releases/Oval.apk
+
+      - name: Check the APK is real
+        run: |
+          set -euo pipefail
+          "${ANDROID_SDK_ROOT}/build-tools/34.0.0/apksigner" verify releases/Oval.apk
+          "${ANDROID_SDK_ROOT}/build-tools/34.0.0/aapt2" dump badging releases/Oval.apk | head -1
+          ls -la releases/Oval.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oval-godot-apk
+          path: releases/Oval.apk
+          retention-days: 30

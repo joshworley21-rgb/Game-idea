@@ -13,6 +13,10 @@ config/name="President Simulator"
 config/description="A single-player 3D president simulator: govern a modern nation while keeping your health, family and sanity intact."
 config/version="0.1.0"
 run/main_scene="res://godot/scenes/main.tscn"
+; Godot reports a missing icon as an error on every Android export. It is not
+; fatal, but an error line in a build log that is expected to be there is a
+; line nobody reads the next time.
+config/icon="res://godot/assets/icon.svg"
 
 [display]
 
@@ -28,3 +32,9 @@ window/size/viewport_height=720
 ; so the phone gets the renderer that runs on it.
 renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="mobile"
+
+; Android refuses to export without this: the platform requires ETC2/ASTC and
+; Godot will not ship textures the device cannot sample. It costs a second
+; compressed copy of every texture under .godot/, which is not in git, and
+; nothing at all at runtime on the desktop.
+textures/vram_compression/import_etc2_astc=true

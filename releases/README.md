@@ -1,5 +1,21 @@
 # Builds
 
+There are two Android builds of this game, from the same repository:
+`oval-president-debug.apk` wraps the web build in Capacitor, and `Oval.apk`
+is the Godot port. They are separate binaries and separate package names, so
+both can be installed side by side.
+
+## `Oval.apk` — the Godot build
+
+Not committed: it is about 147 MB, over GitHub's 100 MB file limit. It is
+built by `.github/workflows/build-godot-apk.yml` on every push that touches
+the Godot project, and downloaded from that run's artifacts. To build it
+yourself you need Godot 4.3, its export templates, and an Android SDK with
+build-tools 34; the workflow is the reference for how those are wired up.
+
+The size is the rooms, not the engine: a release export saves less than two
+megabytes, because 82 MB of it is models and textures.
+
 ## `oval-president-debug.apk`
 
 A sideloadable Android build of the game. Download it, allow installs from
