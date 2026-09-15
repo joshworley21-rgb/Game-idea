@@ -60,6 +60,28 @@ func _walk(node, path: String, out: Array[String]) -> void:
 			_walk(node[k], "%s.%s" % [path, k], out)
 
 
+## Every leaf under `node`, as "path<sigil>value", in sorted-key order. Unlike
+## _walk this covers strings and bools, because the generated crisis table is
+## mostly text and a digest over only its numbers would not notice a title
+## going missing.
+func _walk_all(node, path: String, out: Array[String]) -> void:
+	if node is float or node is int:
+		out.append("%s#%.6f" % [path, float(node)])
+	elif node is String or node is StringName:
+		out.append("%s$%s" % [path, str(node)])
+	elif node is bool:
+		out.append("%s?%s" % [path, "true" if node else "false"])
+	elif node == null:
+		out.append("%s!" % path)
+	elif node is Array:
+		for i in node.size():
+			_walk_all(node[i], "%s[%d]" % [path, i], out)
+	elif node is Dictionary:
+		var keys: Array = node.keys()
+		keys.sort()
+		for k in keys:
+			_walk_all(node[k], "%s.%s" % [path, k], out)
+
 ## FNV-1a, 32-bit, matching the JavaScript reference.
 func _fnv1a(text: String) -> int:
 	var h := 0x811c9dc5
@@ -81,6 +103,7 @@ func _init() -> void:
 	_news_distressed()
 	_month_flow()
 	_endings()
+	_crises()
 	print("")
 	if _failures == 0:
 		print("parity: all checks passed")
@@ -600,3 +623,100 @@ func _endings() -> void:
 		var e := EndingsData.build_ending(x, Rng.new(1),
 			{"id": "x", "title": "x", "blurb": "B"})
 		_check("coda: %s" % row[0], _fnv1a(str(e["blurb"]).substr(3)), row[5])
+
+
+func _crises() -> void:
+	print("crises: the generated table, and the half that could not be generated")
+	# The table in CrisesTable is produced by scripts/export-crises.mjs from
+	# the TypeScript module itself, so it cannot drift by transcription. What
+	# it CAN do is drift by the generator being run against an older source
+	# and never run again, so the digest covers every leaf of all 34 crises --
+	# titles, briefs, choice labels, every effect number, every line of result
+	# text. 1,467 leaves. Regenerate the table if this fails; do not edit it.
+	var leaves: Array[String] = []
+	_walk_all(CrisesTable.CRISES, "", leaves)
+	_check("crisis count", CrisesTable.CRISES.size(), 34)
+	_check("table leaves", leaves.size(), 1467)
+	_check("table digest", _fnv1a("\n".join(leaves)), 913708655)
+
+	# Pressure, on a lived-in state: the same twenty-four months seed 9001.
+	var cs := StateData.create_initial_state("blue", "", 9001)
+	var crng := Rng.new(9001)
+	cs["cabinet"] = People.create_cabinet(crng)
+	cs["family"] = People.create_family(crng, float(cs["personal"]["age"]))
+	cs["bills"] = BillsData.bill_catalog()
+	var cctx := Sim.create_sim_context(crng, 1)
+	for m in range(1, 25):
+		Sim.simulate_month(cs, cctx, crng, m % 3)
+		cs["month"] = int(cs["month"]) + 1
+	var rows: Array[String] = []
+	for c in CrisesTable.CRISES:
+		rows.append("%s=%s" % [c["id"], _f(CrisesData.crisis_pressure(cs, c))])
+	_check("all 34 pressures", _fnv1a(";".join(rows)), 1575922842)
+
+	var elig: Array[String] = []
+	for c in CrisesData.eligible_crises(cs):
+		elig.append(str(c["id"]))
+	_check("eligible", " ".join(elig),
+		"hurricane bank-run standoff cyberattack opioid strike outbreak court-vacancy"
+		+ " leak marriage child spouse-career child-not-well anniversary border-surge"
+		+ " ally-attacked wildfire cabinet-resignation shooting primary-threat")
+	# The ten gated crises are absent on purpose: they are consequences, and
+	# return zero pressure until something unlocks them.
+	_check("gated stay out", elig.has("war-casualties") or elig.has("impeachment-push"), false)
+
+	# Cooldown keeps one out even while its pressure is real.
+	cs["crisisHistory"]["hurricane"] = int(cs["month"]) - 3
+	var elig2: Array[String] = []
+	for c in CrisesData.eligible_crises(cs):
+		elig2.append(str(c["id"]))
+	_check("hurricane on cooldown", elig2.has("hurricane"), false)
+	_check("and nothing else changed", elig2.size(), elig.size() - 1)
+	cs["crisisHistory"].erase("hurricane")
+
+	# The eight briefs that name somebody in your family.
+	var briefs := {"marriage": 2076935971, "child": 2716673880,
+		"spouse-career": 2482107676, "child-school-call": 2433425294,
+		"child-name-trading": 2285538489, "child-not-well": 2722143800,
+		"anniversary": 346414679, "exhaustion": 3507180463}
+	for id in briefs:
+		_check("brief: %s" % id, _fnv1a(CrisesData.brief_for(id, cs)), briefs[id])
+
+	# And again with the family carrying something, so the strain clauses --
+	# "they have been carrying the career on hold on their own" -- actually
+	# fire. Those clauses are the reason these eight are functions at all.
+	cs["family"][0]["strain"] = {"id": "spouse-work", "label": "the career on hold",
+		"detail": "d", "severity": 40.0, "months": 3}
+	cs["family"][0]["since"] = 1
+	cs["family"][1]["strain"] = {"id": "child-school", "label": "struggling at school",
+		"detail": "d", "severity": 55.0, "months": 2}
+	cs["personal"]["condition"] = "atrial fibrillation"
+	var strained := {"marriage": 3402546549, "child": 2716673880,
+		"spouse-career": 2482107676, "child-school-call": 2433425294,
+		"child-name-trading": 2285538489, "child-not-well": 173851782,
+		"anniversary": 346414679, "exhaustion": 3455344510}
+	for id in strained:
+		_check("strained brief: %s" % id, _fnv1a(CrisesData.brief_for(id, cs)), strained[id])
+	var srows: Array[String] = []
+	for c in CrisesTable.CRISES:
+		srows.append("%s=%s" % [c["id"], _f(CrisesData.crisis_pressure(cs, c))])
+	_check("pressures under strain", _fnv1a(";".join(srows)), 701637822)
+
+	# apply_consequence, all five levers, including starting a situation that
+	# is already running -- which deepens it rather than stacking a second.
+	var cc := StateData.create_initial_state("blue", "", 9001)
+	var thread := {"id": "war", "label": "The War", "intensity": 40.0, "drift": -2.0,
+		"tags": ["war"], "perMonth": {"personal.stress": 2.0}}
+	CrisesData.apply_consequence(cc, {"startsThread": thread.duplicate(true),
+		"unlocks": ["war-casualties"], "heats": {"war": 30.0}})
+	CrisesData.apply_consequence(cc, {"startsThread": thread.duplicate(true)})
+	CrisesData.apply_consequence(cc, {"escalates": {"id": "war", "by": 15.0}})
+	CrisesData.apply_consequence(cc, {"eases": {"id": "war", "by": 5.0}})
+	CrisesData.apply_consequence(cc, {"unlocks": ["war-casualties", "inquiry"],
+		"heats": {"war": 90.0}})
+	_check("one situation, not two", (cc["threads"] as Array).size(), 1)
+	_check("intensity after deepen, escalate, ease", _f(cc["threads"][0]["intensity"]),
+		"70.000000")
+	_check("age set on start", int(cc["threads"][0]["age"]), 0)
+	_check("unlocks do not duplicate", ",".join(cc["unlocked"]), "war-casualties,inquiry")
+	_check("heat is capped", _f(cc["heat"]["war"]), "100.000000")
