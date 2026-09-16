@@ -40,3 +40,7 @@ public/models/*.png
 public/models/*.png.import
 public/models/*.jpg
 public/models/*.jpg.import
+
+# Python
+__pycache__/
+*.py[cod]
