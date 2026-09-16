@@ -16,6 +16,9 @@ var _positions: Array[Marker3D] = []
 var _current_index: int = 0
 var _yaw: float = 0.0
 var _pitch: float = 0.0
+## Set by whatever has taken the camera over for a moment -- the cabinet room
+## flying to a seat. While it is set, free look stands down.
+var _camera_locked := false
 
 
 func _ready() -> void:
@@ -49,7 +52,22 @@ func _ready() -> void:
 	_snap_to_position()
 
 
+## Hand the camera to someone else, or take it back.
+##
+## A room that tweens this camera to a seat needs the mouse to stop steering it
+## for the duration: without this the two write to the same rotation every frame
+## and the flight to the seat stutters the whole way there.
+func set_camera_locked(locked: bool) -> void:
+	_camera_locked = locked
+
+
+func is_camera_locked() -> bool:
+	return _camera_locked
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if _camera_locked:
+		return
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 		_yaw -= event.relative.x * look_speed
 		_pitch = clampf(
