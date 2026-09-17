@@ -152,12 +152,23 @@ for (const { id, texture = 512, error = 0.005 } of MODELS) {
       "--simplify-error", String(error),
     ]);
 
+    // `--compress quantize` above emits KHR_mesh_quantization, which three.js
+    // reads natively and Godot's glTF importer refuses outright — it fails the
+    // whole file, so every prop processed here stopped importing. Undoing it
+    // per model, here, is what keeps `npm run assets` from quietly reverting
+    // the dequantized GLBs that are committed to public/models. Done before
+    // the stat below so the size reported is the size that ships.
+    const fixed = await godotReady(out);
+
     const { size } = await stat(out);
     outTotal += size;
 
     const info = await getJson(`${API}/info/${id}`);
     credits.push({ id, name: info.name ?? id, authors: Object.keys(info.authors ?? {}) });
-    console.log(`${(raw / 1e6).toFixed(2)} MB → ${(size / 1e3).toFixed(0)} KB`);
+    console.log(
+      `${(raw / 1e6).toFixed(2)} MB → ${(size / 1e3).toFixed(0)} KB` +
+        (fixed.changed ? "  (dequantized for Godot)" : ""),
+    );
   } catch (err) {
     console.log(`FAILED: ${err.message}`);
   }

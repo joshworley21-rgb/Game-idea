@@ -1,0 +1,94 @@
+name: Godot tests
+
+# The port's three test scripts (parity, oval office, cabinet room) all pass,
+# but until now nothing ran them outside a developer's own machine. They exit
+# non-zero on a failed check, so they gate a push the moment CI calls them.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: godot-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  godot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Pinned rather than floating: .gd.uid sidecars are a 4.4 feature and the
+      # committed .import files carry that version's defaults, so a newer Godot
+      # would rewrite them and churn the diff on every run.
+      GODOT_VERSION: 4.4.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # godot-ignore.mjs runs as postinstall and drops the .gdignore markers
+      # into node_modules/ and dist/. Without it Godot imports 179 packages.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Install Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot
+          curl -fL --retry 3 --retry-delay 5 -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot4
+          chmod +x ~/godot/godot4
+
+      # The Oval Office model is fetched from a release rather than committed,
+      # and the tests build their rooms in code, so the suite passes without it.
+      # It is imported here anyway so an import error in that model is caught
+      # by CI rather than by whoever next opens the editor.
+      - name: Fetch the Oval Office model
+        run: npm run assets
+
+      # The test scripts build their rooms in code and never touch the props,
+      # so a prop that fails to import leaves the suite green — which is how a
+      # quantized `npm run assets` output went unnoticed. Import on its own
+      # first and fail on the importer's own wording.
+      #
+      # Not `grep -c ERROR`: headless runs the dummy rendering backend, whose
+      # texture_2d_get logs "Parameter \"t\" is null." ~40 times per import.
+      # That is noise from having no GPU, not a broken asset.
+      - name: Check every asset imports
+        run: |
+          set -o pipefail
+          GODOT=~/godot/godot4
+          $GODOT --headless --path . --import 2>&1 | tee import.log
+          if grep -qE "Error importing|is not supported" import.log; then
+            echo "::error::An asset failed to import. Run scripts/godot-ready.mjs over public/models."
+            grep -E "Error importing|is not supported" import.log
+            exit 1
+          fi
+
+      - name: Run the Godot suite
+        run: GODOT=~/godot/godot4 npm run godot:test
+
+      # `npm run assets` must reproduce the committed GLBs byte for byte. When
+      # it does not, the pipeline and the checked-in models have drifted.
+      - name: Check the asset pipeline is reproducible
+        run: |
+          if ! git diff --exit-code --stat -- public/models; then
+            echo "::error::npm run assets changed public/models. The pipeline and the committed models disagree."
+            exit 1
+          fi

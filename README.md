@@ -680,11 +680,61 @@ src/audio/    procedural sound synthesis
 src/tools/    headless balance harness
 android/      Capacitor Android project
 public/models/ optimised .glb props (built by `npm run assets`)
-scripts/      asset pipeline (fetch + optimise props, strip the estate)
+scripts/      asset pipeline, and the GDScript that is not room code
+godot/        the Godot 4 port: room scripts, ported simulation, tests
+scenes/       Godot UI scenes (HUD, dossier, epilogue)
+data/events/  JSON dialogue events read by the Godot build
 ```
 
 The simulation has no dependency on the renderer or the DOM, which is what makes
 the balance harness possible.
+
+## The Godot port
+
+The game is being ported to Godot 4. The project file lives at the repository
+root so Godot and the web build share one folder and one copy of the models —
+`res://public/models/*.glb` is the same file Vite serves. Folders npm and vite
+own carry a `.gdignore` so Godot does not import `node_modules/`.
+
+**What is ported and green.** The simulation core — RNG, opening position,
+blocs, actions, bills, congress, effects — is in `godot/scripts/game/` and
+agrees with the TypeScript digit for digit; `godot/tests/parity.gd` is what
+proves it. Three rooms have scripts (`main.gd`, `cabinet_room.gd`,
+`oval_office.gd`), the cabinet room and oval office each have a smoke test,
+and `GameState`, `EventManager`, `TurnManager` and the epilogue generator are
+written.
+
+**What is not wired up yet.** The pieces exist but the game is not assembled:
+
+- `TurnManager` — the 583-line turn coordinator — is not instantiated by any
+  scene or script. Nothing drives a turn.
+- The cabinet room and the oval office have no `.tscn`. They are built in code
+  by their tests, so they are exercised but not playable.
+- `main.tscn` opens the Briefing Room with free-look and nothing else: no HUD,
+  no turn loop.
+- The nine arc events under `data/events/arc_*/` are never drawn.
+  `TurnManager._scan_event_files()` does not recurse, so only the six top-level
+  events reach the deck. They also use four keys no GDScript reads yet —
+  `any_of_flags`, `branch_on_flags`, `random_flag`, `min_turn`.
+- `data/events/arc_domestic/` and `data/events/arc_scandal/` are two different
+  drafts of the same three whistleblower events. One of them should go.
+
+### Running it
+
+```bash
+npm run assets     # required once: the Oval Office model is not committed
+npm run godot:test # import, then parity + oval office + cabinet room
+```
+
+`godot:test` honours `$GODOT`, so point it at a binary if `godot4` is not on
+your path. CI runs the same suite on every pull request.
+
+Anything that regenerates a model must leave it importable: `--compress
+quantize` suits three.js, which decodes `KHR_mesh_quantization` natively, and
+Godot refuses such a file outright — it fails the whole model, not one mesh.
+`scripts/godot-ready.mjs` undoes it, `npm run assets` calls it on everything it
+writes, and CI fails if a model stops importing or if the pipeline no longer
+reproduces the committed bytes.
 
 ## Development
 
@@ -694,6 +744,7 @@ npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production build
 npm run balance    # play the term headlessly under four strategies
 npm run assets     # rebuild the 3D props from Poly Haven
+npm run godot:test # the Godot port's parity and smoke tests
 ```
 
 `npm run dev` is where you make changes — a Chrome mobile-device emulation
