@@ -1,0 +1,19 @@
+{
+  "speaker": "defense",
+  "text": "You find the Defense Secretary alone in the briefing room at 2 AM, pouring a drink. They offer you a glass.",
+  "choices": [
+    {
+      "text": "Accept the drink and sit down.",
+      "trust_impact": {
+        "defense": 15
+      }
+    },
+    {
+      "text": "Tell them to go home and get some sleep.",
+      "trust_impact": {
+        "defense": -10
+      },
+      "set_flag": "defense_alienated"
+    }
+  ]
+}

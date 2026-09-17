@@ -1,0 +1,24 @@
+{
+  "speaker": "state",
+  "text": "The Secretary of State is threatening to publicly block your treaty unless you grant their department a massive budget increase.",
+  "choices": [
+    {
+      "text": "Give them the money to keep them quiet.",
+      "stat_impact": {
+        "budget": -20,
+        "tension": -5
+      }
+    },
+    {
+      "text": "Mention the offshore accounts we found. Tell them to sign the treaty or go to prison.",
+      "required_secret": "state_embezzlement",
+      "trust_impact": {
+        "state": -40
+      },
+      "stat_impact": {
+        "tension": -15,
+        "budget": 0
+      }
+    }
+  ]
+}
