@@ -1,0 +1,30 @@
+{
+  "speaker": "defense",
+  "text": "Defense Secretary (Hawk): \"A Kalmar submarine is inside allied waters. We blockade now, or every patrol in the region looks like a bluff.\"\nSecretary of State (Scholar): \"It would, with respect, be more prudent to first pursue confidential diplomatic channels, so that any naval response we might subsequently authorize is perceived as deliberate rather than merely reactive.\"",
+  "choices": [
+    {
+      "text": "Order naval mobilization.",
+      "stat_impact": {
+        "budget": -10,
+        "tension": 15
+      },
+      "trust_impact": {
+        "defense": 15,
+        "state": -15
+      },
+      "set_flag": "kalmar_mobilized"
+    },
+    {
+      "text": "Open confidential backchannels.",
+      "stat_impact": {
+        "tension": -10,
+        "approval": -5
+      },
+      "trust_impact": {
+        "state": 15,
+        "defense": -15
+      },
+      "set_flag": "kalmar_diplomacy"
+    }
+  ]
+}

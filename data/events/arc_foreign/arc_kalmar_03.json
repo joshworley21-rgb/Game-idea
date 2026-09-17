@@ -1,0 +1,60 @@
+{
+  "trigger_condition": {
+    "any_of_flags": [
+      "kalmar_armed_conflict",
+      "kalmar_sanctions_imposed",
+      "kalmar_appeasement"
+    ]
+  },
+  "branch_on_flags": {
+    "kalmar_armed_conflict": "armed",
+    "kalmar_sanctions_imposed": "sanctions",
+    "kalmar_appeasement": "appeasement"
+  },
+  "nodes": {
+    "armed": {
+      "speaker": "defense",
+      "text": "Defense Secretary: \"The skirmish is over. The Kalmar fleet broke formation, but the bill is written in fuel and steel.\"",
+      "choices": [
+        {
+          "text": "Continue",
+          "stat_impact": {
+            "budget": -30,
+            "tension": 25
+          },
+          "random_flag": [
+            "won_border_skirmish",
+            "lost_carrier"
+          ]
+        }
+      ]
+    },
+    "sanctions": {
+      "speaker": "state",
+      "text": "Secretary of State: \"The sanctions bit harder than expected. Kalmar's fleet is pulling back, but fuel prices at home are spiking.\"",
+      "choices": [
+        {
+          "text": "Continue",
+          "stat_impact": {
+            "approval": -15,
+            "budget": -5
+          }
+        }
+      ]
+    },
+    "appeasement": {
+      "speaker": "chief",
+      "text": "Chief of Staff: \"The shooting stopped and we kept the peace. The opposition calls it surrender. They are moving to table a vote of no confidence.\"",
+      "choices": [
+        {
+          "text": "Continue",
+          "stat_impact": {
+            "approval": -25,
+            "loyalty": -15
+          }
+        }
+      ]
+    }
+  },
+  "start": "armed"
+}

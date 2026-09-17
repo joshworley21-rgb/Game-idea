@@ -1,0 +1,44 @@
+{
+  "trigger_condition": {
+    "any_of_flags": [
+      "kalmar_mobilized",
+      "kalmar_diplomacy"
+    ],
+    "min_turn": 2
+  },
+  "branch_on_flags": {
+    "kalmar_mobilized": "mobilized",
+    "kalmar_diplomacy": "diplomacy"
+  },
+  "nodes": {
+    "mobilized": {
+      "speaker": "state",
+      "text": "Secretary of State: \"The blockade fired a warning shot across the bow of a civilian tanker. The whole region is watching. Escalate now and we own the disaster; back down and we look erratic. You have to choose.\"",
+      "choices": [
+        {
+          "text": "Order the fleet to open fire.",
+          "set_flag": "kalmar_armed_conflict"
+        },
+        {
+          "text": "Stand the fleet down before this goes further.",
+          "set_flag": "kalmar_appeasement"
+        }
+      ]
+    },
+    "diplomacy": {
+      "speaker": "defense",
+      "text": "Defense Secretary: \"Intelligence confirms it. They used the backchannel window to pour concrete on the disputed reefs. Radar installations are live. We can hit them with emergency sanctions or accept the new facts on the ground.\"",
+      "choices": [
+        {
+          "text": "Impose emergency trade sanctions.",
+          "set_flag": "kalmar_sanctions_imposed"
+        },
+        {
+          "text": "Concede the reefs to keep the peace.",
+          "set_flag": "kalmar_appeasement"
+        }
+      ]
+    }
+  },
+  "start": "mobilized"
+}
