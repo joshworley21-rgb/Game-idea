@@ -205,14 +205,24 @@ func _add_choice_button(choice: Dictionary) -> void:
 	var button := Button.new()
 	button.name = "Choice"
 	button.text = str(choice.get("text", "Continue"))
+
+	# Choices can be gated on a piece of intel. When a required_secret is
+	# present but not yet in GameState.known_secrets, the button is disabled
+	# and relabelled so the player can see the option exists but is unavailable.
+	var required_secret := str(choice.get("required_secret", ""))
+	if not required_secret.is_empty() and not GameState.known_secrets.has(required_secret):
+		button.text = "[LOCKED - Requires Intel]"
+		button.disabled = true
+
 	button.pressed.connect(_on_choice_pressed.bind(choice))
 	_choices_box.add_child(button)
 
 
 func _on_choice_pressed(choice: Dictionary) -> void:
 	var stat_impact: Dictionary = choice.get("stat_impact", {})
+	var trust_impact: Dictionary = choice.get("trust_impact", {})
 	var set_flag := str(choice.get("set_flag", ""))
-	GameState.apply_choice(stat_impact, set_flag)
+	GameState.apply_choice(stat_impact, set_flag, trust_impact)
 	choice_made.emit(choice)
 
 	var next_ref: Variant = choice.get("next", "")
