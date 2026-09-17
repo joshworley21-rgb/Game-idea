@@ -14,6 +14,10 @@ config/description="A single-player 3D president simulator: govern a modern nati
 config/version="0.1.0"
 run/main_scene="res://godot/scenes/main.tscn"
 
+[autoload]
+
+GameState="*res://scripts/game_state.gd"
+
 [display]
 
 window/size/viewport_width=1280
