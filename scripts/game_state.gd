@@ -6,11 +6,26 @@ extends Node
 ## as the `GameState` autoload in project.godot, so any scene can reach it as
 ## `GameState.approval`, `GameState.cabinet_roles`, and so on.
 
+## Emitted after [method apply_choice] changes one or more headline stats, so
+## reactive UI (the HUD) can tween to the new values.
+signal stats_changed
+
+## Emitted after [method advance_turn] moves the in-game calendar. Carries the
+## new year, month and week so listeners do not need to reach back into state.
+signal calendar_changed(year: int, month: int, week: int)
+
 ## The four headline numbers. Each opens at a neutral 50.
 var approval: int = 50
 var budget: int = 50
 var tension: int = 50
 var loyalty: int = 50
+
+## The in-game calendar, advanced once per turn by [method advance_turn].
+## Stored separately rather than as one counter so the HUD can format it as
+## "Year 1 - Month 1, Week 1" without parsing anything.
+var year: int = 1
+var month: int = 1
+var week: int = 1
 
 ## Story beats the player has triggered, keyed by flag id.
 var story_flags: Dictionary = {}
@@ -99,6 +114,9 @@ func start_new_run(names: Array = []) -> void:
 	budget = 50
 	tension = 50
 	loyalty = 50
+	year = 1
+	month = 1
+	week = 1
 	story_flags.clear()
 	cabinet_roles.clear()
 	_reset_relationship_state()
@@ -112,6 +130,9 @@ func start_new_run(names: Array = []) -> void:
 
 	for i in range(CABINET_ROLES.size()):
 		cabinet_roles[CABINET_ROLES[i]] = pool[i]
+
+	stats_changed.emit()
+	calendar_changed.emit(year, month, week)
 
 
 ## Applies a set of stat deltas to the headline numbers and, if [param new_flag]
@@ -142,6 +163,7 @@ func apply_choice(stat_changes: Dictionary, new_flag: String = "", trust_impact:
 		if advisor_trust.has(role_id):
 			var new_trust := int(advisor_trust[role_id]) + int(trust_impact[role])
 			advisor_trust[role_id] = clampi(new_trust, 0, 100)
+	stats_changed.emit()
 
 
 ## Re-seeds [member advisor_trust] to a neutral 50 for every active cabinet
@@ -152,6 +174,30 @@ func _reset_relationship_state() -> void:
 		advisor_trust[role] = 50
 	known_secrets.clear()
 	pending_events.clear()
+
+
+## Advances the in-game calendar one week and emits [signal calendar_changed].
+##
+## The HUD listens for this rather than polling, so its date label updates the
+## moment the turn system moves forward. The week wraps at four into the next
+## month, and the month wraps at twelve into the next year.
+func advance_turn() -> void:
+	week += 1
+	if week > 4:
+		week = 1
+		month += 1
+		if month > 12:
+			month = 1
+			year += 1
+	calendar_changed.emit(year, month, week)
+	# Advancing a turn is exactly the moment resignations should surface, so the
+	# turn system gets both in one call.
+	end_of_turn_checks()
+
+
+## The current date as the HUD prints it, e.g. "Year 1 - Month 1, Week 1".
+func date_text() -> String:
+	return "Year %d - Month %d, Week %d" % [year, month, week]
 
 
 ## End-of-turn sweep. Any active cabinet role whose trust has fallen below 20
