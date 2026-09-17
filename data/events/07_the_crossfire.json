@@ -1,0 +1,42 @@
+{
+  "speaker": "chief",
+  "text": "In the residence, the Chief of Staff and your spouse are locked in a heated argument. \"We have to use the family tragedy,\" the Chief insists. \"A sympathetic press tour would buy us weeks of goodwill - it's a necessary evil for the campaign.\"",
+  "conditional_text": {
+    "speaker": "chief",
+    "threshold": 30,
+    "hostile_text": "In the residence, the Chief of Staff and your spouse are locked in a heated argument. The Chief's patience is gone. \"Run the story, or I'll leak it myself,\" they snap. \"You don't have the spine to refuse.\""
+  },
+  "choices": [
+    {
+      "text": "Side with the Chief. We need the poll bump.",
+      "trust_impact": {
+        "chief": 20,
+        "spouse": -40
+      },
+      "stat_impact": {
+        "approval": 15
+      }
+    },
+    {
+      "text": "Side with your family. Fire the press team who suggested this.",
+      "trust_impact": {
+        "spouse": 30,
+        "chief": -25
+      },
+      "stat_impact": {
+        "approval": -10
+      }
+    },
+    {
+      "text": "Use your old media contacts to kill the story completely without a trace.",
+      "required_background": "media_mogul",
+      "trust_impact": {
+        "spouse": 10,
+        "chief": 0
+      },
+      "stat_impact": {
+        "budget": -10
+      }
+    }
+  ]
+}
