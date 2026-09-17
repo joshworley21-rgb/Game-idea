@@ -1,0 +1,30 @@
+{
+  "trigger_condition": {
+    "any_of_flags": [
+      "secretary_fired_publicly",
+      "secretary_resigned_quietly"
+    ]
+  },
+  "speaker": "spouse",
+  "text": "Your spouse waits in the residence, phone open on a news alert. The scandal has reached home, and camera crews are harassing your child at school.",
+  "choices": [
+    {
+      "text": "Send them away for their safety.",
+      "stat_impact": {
+        "loyalty": 10,
+        "approval": -10
+      },
+      "set_flag": "family_isolated"
+    },
+    {
+      "text": "Keep them in the residence. We must project strength.",
+      "stat_impact": {
+        "approval": 5
+      },
+      "trust_impact": {
+        "spouse": -30
+      },
+      "set_flag": "spouse_resentful"
+    }
+  ]
+}

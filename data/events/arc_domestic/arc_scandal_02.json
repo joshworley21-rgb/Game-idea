@@ -1,0 +1,30 @@
+{
+  "trigger_condition": {
+    "any_of_flags": [
+      "press_threatened",
+      "ig_investigation_opened",
+      "press_bribe"
+    ]
+  },
+  "speaker": "chief",
+  "text": "The Chief of Staff closes the residence door and lowers their voice. They discovered who leaked the tape: the cabinet secretary with the lowest trust score in the room sold it.",
+  "choices": [
+    {
+      "text": "Publicly fire them.",
+      "stat_impact": {
+        "tension": 15,
+        "approval": 5
+      },
+      "set_flag": "secretary_fired_publicly"
+    },
+    {
+      "text": "Demand their quiet resignation.",
+      "required_secret": "embezzlement",
+      "stat_impact": {
+        "budget": 10,
+        "tension": -10
+      },
+      "set_flag": "secretary_resigned_quietly"
+    }
+  ]
+}
