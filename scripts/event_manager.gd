@@ -166,15 +166,49 @@ func _show_node(node_ref: Variant) -> void:
 		_finish()
 		return
 
-	_text_label.text = str(node.get("text", ""))
+	var displayed_text := _resolve_node_text(node)
+	_text_label.text = displayed_text
 	# The console trace is part of the brief: print the event text as it is
 	# shown, so headless runs and the editor output both read like a log.
-	print(str(node.get("text", "")))
+	print(displayed_text)
 
 	_clear_choices()
 	for choice in node.get("choices", []):
 		if choice is Dictionary:
 			_add_choice_button(choice)
+
+
+## Returns the text that should actually be shown for [param node].
+##
+## A node (or the event itself) may carry a `conditional_text` block:
+##
+##   {
+##     "conditional_text": {
+##       "speaker": "defense",
+##       "threshold": 30,
+##       "hostile_text": "You again. What do you want?"
+##     }
+##   }
+##
+## If the named speaker has a GameState.advisor_trust value below `threshold`
+## (default 30), the hostile greeting is shown instead of the node's normal
+## "text". Unknown speakers, missing trust entries, and events without a
+## conditional_text block fall back to the normal text.
+func _resolve_node_text(node: Dictionary) -> String:
+	var default_text := str(node.get("text", ""))
+	var conditional: Variant = node.get("conditional_text", _event_data.get("conditional_text", {}))
+	if not (conditional is Dictionary) or (conditional as Dictionary).is_empty():
+		return default_text
+	var block: Dictionary = conditional
+
+	var speaker := str(block.get("speaker", _event_data.get("speaker", node.get("speaker", ""))))
+	if speaker.is_empty() or not GameState.advisor_trust.has(speaker):
+		return default_text
+
+	var threshold := int(block.get("threshold", 30))
+	if int(GameState.advisor_trust[speaker]) < threshold:
+		return str(block.get("hostile_text", default_text))
+	return default_text
 
 
 func _resolve_node(node_ref: Variant) -> Dictionary:
@@ -204,16 +238,31 @@ func _resolve_node(node_ref: Variant) -> Dictionary:
 func _add_choice_button(choice: Dictionary) -> void:
 	var button := Button.new()
 	button.name = "Choice"
-	button.text = str(choice.get("text", "Continue"))
+	var original_text := str(choice.get("text", "Continue"))
+	button.text = original_text
+	var locked := false
 
-	# Choices can be gated on a piece of intel. When a required_secret is
+	# A choice can require the player to have a specific background. When the
+	# requirement exists and does not match GameState.player_background, the
+	# choice is disabled and the lock tag is prepended so the original option
+	# text stays visible.
+	var required_background := str(choice.get("required_background", ""))
+	if not required_background.is_empty() and str(GameState.player_background) != required_background:
+		button.text = "[LOCKED - Background] " + original_text
+		locked = true
+
+	# Choices can also be gated on a piece of intel. When a required_secret is
 	# present but not yet in GameState.known_secrets, the button is disabled
 	# and relabelled so the player can see the option exists but is unavailable.
 	var required_secret := str(choice.get("required_secret", ""))
 	if not required_secret.is_empty() and not GameState.known_secrets.has(required_secret):
-		button.text = "[LOCKED - Requires Intel]"
-		button.disabled = true
+		if locked:
+			button.text = "[LOCKED - Background] [LOCKED - Requires Intel] " + original_text
+		else:
+			button.text = "[LOCKED - Requires Intel]"
+		locked = true
 
+	button.disabled = locked
 	button.pressed.connect(_on_choice_pressed.bind(choice))
 	_choices_box.add_child(button)
 

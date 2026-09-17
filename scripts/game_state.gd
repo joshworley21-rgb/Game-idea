@@ -35,6 +35,10 @@ var pending_events: Array[String] = []
 ## more than one group.
 var character_profiles: Dictionary = {}
 
+## The player's background id. Dialogue choices can be gated on this value;
+## see EventManager's required_background choice field.
+var player_background: String = "ex_military"
+
 ## The 24 first names drawn into the cabinet at the start of a run.
 const CABINET_NAMES: Array[String] = [
 	"Margaret", "Daniel", "Ruth", "Marcus", "Eleanor", "Priya", "Thomas",
