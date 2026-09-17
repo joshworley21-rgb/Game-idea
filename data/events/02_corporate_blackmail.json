@@ -1,0 +1,24 @@
+{
+  "trigger_condition": {
+    "required_flags": [
+      "took_corporate_bailout"
+    ]
+  },
+  "text": "Chief of Staff: The CEO who bailed us out is demanding a tax break. He says if you refuse, he will ruin your reputation.",
+  "choices": [
+    {
+      "text": "Cede to the blackmail.",
+      "stat_impact": {
+        "budget": -15,
+        "loyalty": 10
+      }
+    },
+    {
+      "text": "Refuse and face the press.",
+      "stat_impact": {
+        "approval": -20,
+        "tension": 15
+      }
+    }
+  ]
+}

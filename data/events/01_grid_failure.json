@@ -1,0 +1,21 @@
+{
+  "text": "Chief of Staff: Mr. President, a massive power grid failure is spreading across the country. Hospitals are on backup generators, and the markets are panicking.",
+  "choices": [
+    {
+      "text": "Take a private corporate bailout.",
+      "stat_impact": {
+        "budget": 10,
+        "approval": -5
+      },
+      "set_flag": "took_corporate_bailout"
+    },
+    {
+      "text": "Use federal emergency funds.",
+      "stat_impact": {
+        "budget": -20,
+        "approval": 15
+      },
+      "set_flag": "used_federal_funds"
+    }
+  ]
+}
