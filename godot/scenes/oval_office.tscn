@@ -1,0 +1,61 @@
+[gd_scene load_steps=6 format=3]
+
+; The Oval Office: an advisor walks in from the west door and stops at the desk.
+;
+; The path's two ends are measured off the model rather than guessed. In the
+; imported OvalOffice.glb the Resolute desk sits at (0, 0.46, -3.02) and is
+; 1.23 deep, putting its near edge at z = -2.40; the classic door on the west
+; wall is at (-5.31, 1.26, -0.03). So the walk starts just inside that door and
+; ends 0.7 in front of the desk, facing it, which is where a briefing is given
+; standing up.
+
+[ext_resource type="Script" path="res://godot/scripts/world/oval_office.gd" id="1_oval"]
+[ext_resource type="Script" path="res://godot/scripts/ui/dossier_card.gd" id="2_card"]
+[ext_resource type="PackedScene" path="res://public/models/OvalOffice.glb" id="3_room"]
+[ext_resource type="PackedScene" path="res://public/models/Suit_Male.glb" id="4_suit"]
+
+[sub_resource type="Curve3D" id="Curve3D_walk"]
+; Three points: in at the west door, a bend around the near end of the seating,
+; then square on to the desk. Each point is (in-handle, out-handle, position).
+_data = {
+"points": PackedVector3Array(0, 0, 0, 1.2, 0, -0.3, -5, 0, 0, -1, 0, 0.2, 1, 0, -0.2, -2.6, 0, -0.9, -1, 0, 0.4, 0, 0, 0, 0, 0, -1.7),
+"tilts": PackedFloat32Array(0, 0, 0)
+}
+point_count = 3
+
+[node name="OvalOffice" type="Node3D" node_paths=PackedStringArray("walk_path", "follower", "briefing_card")]
+script = ExtResource("1_oval")
+walk_path = NodePath("AdvisorPath")
+follower = NodePath("AdvisorPath/Advisor")
+briefing_card = NodePath("BriefingCard")
+
+[node name="Room" type="Node3D" parent="." instance=ExtResource("3_room")]
+
+[node name="AdvisorPath" type="Path3D" parent="."]
+curve = SubResource("Curve3D_walk")
+
+; rotation_mode is the default ROTATION_XYZ, so the follower turns to face the
+; way it is travelling -- which in Godot means its -Z runs along the path.
+[node name="Advisor" type="PathFollow3D" parent="AdvisorPath"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 0)
+
+; Turned 180 degrees inside the follower, and this is the one place that belongs
+; in a scene file rather than in a script.
+;
+; build_suit_models.gd builds its figures facing +Z: with the model at rest the
+; thighs, forearms and gaze all run that way, which is measurable -- drop one at
+; an identity marker and Knee_L lands at z = +0.44. Godot's own forward is -Z,
+; and PathFollow3D orients by that convention, so an unturned model walks the
+; path backwards. oval_office.gd deliberately never touches the body's
+; transform ("the follower is authored with the model already in it"), so the
+; correction is authored here, once, where the body is placed.
+[node name="AdvisorModel" parent="AdvisorPath/Advisor" instance=ExtResource("4_suit")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1.0000, 0.0000, 0.0000, 0.0000, 0.9927, -0.1207, 0.0000, 0.1207, 0.9927, 0.0000, 1.7000, 1.3000)
+current = true
+fov = 70.0
+
+[node name="BriefingCard" type="CanvasLayer" parent="."]
+script = ExtResource("2_card")

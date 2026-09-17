@@ -27,6 +27,17 @@ var year: int = 1
 var month: int = 1
 var week: int = 1
 
+## How many turns have been played, counting the first as 1. The calendar above
+## cannot answer this: it wraps, so "week 2" is the second turn of a month and
+## not the second turn of the run. An event's `min_turn` is measured against
+## this, so a beat can be held back until the player has some history.
+var turn: int = 1
+
+## Ids of events already played this run, so the deck does not deal one twice.
+## An arc depends on it: stage one sets the flag stage two needs, and without
+## this the deck would keep returning to stage one and setting it again.
+var played_events: Dictionary = {}
+
 ## Story beats the player has triggered, keyed by flag id.
 var story_flags: Dictionary = {}
 
@@ -117,7 +128,9 @@ func start_new_run(names: Array = []) -> void:
 	year = 1
 	month = 1
 	week = 1
+	turn = 1
 	story_flags.clear()
+	played_events.clear()
 	cabinet_roles.clear()
 	_reset_relationship_state()
 
@@ -182,6 +195,7 @@ func _reset_relationship_state() -> void:
 ## moment the turn system moves forward. The week wraps at four into the next
 ## month, and the month wraps at twelve into the next year.
 func advance_turn() -> void:
+	turn += 1
 	week += 1
 	if week > 4:
 		week = 1
@@ -193,6 +207,19 @@ func advance_turn() -> void:
 	# Advancing a turn is exactly the moment resignations should surface, so the
 	# turn system gets both in one call.
 	end_of_turn_checks()
+
+
+## Records [param event_id] as played, so the deck stops offering it.
+## The id is an event's file name without its extension, which is what
+## TurnManager.current_event_id() returns.
+func mark_event_played(event_id: String) -> void:
+	if event_id.is_empty():
+		return
+	played_events[event_id] = true
+
+
+func has_played_event(event_id: String) -> bool:
+	return not event_id.is_empty() and played_events.has(event_id)
 
 
 ## The current date as the HUD prints it, e.g. "Year 1 - Month 1, Week 1".

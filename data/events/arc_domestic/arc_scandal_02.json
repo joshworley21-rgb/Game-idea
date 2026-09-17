@@ -7,22 +7,29 @@
     ]
   },
   "speaker": "chief",
-  "text": "The Chief of Staff closes the residence door and lowers their voice. They discovered who leaked the tape: the cabinet secretary with the lowest trust score in the room sold it.",
+  "text": "The Chief of Staff shuts the Residence door and lowers their voice. \"We traced the leak. It came from inside - the secretary with the least loyalty left in this building sold the tape.\" They slide a shortlist across the table. \"Fire them publicly, pin it on a civil servant, or use what we have on them to force a quiet resignation. Decide.\"",
   "choices": [
     {
-      "text": "Publicly fire them.",
+      "text": "Fire them publicly.",
       "stat_impact": {
-        "tension": 15,
-        "approval": 5
+        "approval": -15,
+        "loyalty": -10
       },
       "set_flag": "secretary_fired_publicly"
     },
     {
-      "text": "Demand their quiet resignation.",
-      "required_secret": "embezzlement",
+      "text": "Frame a scapegoat in the civil service.",
       "stat_impact": {
-        "budget": 10,
-        "tension": -10
+        "approval": -5,
+        "tension": 10
+      },
+      "set_flag": "scapegoat_framed"
+    },
+    {
+      "text": "Demand their quiet resignation using your leverage.",
+      "required_secret": "state_embezzlement",
+      "trust_impact": {
+        "chief": 10
       },
       "set_flag": "secretary_resigned_quietly"
     }

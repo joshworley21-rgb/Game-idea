@@ -1,6 +1,6 @@
 {
   "speaker": "press",
-  "text": "A reporter steps into your path outside the West Wing, phone already recording. They claim to have leaked audio of a cabinet secretary admitting the administration diverted infrastructure funds, and they intend to run it tonight.",
+  "text": "A reporter cuts across the West Wing walkway, recorder already running. \"I have leaked audio of one of your cabinet secretaries admitting the administration diverted infrastructure funds,\" they say. \"I'm running it tonight. Do you have a comment, or should I quote your silence?\"",
   "choices": [
     {
       "text": "Threaten the journalist with national security injunctions.",
@@ -21,7 +21,7 @@
       "set_flag": "ig_investigation_opened"
     },
     {
-      "text": "Offer an exclusive interview to bury the story.",
+      "text": "Offer an exclusive interview on another topic to bury the story.",
       "required_background": "media_mogul",
       "set_flag": "press_bribe"
     }

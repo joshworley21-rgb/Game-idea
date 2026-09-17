@@ -79,8 +79,13 @@ func load_event(path: String) -> Dictionary:
 ## trigger_condition block always plays. When the block is present:
 ##   required_flags  -> every flag in the array must already be in
 ##                      GameState.story_flags.
+##   any_of_flags    -> at least one flag in the array must be present. This is
+##                      what chains an arc: stage two lists the flags stage one
+##                      can set, so whichever branch the player took opens it.
 ##   blocked_flags   -> if any flag in the array is present, the event cannot
 ##                      play.
+##   min_turn        -> GameState.turn must have reached this value, which
+##                      holds a beat back until the run has some history.
 func can_play(event_data: Dictionary) -> bool:
 	if event_data.is_empty() or not event_data.has("trigger_condition"):
 		return true
@@ -98,10 +103,28 @@ func can_play(event_data: Dictionary) -> bool:
 			if not GameState.story_flags.has(str(flag)):
 				return false
 
+	# Unlike required_flags, one hit is enough. An empty array is treated as no
+	# constraint rather than as an unsatisfiable one, so a half-written event
+	# does not vanish silently from the deck.
+	if trigger.has("any_of_flags"):
+		var any_of: Array = trigger["any_of_flags"]
+		if not any_of.is_empty():
+			var matched := false
+			for flag in any_of:
+				if GameState.story_flags.has(str(flag)):
+					matched = true
+					break
+			if not matched:
+				return false
+
 	if trigger.has("blocked_flags"):
 		for flag in trigger["blocked_flags"]:
 			if GameState.story_flags.has(str(flag)):
 				return false
+
+	if trigger.has("min_turn"):
+		if GameState.turn < int(trigger["min_turn"]):
+			return false
 
 	return true
 
@@ -124,8 +147,42 @@ func play_event(event_data: Dictionary) -> void:
 	_ensure_ui()
 	visible = true
 
-	var start_ref: Variant = event_data.get("start", event_data.get("start_node", ""))
-	_show_node(start_ref)
+	_show_node(_start_node_ref(event_data))
+
+
+## Which node an event opens on.
+##
+## Normally that is its "start" value. An event carrying a `branch_on_flags`
+## block opens instead on the node named by the first of those flags the player
+## actually has:
+##
+##   "branch_on_flags": { "kalmar_mobilized": "mobilized",
+##                        "kalmar_diplomacy": "diplomacy" }
+##
+## which is how the follow-up to a branching event picks up where that event
+## left the player. "start" stays the fallback for a player who has none of
+## them -- an event reachable by some route its author did not list still opens
+## rather than showing nothing.
+##
+## Dictionary order in GDScript is insertion order, and JSON is parsed in the
+## order it is written, so the first match is the topmost line in the file.
+## That makes precedence something the author controls by hand when a player
+## holds two of the flags at once.
+func _start_node_ref(event_data: Dictionary) -> Variant:
+	var fallback: Variant = event_data.get("start", event_data.get("start_node", ""))
+	var branch: Variant = event_data.get("branch_on_flags", {})
+	if not (branch is Dictionary) or (branch as Dictionary).is_empty():
+		return fallback
+
+	var nodes: Dictionary = event_data.get("nodes", {})
+	for flag in branch:
+		if not GameState.story_flags.has(str(flag)):
+			continue
+		var node_id := str((branch as Dictionary)[flag])
+		if nodes.has(node_id) or event_data.has(node_id):
+			return node_id
+		push_warning("EventManager: branch_on_flags sends '%s' to node '%s', which the event does not define" % [str(flag), node_id])
+	return fallback
 
 
 ## Returns the event currently being played, or {} when idle.
@@ -256,10 +313,12 @@ func _add_choice_button(choice: Dictionary) -> void:
 	# and relabelled so the player can see the option exists but is unavailable.
 	var required_secret := str(choice.get("required_secret", ""))
 	if not required_secret.is_empty() and not GameState.known_secrets.has(required_secret):
-		if locked:
-			button.text = "[LOCKED - Background] [LOCKED - Requires Intel] " + original_text
-		else:
-			button.text = "[LOCKED - Requires Intel]"
+		# Both tags when both gates fail, and the option text stays on the
+		# button either way: a locked choice the player cannot read is just a
+		# greyed-out row, and the point of showing it is that they can see what
+		# they are missing.
+		var tags := "[LOCKED - Background] [LOCKED - Requires Intel] " if locked else "[LOCKED - Requires Intel] "
+		button.text = tags + original_text
 		locked = true
 
 	button.disabled = locked
@@ -272,10 +331,29 @@ func _on_choice_pressed(choice: Dictionary) -> void:
 	var trust_impact: Dictionary = choice.get("trust_impact", {})
 	var set_flag := str(choice.get("set_flag", ""))
 	GameState.apply_choice(stat_impact, set_flag, trust_impact)
+
+	# A choice may also carry "random_flag": one of these is drawn and set, for
+	# an outcome the player does not control -- the skirmish they win or the
+	# carrier they lose. It is applied on top of set_flag, not instead of it,
+	# so a choice can both record what was chosen and how it turned out.
+	_apply_random_flag(choice)
+
 	choice_made.emit(choice)
 
 	var next_ref: Variant = choice.get("next", "")
 	_show_node(next_ref)
+
+
+## Draws one flag from a choice's "random_flag" array and sets it. Returns the
+## flag chosen, or "" when the choice carries none, so a test can see which way
+## it fell without reading GameState.
+func _apply_random_flag(choice: Dictionary) -> String:
+	var options: Variant = choice.get("random_flag", [])
+	if not (options is Array) or (options as Array).is_empty():
+		return ""
+	var picked := str((options as Array)[randi() % (options as Array).size()])
+	GameState.apply_choice({}, picked)
+	return picked
 
 
 func _clear_choices() -> void:

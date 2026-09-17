@@ -12,7 +12,7 @@ config_version=5
 config/name="President Simulator"
 config/description="A single-player 3D president simulator: govern a modern nation while keeping your health, family and sanity intact."
 config/version="0.1.0"
-run/main_scene="res://godot/scenes/main.tscn"
+run/main_scene="res://godot/scenes/game.tscn"
 
 [autoload]
 

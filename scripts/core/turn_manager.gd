@@ -120,6 +120,9 @@ func start_turn() -> void:
 	_current_speaker = _speaker_for_event(data)
 	_current_person = _person_for_speaker(_current_speaker)
 	_last_choice = {}
+	# Marked on the way in, not on the way out: the 3D entry below awaits, and
+	# an event still counts as played if the run ends part-way through it.
+	GameState.mark_event_played(current_event_id())
 	turn_started.emit(current_event_id(), _current_speaker)
 
 	await _enter_speaker_3d(_current_speaker)
@@ -163,7 +166,9 @@ func on_choice_resolved(choice: Dictionary = {}) -> void:
 		_trigger_game_over(end_reason)
 		return
 
-	GameState.end_of_turn_checks()
+	# advance_turn() runs end_of_turn_checks() itself, by design -- "the turn
+	# system gets both in one call". Calling it here as well ran the sweep
+	# twice per turn.
 	GameState.advance_turn()
 	start_turn()
 
@@ -218,6 +223,11 @@ func _path_for_pending_id(id: String) -> String:
 ## Draw the next eligible event from a shuffled deck of all JSON files in
 ## event_directory. Ineligible events are skipped but stay in the deck, so they
 ## can become eligible later once their story flags change.
+##
+## An event already played this run is skipped for good. Without that an arc
+## cannot run: stage one sets the flag stage two waits on, and the deck would
+## keep coming back round to stage one and setting it again, so the run would
+## circle the opening beat instead of moving through the arc.
 func _next_deck_path() -> String:
 	_ensure_deck()
 	if _deck.is_empty():
@@ -227,10 +237,18 @@ func _next_deck_path() -> String:
 			_deck_cursor = 0
 		var path: String = _deck[_deck_cursor]
 		_deck_cursor += 1
+		if GameState.has_played_event(_event_id_for(path)):
+			continue
 		var data := _read_event(path)
 		if not data.is_empty() and _is_eligible(data):
 			return path
 	return ""
+
+
+## An event's id is its file name without the extension, so the same string
+## identifies it whether it came from the deck or from pending_events.
+func _event_id_for(path: String) -> String:
+	return path.get_file().get_basename()
 
 
 func _ensure_deck() -> void:
@@ -242,23 +260,38 @@ func _ensure_deck() -> void:
 	_deck_cursor = 0
 
 
+## Every .json under event_directory, including the arc subdirectories.
+##
+## This recurses because the arcs live in folders -- data/events/arc_foreign/,
+## data/events/arc_domestic/ -- and a flat scan left all of them out of the
+## deck, so the nine events in them could never be drawn.
 func _scan_event_files() -> Array[String]:
 	var paths: Array[String] = []
-	var dir := DirAccess.open(event_directory)
+	_scan_into(event_directory, paths)
+	paths.sort()
+	return paths
+
+
+func _scan_into(directory: String, paths: Array[String]) -> void:
+	var dir := DirAccess.open(directory)
 	if dir == null:
 		push_error("TurnManager: cannot open event directory %s (error %d)" % [
-			event_directory, DirAccess.get_open_error()
+			directory, DirAccess.get_open_error()
 		])
-		return paths
+		return
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
-		if not dir.current_is_dir() and file_name.get_extension().to_lower() == "json":
-			paths.append(event_directory.path_join(file_name))
+		var full := directory.path_join(file_name)
+		if dir.current_is_dir():
+			# list_dir_begin() already skips "." and "..", and skip_navigational
+			# is not set, so the only guard needed is against a hidden folder.
+			if not file_name.begins_with("."):
+				_scan_into(full, paths)
+		elif file_name.get_extension().to_lower() == "json":
+			paths.append(full)
 		file_name = dir.get_next()
 	dir.list_dir_end()
-	paths.sort()
-	return paths
 
 
 func _read_event(path: String) -> Dictionary:
@@ -303,10 +336,23 @@ func _local_can_play(data: Dictionary) -> bool:
 		for flag in trigger["required_flags"]:
 			if not GameState.story_flags.has(str(flag)):
 				return false
+	if trigger.has("any_of_flags"):
+		var any_of: Array = trigger["any_of_flags"]
+		if not any_of.is_empty():
+			var matched := false
+			for flag in any_of:
+				if GameState.story_flags.has(str(flag)):
+					matched = true
+					break
+			if not matched:
+				return false
 	if trigger.has("blocked_flags"):
 		for flag in trigger["blocked_flags"]:
 			if GameState.story_flags.has(str(flag)):
 				return false
+	if trigger.has("min_turn"):
+		if GameState.turn < int(trigger["min_turn"]):
+			return false
 	return true
 
 

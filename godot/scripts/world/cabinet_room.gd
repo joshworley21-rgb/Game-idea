@@ -191,8 +191,22 @@ func _seat(index: int, marker: Marker3D, person: Dictionary) -> Node3D:
 	var body := _instance_body(person)
 	body.name = "Seat%d_%s" % [index + 1, Cast.slug(str(person.get("name", "character")))]
 	marker.add_child(body)
-	# The model keeps its own transform: the seat marker is the chair, and where
-	# the mesh sits relative to it is the modeller's business, not this script's.
+	# Turned to face the way the chair faces.
+	#
+	# build_suit_models.gd builds its figures facing +Z -- with a model at rest
+	# the thighs and forearms both run that way, which is measurable rather
+	# than a reading of the code: drop one at an identity marker and Knee_L
+	# lands at z = +0.44. Godot's own forward is -Z, and a seat marker's -Z is
+	# what this script treats as the direction the sitter faces: the focus
+	# maths below stands the camera along it, "in front of the seat looking
+	# back at it". Seat the body unturned and those two disagree by half a
+	# turn, so every secretary has their back to the table and the camera
+	# frames the back of their head.
+	#
+	# oval_office.tscn carries the same 180 degrees on the body inside its
+	# PathFollow3D. The correction belongs wherever the body is placed, and
+	# here that is this line rather than a scene file.
+	body.rotate_y(PI)
 	_play_idle_sit(body)
 	_add_hitbox(body, index)
 	return body

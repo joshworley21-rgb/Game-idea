@@ -1,0 +1,35 @@
+[gd_scene load_steps=6 format=3]
+
+; The game, assembled: a room to stage a briefing in, the turn loop that deals
+; the briefings, and the HUD that reads the numbers they change.
+;
+; TurnManager resolves its neighbours by name as well, but only as a fallback,
+; and its fallbacks look for children of itself -- get_node_or_null("OvalOffice")
+; is relative to the TurnManager node. Wiring the exports instead is what lets
+; the room stay a sibling, where a room belongs, rather than being parented to
+; the turn loop to satisfy a name lookup. That only works because the node
+; header lists them in node_paths; without it the exports arrive null.
+
+[ext_resource type="Script" path="res://scripts/core/game.gd" id="1_game"]
+[ext_resource type="PackedScene" path="res://godot/scenes/oval_office.tscn" id="2_oval"]
+[ext_resource type="Script" path="res://scripts/core/turn_manager.gd" id="3_turn"]
+[ext_resource type="Script" path="res://scripts/event_manager.gd" id="4_events"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_hud"]
+
+[node name="Game" type="Node3D" node_paths=PackedStringArray("turn_manager")]
+script = ExtResource("1_game")
+turn_manager = NodePath("TurnManager")
+
+[node name="OvalOffice" parent="." instance=ExtResource("2_oval")]
+
+[node name="TurnManager" type="Node" parent="." node_paths=PackedStringArray("event_manager", "oval_office", "briefing_card", "camera")]
+script = ExtResource("3_turn")
+event_manager = NodePath("EventManager")
+oval_office = NodePath("../OvalOffice")
+briefing_card = NodePath("../OvalOffice/BriefingCard")
+camera = NodePath("../OvalOffice/Camera3D")
+
+[node name="EventManager" type="CanvasLayer" parent="TurnManager"]
+script = ExtResource("4_events")
+
+[node name="HUD" parent="." instance=ExtResource("5_hud")]

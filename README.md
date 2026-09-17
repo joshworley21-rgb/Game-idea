@@ -681,8 +681,10 @@ src/tools/    headless balance harness
 android/      Capacitor Android project
 public/models/ optimised .glb props (built by `npm run assets`)
 scripts/      asset pipeline, and the GDScript that is not room code
-godot/        the Godot 4 port: room scripts, ported simulation, tests
-scenes/       Godot UI scenes (HUD, dossier, epilogue)
+godot/scenes/ Godot scenes: game (the main scene), the three rooms
+godot/scripts/ the Godot port: room controllers and the ported simulation
+godot/tests/  the headless suite behind `npm run godot:test`
+scenes/ui/    Godot UI scenes (HUD, dossier, epilogue)
 data/events/  JSON dialogue events read by the Godot build
 ```
 
@@ -699,35 +701,63 @@ own carry a `.gdignore` so Godot does not import `node_modules/`.
 **What is ported and green.** The simulation core — RNG, opening position,
 blocs, actions, bills, congress, effects — is in `godot/scripts/game/` and
 agrees with the TypeScript digit for digit; `godot/tests/parity.gd` is what
-proves it. Three rooms have scripts (`main.gd`, `cabinet_room.gd`,
-`oval_office.gd`), the cabinet room and oval office each have a smoke test,
-and `GameState`, `EventManager`, `TurnManager` and the epilogue generator are
-written.
+proves it.
 
-**What is not wired up yet.** The pieces exist but the game is not assembled:
+The game is assembled and plays: `godot/scenes/game.tscn` is the project's
+main scene, and opening it starts a run, walks an advisor into the Oval
+Office, puts their briefing on screen with its choices, and applies what the
+player picks to the numbers the HUD is showing. `TurnManager` drives that loop
+— its own `on_choice_resolved()` advances the calendar and deals the next
+turn.
 
-- `TurnManager` — the 583-line turn coordinator — is not instantiated by any
-  scene or script. Nothing drives a turn.
-- The cabinet room and the oval office have no `.tscn`. They are built in code
-  by their tests, so they are exercised but not playable.
-- `main.tscn` opens the Briefing Room with free-look and nothing else: no HUD,
-  no turn loop.
-- The nine arc events under `data/events/arc_*/` are never drawn.
-  `TurnManager._scan_event_files()` does not recurse, so only the six top-level
-  events reach the deck. They also use four keys no GDScript reads yet —
-  `any_of_flags`, `branch_on_flags`, `random_flag`, `min_turn`.
-- `data/events/arc_domestic/` and `data/events/arc_scandal/` are two different
-  drafts of the same three whistleblower events. One of them should go.
+Three rooms have scenes. `main.tscn` is the Briefing Room, `cabinet_room.tscn`
+seats the cabinet at a table built to the web build's measurements, and
+`oval_office.tscn` walks an advisor from the west door to the desk along a
+path measured off the imported model.
+
+**Events.** The deck is every `.json` under `data/events/`, subdirectories
+included, dealt shuffled and never twice in a run. An event's
+`trigger_condition` understands `required_flag`, `required_flags`,
+`any_of_flags`, `blocked_flags` and `min_turn`; an event can open on a
+`branch_on_flags` node chosen by what the player has already done, and a
+choice can carry `stat_impact`, `trust_impact`, `set_flag`, `random_flag`,
+`required_secret` and `required_background`. Both arcs — the Kalmar crisis and
+the whistleblower scandal — run from first beat to last on those rules, which
+`godot/tests/events_smoke.gd` walks through end to end.
+
+**What is still missing.** Two things, both art rather than code:
+
+- The suit models carry only an `idle_sit` clip. `oval_office.gd` asks for
+  `walk` and `idle_stand`, finds neither, and degrades to sliding the advisor
+  along the path — the walk-in reads as a glide. The clips have to be written
+  into the GLBs the way `scripts/add_sit_animation.py` writes `idle_sit`,
+  because Godot's glTF exporter writes no animations at all.
+- There is no Cabinet Room model, so that scene's shell is boxes in the web
+  build's palette rather than a room.
 
 ### Running it
 
 ```bash
 npm run assets     # required once: the Oval Office model is not committed
-npm run godot:test # import, then parity + oval office + cabinet room
+npm run godot:test # import, then parity + events + scenes + the two rooms
+godot4 --path .    # play it: game.tscn is the main scene
 ```
 
 `godot:test` honours `$GODOT`, so point it at a binary if `godot4` is not on
 your path. CI runs the same suite on every pull request.
+
+An exported Node reference in a hand-written `.tscn` needs the property named
+in the **node header**, not just assigned:
+
+```
+[node name="Game" type="Node3D" node_paths=PackedStringArray("turn_manager")]
+turn_manager = NodePath("TurnManager")
+```
+
+Write the assignment without the header and the property arrives null, every
+script falls back to a name lookup, and nothing errors — which is what
+`main.tscn` did for months. `godot/tests/scenes_smoke.gd` checks each scene's
+exports actually resolve, because that failure is invisible otherwise.
 
 Anything that regenerates a model must leave it importable: `--compress
 quantize` suits three.js, which decodes `KHR_mesh_quantization` natively, and

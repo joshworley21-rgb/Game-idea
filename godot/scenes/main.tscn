@@ -35,7 +35,7 @@ tonemap_mode = 3
 tonemap_exposure = 0.72
 tonemap_white = 4.0
 
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" node_paths=PackedStringArray("camera", "positions_root")]
 script = ExtResource("1_main")
 camera = NodePath("Camera3D")
 positions_root = NodePath("CameraPositions")

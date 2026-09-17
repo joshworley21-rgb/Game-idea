@@ -25,11 +25,20 @@ func _ready() -> void:
 	# Resolve the exported references by name if the scene did not supply them.
 	#
 	# A hand-written .tscn stores an exported Node reference as a NodePath, and
-	# it does not reliably resolve on load the way an editor-authored scene
-	# does. Both arrived null here, which fails silently in the worst way: the
-	# marker list falls back to a single default, _snap_to_position() returns
-	# at its own guard, and the camera simply sits wherever the scene file put
-	# it, facing whatever way the scene file left it. Nothing errors.
+	# writing that line alone is not enough: the reference arrives null unless
+	# the *node header* also lists the property in node_paths, which is how the
+	# editor writes it and what nobody writing a .tscn by hand thinks to add.
+	#
+	#   [node name="Main" type="Node3D" node_paths=PackedStringArray("camera")]
+	#   camera = NodePath("Camera3D")
+	#
+	# main.tscn was missing that header for a long time, and it fails silently
+	# in the worst way: the marker list falls back to a single default,
+	# _snap_to_position() returns at its own guard, and the camera simply sits
+	# wherever the scene file put it, facing whatever way the scene file left
+	# it. Nothing errors. The header is there now, so these two arrive wired --
+	# the fallbacks below stay because they cost nothing and they are what let
+	# the smoke tests build this scene in code with no .tscn at all.
 	if camera == null:
 		camera = get_node_or_null("Camera3D") as Camera3D
 	if positions_root == null:
