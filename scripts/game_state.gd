@@ -19,6 +19,12 @@ var story_flags: Dictionary = {}
 ## Keys are the six role ids; values are first names from CABINET_NAMES.
 var cabinet_roles: Dictionary = {}
 
+## Voice archetype for every named character, loaded once at startup from
+## res://data/character_profiles.json. Grouped by "cabinet", "spouses" and
+## "children" because some first names (Marcus, Priya, Ruth, ...) appear in
+## more than one group.
+var character_profiles: Dictionary = {}
+
 ## The 24 first names drawn into the cabinet at the start of a run.
 const CABINET_NAMES: Array[String] = [
 	"Margaret", "Daniel", "Ruth", "Marcus", "Eleanor", "Priya", "Thomas",
@@ -37,6 +43,33 @@ func _ready() -> void:
 	# Autoloads call _ready() when the game boots; seed the global RNG so
 	# each run draws a different cabinet.
 	randomize()
+	# Personality data is read here so every run starts with the same,
+	# complete character -> archetype map already in memory.
+	_load_character_profiles()
+
+
+## Reads res://data/character_profiles.json into [member character_profiles].
+func _load_character_profiles() -> void:
+	character_profiles.clear()
+	var file := FileAccess.open("res://data/character_profiles.json", FileAccess.READ)
+	if file == null:
+		push_error("GameState: cannot open res://data/character_profiles.json (error %d)" % FileAccess.get_open_error())
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if parsed is Dictionary:
+		character_profiles = parsed
+	else:
+		push_error("GameState: character_profiles.json is not a JSON object")
+
+
+## Returns the voice archetype for [param character_name] ("Hawk", "Scholar",
+## "Strained Spouse", ...), searching the cabinet, spouses and children groups.
+## Returns "" when the name is not in the profile data.
+func voice_archetype(character_name: String) -> String:
+	for group in character_profiles.values():
+		if group is Dictionary and group.has(character_name):
+			return str(group[character_name])
+	return ""
 
 
 ## Starts a fresh run: resets the headline numbers and flags, then shuffles
