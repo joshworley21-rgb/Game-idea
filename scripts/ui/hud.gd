@@ -13,6 +13,10 @@ extends CanvasLayer
 
 const PANEL_WIDTH := 384.0
 
+## The overlay the HUD's toggle button opens. Loaded lazily on first press so
+## the HUD stays cheap while the dossier is not in use.
+const DOSSIER_SCENE_PATH := "res://scenes/ui/cabinet_dossier.tscn"
+
 const STAT_KEYS: Array[String] = ["approval", "budget", "tension", "loyalty"]
 
 const STAT_TITLES := {
@@ -35,6 +39,8 @@ var _date_label: Label
 var _bars: Dictionary = {}
 var _value_labels: Dictionary = {}
 var _tweens: Dictionary = {}
+var _dossier_button: Button
+var _dossier_overlay: Node = null
 
 
 func _ready() -> void:
@@ -85,6 +91,12 @@ func _build() -> void:
 	_date_label.add_theme_font_size_override("font_size", 17)
 	_date_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.96, 1.0))
 	column.add_child(_date_label)
+
+	_dossier_button = Button.new()
+	_dossier_button.name = "DossierToggle"
+	_dossier_button.text = "Cabinet Dossier"
+	_dossier_button.pressed.connect(_on_dossier_button_pressed)
+	column.add_child(_dossier_button)
 
 	column.add_child(HSeparator.new())
 
@@ -190,6 +202,35 @@ func _date_from_state() -> String:
 	var m := int(_state.get("month"))
 	var w := int(_state.get("week"))
 	return "Year %d - Month %d, Week %d" % [y, m, w]
+
+
+# --------------------------------------------------------------- dossier toggle
+
+func _on_dossier_button_pressed() -> void:
+	var overlay := _ensure_dossier_overlay()
+	if overlay == null:
+		push_warning("HUD: CabinetDossier overlay is unavailable")
+		return
+	if overlay.has_method("toggle"):
+		overlay.call("toggle")
+
+
+## Returns the shared CabinetDossier instance, loading it on first use and
+## adding it as a child of the HUD so it stays alive for the whole session.
+func _ensure_dossier_overlay() -> Node:
+	if _dossier_overlay != null and is_instance_valid(_dossier_overlay):
+		return _dossier_overlay
+	if not ResourceLoader.exists(DOSSIER_SCENE_PATH):
+		push_warning("HUD: cannot find %s" % DOSSIER_SCENE_PATH)
+		return null
+	var packed: PackedScene = load(DOSSIER_SCENE_PATH) as PackedScene
+	if packed == null:
+		push_warning("HUD: cannot load %s" % DOSSIER_SCENE_PATH)
+		return null
+	_dossier_overlay = packed.instantiate()
+	_dossier_overlay.name = "CabinetDossier"
+	add_child(_dossier_overlay)
+	return _dossier_overlay
 
 
 # ------------------------------------------------------------------- signals
