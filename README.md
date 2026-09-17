@@ -712,8 +712,26 @@ turn.
 
 Three rooms have scenes. `main.tscn` is the Briefing Room, `cabinet_room.tscn`
 seats the cabinet at a table built to the web build's measurements, and
-`oval_office.tscn` walks an advisor from the west door to the desk along a
-path measured off the imported model.
+`oval_office.tscn` stands an advisor at the Resolute desk and cuts the camera
+onto them.
+
+That last one is direction standing in for animation, deliberately. The suit
+models carry one clip, `idle_sit`, and no walk cycle, so the advisor used to
+travel from the door to the desk with their legs perfectly still — a glide.
+Rather than invent a walk cycle, `advisor_enters()` now places the body on its
+standing mark (the far end of the same path, which is still what marks the
+spot), stands it up, and moves the camera onto it over `cut_seconds` — 0.3 by
+default. The briefing card opens when the camera settles, not before, so the
+text never lands over whatever the camera was last pointed at.
+
+Standing it up is its own small problem: the models' bind pose is *seated* —
+`build_suit_models.gd` lays the thighs forward and folds the shins down — so a
+body placed at the desk untouched sits on nothing. With no `idle_stand` clip to
+play, `_stand_pose()` undoes those three joint rotations and lifts the body so
+the feet land on the floor. It is the rig's own offsets removed rather than a
+pose invented for it, and the lift is measured off the leg chain, so a model
+built to other proportions still stands on the ground. If an `idle_stand` clip
+is ever added, it is played instead and none of this runs.
 
 **Events.** The deck is every `.json` under `data/events/`, subdirectories
 included, dealt shuffled and never twice in a run. An event's
@@ -725,13 +743,14 @@ choice can carry `stat_impact`, `trust_impact`, `set_flag`, `random_flag`,
 the whistleblower scandal — run from first beat to last on those rules, which
 `godot/tests/events_smoke.gd` walks through end to end.
 
-**What is still missing.** Two things, both art rather than code:
+**What is still missing.** Both are art rather than code, and neither blocks
+play:
 
-- The suit models carry only an `idle_sit` clip. `oval_office.gd` asks for
-  `walk` and `idle_stand`, finds neither, and degrades to sliding the advisor
-  along the path — the walk-in reads as a glide. The clips have to be written
-  into the GLBs the way `scripts/add_sit_animation.py` writes `idle_sit`,
-  because Godot's glTF exporter writes no animations at all.
+- The suit models have no `idle_stand`, so a standing advisor holds the derived
+  pose above rather than breathing. A real clip would have to be written into
+  the GLBs the way `scripts/add_sit_animation.py` writes `idle_sit`, because
+  Godot's glTF exporter writes no animations at all. Nothing needs a walk cycle
+  any more — the room cuts rather than walks.
 - There is no Cabinet Room model, so that scene's shell is boxes in the web
   build's palette rather than a room.
 

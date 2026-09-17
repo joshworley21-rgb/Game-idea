@@ -23,11 +23,12 @@ _data = {
 }
 point_count = 3
 
-[node name="OvalOffice" type="Node3D" node_paths=PackedStringArray("walk_path", "follower", "briefing_card")]
+[node name="OvalOffice" type="Node3D" node_paths=PackedStringArray("walk_path", "follower", "briefing_card", "camera")]
 script = ExtResource("1_oval")
 walk_path = NodePath("AdvisorPath")
 follower = NodePath("AdvisorPath/Advisor")
 briefing_card = NodePath("BriefingCard")
+camera = NodePath("Camera3D")
 
 [node name="Room" type="Node3D" parent="." instance=ExtResource("3_room")]
 
@@ -36,8 +37,14 @@ curve = SubResource("Curve3D_walk")
 
 ; rotation_mode is the default ROTATION_XYZ, so the follower turns to face the
 ; way it is travelling -- which in Godot means its -Z runs along the path.
+; The standing mark is the far end of the curve, and oval_office.gd parks the
+; follower there in _ready(). It is not set here because it cannot be:
+; progress_ratio is derived from the curve's baked length, and a .tscn assigns
+; a node's properties before it is under its Path3D, so the length is 0 and the
+; value is dropped. loop does stick, and has to be off, or the far end of the
+; path wraps round to the near one.
 [node name="Advisor" type="PathFollow3D" parent="AdvisorPath"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 0)
+loop = false
 
 ; Turned 180 degrees inside the follower, and this is the one place that belongs
 ; in a scene file rather than in a script.

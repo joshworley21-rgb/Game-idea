@@ -383,12 +383,20 @@ func _on_oval_arrived(_role: String, _person: Dictionary) -> void:
 	_entry_arrived = true
 
 
+## How long to wait for a room's entry before giving up on its arrived signal.
+##
+## Asks the room how long its own entry takes: cut_seconds since the Oval cuts
+## to the advisor rather than walking them in, and walk_seconds for a room that
+## still travels. Two seconds of slack on top, and a two second floor, because
+## the cut is 0.3 and a timeout that tight would race the tween.
 func _entry_timeout(room: Node) -> float:
 	var seconds := 3.0
 	if room != null:
-		var value: Variant = room.get("walk_seconds")
-		if value is float or value is int:
-			seconds = float(value)
+		for property in ["cut_seconds", "walk_seconds"]:
+			var value: Variant = room.get(property)
+			if value is float or value is int:
+				seconds = float(value)
+				break
 	return maxf(seconds + 2.0, 2.0)
 
 

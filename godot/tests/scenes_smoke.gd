@@ -143,6 +143,7 @@ func _oval() -> void:
 	_check("walk_path export wired", room.walk_path != null, true)
 	_check("follower export wired", room.follower != null, true)
 	_check("briefing_card export wired", room.briefing_card != null, true)
+	_check("camera export wired", room.camera != null, true)
 	root.add_child(room)
 	await process_frame
 	_check("the follower carries a body", room.advisor_model() != null, true)
@@ -167,12 +168,26 @@ func _oval() -> void:
 	var body := room.advisor_model() as Node3D
 	_check("the body is turned to face the way it walks", body.transform.basis.z.z < -0.99, true)
 
+	# The follower is parked on the standing mark in the scene file, so the
+	# advisor is at the desk before anything is called.
+	_check("the advisor is parked at the desk", room.follower.progress_ratio, 1.0)
+
 	room.set_state({"cabinet": [{"office": "chief", "title": "Chief of Staff", "name": "Ruth Ellery"}]})
-	room.walk_seconds = 0.1
+	room.cut_seconds = 0.05
+	var camera_before: Vector3 = room.camera.global_position
 	room.advisor_enters("chief")
-	await create_timer(0.4).timeout
-	_check("the advisor reached the desk", room.follower.progress_ratio > 0.99, true)
+	await create_timer(0.3).timeout
+	_check("the camera cut to the advisor", room.camera.global_position.distance_to(camera_before) > 0.3, true)
 	_check("the briefing card opened", room.briefing_card.is_open(), true)
+
+	# The real Suit_Male has no idle_stand, so this is the standing pose being
+	# derived rather than played -- checked on the shipping model, not a rig.
+	var hips := _find(body, "Hips")
+	var knee := _find(body, "Knee_L")
+	var foot := _find(body, "Foot_L")
+	_check("the advisor is standing, not seated in mid-air",
+		hips.global_position.y - knee.global_position.y > 0.35, true)
+	_check("their feet are on the floor", absf(foot.global_position.y) < 0.02, true)
 	room.queue_free()
 	await process_frame
 

@@ -1,32 +1,41 @@
 class_name OvalOffice
 extends Node3D
-## The Oval Office: an advisor walks in from the door and stops at the desk.
+## The Oval Office: the camera cuts to an advisor standing at the desk.
 ##
-## The player does not walk here either, the advisor does. The room owns one
-## Path3D that runs from the door to the desk; a PathFollow3D rides it, carrying
-## the character model. advisor_enters(role) plays that model's walk clip while
-## a Tween drives the follower's progress_ratio from 0.0 to 1.0, then swaps the
-## model to idle_stand and opens the briefing card.
+## The player does not move here, and neither does the advisor. advisor_enters()
+## places the body on its standing mark, stands it up, and moves the camera onto
+## it over cut_seconds; when the camera settles the briefing card opens.
+##
+## It used to walk them in, down a Path3D from the door, and that is worth
+## writing down because the path is still here and still what marks the spot.
+## The suit models carry one clip, idle_sit, and no walk cycle, so a body
+## carried across the room arrived with its legs perfectly still -- a glide.
+## Given the choice between inventing a walk cycle and not showing one, the
+## room now cuts. The path survives as the two marks it always was: point one
+## is the door, the last point is where an advisor stands to brief.
 ##
 ## The nodes this expects, all resolvable by name if the exports are left unset:
 ##
 ##   OvalOffice              this script
 ##   |- Room                 the imported room model
-##   |- Camera3D             optional; the camera that watches the walk
+##   |- Camera3D             the camera that cuts
+##   |- BriefingCamera       optional Marker3D; where that camera settles
 ##   |- AdvisorPath          Path3D, door -> desk
-##   |   `- Advisor          PathFollow3D, the rider
+##   |   `- Advisor          PathFollow3D, parked at the desk end
 ##   |       `- ...          the generic suit model, one or more Node3D deep
 ##   `- BriefingCard         CanvasLayer running the briefing card script
 ##
 ## The follower is authored with the model already in it; this script never
-## instantiates a body. It only needs to find an AnimationPlayer somewhere under
-## the follower, so whatever .glb the scene drops in there is the one that walks.
+## instantiates a body. It only needs to find the model, and an AnimationPlayer
+## under it if there is one, so whatever .glb the scene drops in there is the
+## one that stands at the desk.
 
 
-## The advisor started walking in. Fired when advisor_enters() runs, before the
-## tween has moved anything.
+## An advisor is coming in. Fired when advisor_enters() runs, before the body
+## has been placed or the camera has moved.
 signal advisor_entered(role: String, person: Dictionary)
-## The advisor reached the desk and switched to idle_stand.
+## The camera has settled on the advisor, who is standing at the desk. This is
+## the cue the briefing is ready to be read.
 signal advisor_arrived(role: String, person: Dictionary)
 ## The briefing card was handed the role and person.
 signal briefing_opened(role: String, person: Dictionary)
@@ -34,13 +43,28 @@ signal briefing_opened(role: String, person: Dictionary)
 @export var walk_path: Path3D
 @export var follower: PathFollow3D
 @export var briefing_card: Node
-## How long the walk from door to desk takes, in seconds.
-@export var walk_seconds: float = 3.0
+## The camera that cuts to the advisor. Resolved by name when left unset.
+@export var camera: Camera3D
+## An authored vantage for the briefing shot. Optional: with no marker the
+## camera stands off the advisor by the two numbers below.
+@export var briefing_mark: Marker3D
 
-## The animation clips the model is expected to carry. Looked up by name with a
-## contains fallback, like cabinet_room.gd, because exported clip names are
-## rarely exactly what the artist named them.
-const WALK_CLIP := "walk"
+## How long the cut to the advisor takes. Short on purpose -- this is a cut
+## with a little travel on it, not a move the player waits through.
+@export var cut_seconds: float = 0.3
+## Where the camera ends up when no briefing_mark is authored: this far in
+## front of the advisor, this high, looking at their head.
+@export var briefing_distance: float = 1.25
+@export var briefing_height: float = 1.45
+
+## The clip a standing advisor plays, looked up by name with a contains
+## fallback, like cabinet_room.gd, because exported clip names are rarely
+## exactly what the artist named them.
+##
+## There is no walk clip any more and no WALK_CLIP to look for. The suit models
+## carry only idle_sit, so asking for one found nothing and the advisor slid
+## down the path with their legs still -- a glide is worse than a cut, and a
+## cut needs no animation to look deliberate.
 const IDLE_CLIP := "idle_stand"
 
 var _state: Dictionary = {}
@@ -52,6 +76,24 @@ var _warned_missing_path := false
 
 func _ready() -> void:
 	_resolve_nodes()
+	_park_at_desk()
+
+
+## Put the follower on the standing mark, and keep it there.
+##
+## Not left to the scene file: progress_ratio is derived from the curve's baked
+## length, and when a .tscn assigns it the follower is not yet under its Path3D,
+## so the length is 0, the assignment is 1.0 * 0, and the value is silently
+## lost. Setting it here, after the tree is built, is the only place it sticks.
+##
+## loop goes off with it. A looping follower wraps its progress, so the far end
+## of the path and the near end are the same place to it -- and the far end is
+## exactly where this room wants to sit.
+func _park_at_desk() -> void:
+	if follower == null:
+		return
+	follower.loop = false
+	follower.progress_ratio = 1.0
 
 
 ## Hand the room a run to resolve a role against. Safe to call before the node
@@ -91,48 +133,145 @@ func progress() -> float:
 	return follower.progress_ratio if follower != null else -1.0
 
 
-## Make an advisor walk from the door to the desk.
+## Bring an advisor in, by cutting to them rather than walking them in.
 ##
 ## `role` is the same key the rest of the game uses: "chief" (or any office
 ## key) names someone in the cabinet, "press" and "ally" name the two specials.
+##
+## The advisor is placed at the desk standing, and the camera makes a short
+## move onto them; when it settles the briefing card opens. Nothing translates
+## across the room, which is the point: the models have no walk cycle, so a
+## body carried down the path arrived with its legs perfectly still. Direction
+## is cheaper than animation and does not lie about what the art can do.
 func advisor_enters(role: String) -> void:
 	_current_role = role.strip_edges()
 	_current_person = _person_for_role(_current_role)
 	advisor_entered.emit(_current_role, _current_person)
 
 	if follower == null:
-		# No path to walk: the card still has to open, and the scene still has
-		# to behave, rather than sit there having swallowed the call.
+		# No path means nowhere authored to stand. The card still has to open,
+		# and the scene still has to behave, rather than sit there having
+		# swallowed the call.
 		if not _warned_missing_path:
 			_warned_missing_path = true
-			push_warning("OvalOffice: no PathFollow3D found, so the advisor cannot walk. Add an AdvisorPath with an Advisor PathFollow3D child.")
+			push_warning("OvalOffice: no PathFollow3D found, so there is nowhere to place the advisor. Add an AdvisorPath with an Advisor PathFollow3D child.")
 		_on_arrived()
 		return
 
-	follower.progress_ratio = 0.0
-	_play_walk()
+	# The far end of the path is the standing mark: it already carries both the
+	# position at the desk and the facing, so placing the advisor is one call
+	# rather than a second set of coordinates to keep in step.
+	_park_at_desk()
+	_stand()
+	_cut_to_advisor()
+
+
+# ------------------------------------------------------------------ the entry
+
+## Move the camera onto the standing advisor, then open the briefing.
+func _cut_to_advisor() -> void:
+	var cam := _camera()
+	if cam == null:
+		# Nothing to cut with: the briefing still opens, immediately.
+		_on_arrived()
+		return
+
 	_kill_tween()
+	var target := _briefing_transform(cam)
+	if cut_seconds <= 0.0:
+		cam.global_transform = target
+		_on_arrived()
+		return
+
 	_tween = create_tween()
-	_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_tween.tween_property(follower, "progress_ratio", 1.0, walk_seconds)
+	_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_tween.tween_property(cam, "global_transform", target, cut_seconds)
 	_tween.finished.connect(_on_arrived, CONNECT_ONE_SHOT)
 
 
-# ------------------------------------------------------------------- the walk
+## Where the camera settles. An authored briefing_mark wins; otherwise stand
+## off the advisor by briefing_distance at briefing_height, looking at their
+## head.
+##
+## "In front of" is the follower's own -Z, which is the way it faces at the end
+## of the path -- and at the desk that is the desk, so the shot is the one the
+## player is meant to have: their own side of the Resolute, looking up at
+## whoever has come to brief them.
+func _briefing_transform(cam: Camera3D) -> Transform3D:
+	if briefing_mark != null:
+		return briefing_mark.global_transform
+
+	var stand := follower.global_position
+	var facing := -follower.global_transform.basis.z.normalized()
+	var head := stand + Vector3(0.0, briefing_height, 0.0)
+	var eye := head + facing * maxf(briefing_distance, 0.05)
+
+	var look := Transform3D(Basis.IDENTITY, eye)
+	if absf((head - eye).normalized().dot(Vector3.UP)) > 0.999:
+		return Transform3D(cam.global_transform.basis, eye)
+	return look.looking_at(head, Vector3.UP)
+
 
 func _on_arrived() -> void:
-	# Stop the walking cycle before it loops over the desk, and stand.
-	_play_idle_stand()
 	advisor_arrived.emit(_current_role, _current_person)
 	_open_briefing()
 
 
-func _play_walk() -> void:
-	_play_clip(WALK_CLIP)
+## Put the advisor on their feet.
+##
+## Plays idle_stand when the model has one. None of them do yet -- the suits
+## carry only idle_sit -- and the rest pose they fall back on is itself a
+## seated one: build_suit_models.gd lays the thighs forward and the shins down,
+## so an unposed body at the desk is sitting on nothing. So when there is no
+## clip, the seated offsets are undone instead.
+func _stand() -> void:
+	if _play_idle_stand():
+		return
+	_stand_pose(advisor_model())
 
 
-func _play_idle_stand() -> void:
-	_play_clip(IDLE_CLIP)
+func _play_idle_stand() -> bool:
+	return _play_clip(IDLE_CLIP)
+
+
+## Straightens the legs and drops the arms, then lifts the body so the feet
+## land on the floor.
+##
+## This is the rig's own seated offsets removed, not a pose invented for it:
+## the hips, knees and elbows are the three joints build_suit_models.gd rotates
+## to sit a figure down, and zeroing them leaves the limbs hanging along the
+## bone as they were built. The lift is measured off the leg chain rather than
+## hardcoded, so a model built to different proportions still lands on the
+## floor.
+func _stand_pose(body: Node3D) -> void:
+	if body == null:
+		return
+	for joint_name in ["Hip_L", "Hip_R", "Knee_L", "Knee_R", "Elbow_L", "Elbow_R"]:
+		var joint := _joint(body, joint_name)
+		if joint != null:
+			joint.rotation = Vector3.ZERO
+
+	# With every rotation in the chain zeroed the offsets simply add, so the
+	# sole's height is the sum of their local y and needs no transform flush.
+	var drop := 0.0
+	for joint_name in ["Hips", "Hip_L", "Knee_L", "Foot_L"]:
+		var joint := _joint(body, joint_name)
+		if joint != null:
+			drop += joint.position.y
+	if drop < 0.0:
+		body.position.y -= drop
+
+
+## First descendant Node3D with this name, or null. The joints sit a few levels
+## down and how deep is the modeller's business.
+func _joint(node: Node, wanted: String) -> Node3D:
+	if node is Node3D and node.name == wanted:
+		return node as Node3D
+	for child in node.get_children():
+		var hit := _joint(child, wanted)
+		if hit != null:
+			return hit
+	return null
 
 
 ## Play the first clip under the follower whose name matches `wanted`, looping
@@ -227,6 +366,14 @@ func _open_briefing() -> void:
 	briefing_opened.emit(_current_role, _current_person)
 
 
+## The camera to cut, resolved late so a scene that adds one after _ready()
+## still gets a cut rather than a jump.
+func _camera() -> Camera3D:
+	if camera == null:
+		camera = get_node_or_null("Camera3D") as Camera3D
+	return camera
+
+
 func _briefing() -> Node:
 	if briefing_card == null:
 		briefing_card = get_node_or_null("BriefingCard")
@@ -248,5 +395,9 @@ func _resolve_nodes() -> void:
 					if child is PathFollow3D:
 						follower = child as PathFollow3D
 						break
+	if camera == null:
+		camera = get_node_or_null("Camera3D") as Camera3D
+	if briefing_mark == null:
+		briefing_mark = get_node_or_null("BriefingCamera") as Marker3D
 	if briefing_card == null:
 		briefing_card = get_node_or_null("BriefingCard")
