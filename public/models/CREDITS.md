@@ -24,6 +24,29 @@ door. Converted with `node scripts/convert-fbx-props.mjs`. 17,454 triangles,
 768 KB. They are what the procedural briefing room is still built from, and so
 what you see if BriefingRoom.glb does not load.
 
+**CR_*.glb** — the Cabinet Room, from a "Conference Room" Unreal Engine 4 pack
+supplied by the project owner. It arrived twice: once as a `.uproject` of
+`.uasset` files, which only Unreal can open, and once as source — 22 FBX meshes
+and 43 TGA/PNG textures, which is the copy that was used. Converted with `node
+scripts/convert-conference-room.mjs`, which is where the conversion and every
+decision in it is written down. 22 pieces, 38,162 triangles and 2.1 MB as
+shipped, from 63,010 triangles and 588 MB of textures as supplied.
+
+The layout is not in any of it. The room's arrangement existed only in the
+pack's Unreal `.umap`, so the pieces are modelled around their own origins and
+`godot/scenes/cabinet_room.tscn` places them by hand, off measurements taken
+from the meshes.
+
+Two pieces are deliberately not converted: `Light_Blocking`, a lightmass shell
+that would simply hide the room in Godot, and `Speaker`, a 20,188-triangle
+floor-standing tower whose grille is built as hundreds of separate closed
+shells — the same thing that stops meshoptimizer touching the Situation Room's
+chair casters, and for the same reason it cannot be reduced.
+
+**The licence has not been established.** The pack looks like Unreal Marketplace
+content, and Epic's content licence generally covers use in projects built with
+Unreal Engine rather than in a Godot game. Settle that before shipping this.
+
 **OvalOffice.glb** is not in the repo: at ~12 MB it lives as a GitHub release
 asset and `npm run assets` fetches it.
 

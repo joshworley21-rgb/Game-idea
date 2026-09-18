@@ -87,6 +87,38 @@ func _cabinet() -> void:
 	await process_frame
 	_check("six seats", room.seats_root.get_child_count(), 6)
 
+	# The room is the Conference Room pack now, not six boxes. Each piece is
+	# checked by name because the arrangement is authored in the scene file --
+	# the layout only existed in an Unreal .umap, so nothing recovers it if a
+	# piece is dropped, and a missing wall is a hole rather than an error.
+	var shell := room.get_node_or_null("Room")
+	_check("the room has a shell", shell != null, true)
+	for piece in ["Floor", "Ceiling", "FrontWall", "NearWall", "LeftWall", "RightWall", "Table"]:
+		if shell == null or shell.get_node_or_null(piece) == null:
+			_failures += 1
+			printerr("  FAIL  the room is missing its %s" % piece)
+	_check("every piece of the shell is placed", true, true)
+
+	# 12 x 8, which is what the pack models and what every position in the
+	# scene file is measured against.
+	var floor_aabb := _world_aabb(shell.get_node("Floor"))
+	_check("the floor is 12 metres across", snappedf(floor_aabb.size.x, 0.1), 12.0)
+	_check("the floor is 8 metres deep", snappedf(floor_aabb.size.z, 0.1), 8.0)
+
+	# Every seat has to be over the table's own length, or a secretary is
+	# sitting past the end of it.
+	var table_aabb := _world_aabb(shell.get_node("Table"))
+	var off_table := 0
+	for i in 6:
+		var seat := room.seats_root.get_child(i) as Marker3D
+		if seat.position.x < table_aabb.position.x or seat.position.x > table_aabb.end.x:
+			off_table += 1
+	_check("every seat is within the table's length", off_table, 0)
+
+	# And a chair under each of them.
+	var chairs := room.get_node_or_null("Chairs")
+	_check("the chairs are in the room", chairs != null and chairs.get_child_count() >= 6, true)
+
 	# With no run handed in, _ready() seats a preview cabinet, so the scene
 	# opens with somebody in every chair rather than six empty markers.
 	var seated := 0
@@ -116,8 +148,8 @@ func _cabinet() -> void:
 		var knee := _find(body, "Knee_L")
 		if knee == null:
 			continue
-		# The table is at z = 0 and the seats at z = 1.84, so a knee in front
-		# of its own seat is a knee at a smaller z than the seat.
+		# The table is at z = 0 and the seats in front of it, so a knee on the
+		# table side of its own seat is a knee at a smaller z than the seat.
 		if knee.global_position.z > body.global_position.z:
 			facing_wrong = i
 			break
@@ -231,6 +263,30 @@ func _game() -> void:
 ## The autoload, which --script instantiates but does not register as a global.
 func GameStateRef() -> Node:
 	return root.get_node("GameState")
+
+
+## A node's bounds in world space, gathered from every mesh under it. The
+## imported pieces nest their meshes at whatever depth the exporter chose.
+func _world_aabb(node: Node) -> AABB:
+	var out := AABB()
+	var first := true
+	for mesh in _meshes(node):
+		var box: AABB = mesh.global_transform * mesh.get_aabb()
+		if first:
+			out = box
+			first = false
+		else:
+			out = out.merge(box)
+	return out
+
+
+func _meshes(node: Node) -> Array[MeshInstance3D]:
+	var found: Array[MeshInstance3D] = []
+	if node is MeshInstance3D:
+		found.append(node as MeshInstance3D)
+	for child in node.get_children():
+		found.append_array(_meshes(child))
+	return found
 
 
 ## First descendant with this name, or null. The suit models nest their joints

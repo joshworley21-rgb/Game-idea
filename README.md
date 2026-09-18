@@ -711,7 +711,9 @@ player picks to the numbers the HUD is showing. `TurnManager` drives that loop
 turn.
 
 Three rooms have scenes. `main.tscn` is the Briefing Room, `cabinet_room.tscn`
-seats the cabinet at a table built to the web build's measurements, and
+seats the cabinet round a real conference table — converted out of an Unreal
+pack by `scripts/convert-conference-room.mjs`, and arranged by hand because the
+pack's own layout only ever existed in a `.umap` — and
 `oval_office.tscn` stands an advisor at the Resolute desk and cuts the camera
 onto them.
 
@@ -761,8 +763,11 @@ play:
   the GLBs the way `scripts/add_sit_animation.py` writes `idle_sit`, because
   Godot's glTF exporter writes no animations at all. Nothing needs a walk cycle
   any more — the room cuts rather than walks.
-- There is no Cabinet Room model, so that scene's shell is boxes in the web
-  build's palette rather than a room.
+- The Cabinet Room's licence is unsettled. The pack it is built from looks like
+  Unreal Marketplace content, whose licence generally covers Unreal projects
+  rather than Godot ones; `public/models/CREDITS.md` says so beside the models.
+  Nothing else in the repo depends on it, so it can be pulled without touching
+  code if the answer is no.
 
 ### Running it
 
