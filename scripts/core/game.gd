@@ -85,21 +85,20 @@ func is_running() -> bool:
 	return _started
 
 
-## GameState stores the cabinet as role -> first name, which is all the
+## GameState stores the cabinet as role -> full name, which is all the
 ## simulation needs but not enough for a room: the rooms want a record per
-## person, with the office on it, so Cast can find a portrait.
+## person, with the office and the title on it, so Cast can find a portrait and
+## the dossier has something to put under it.
 func _cabinet_from_state() -> Array:
 	var people: Array = []
 	for role in GameState.CABINET_ROLES:
 		if not GameState.cabinet_roles.has(role):
 			continue
-		var first := str(GameState.cabinet_roles[role])
-		var person := {"office": role, "name": first}
-		# The chief's portrait is filed under a full name, so the one role that
-		# needs more than a first name gets it.
-		if role == "chief" and first.to_lower() == "ruth":
-			person = {"office": "chief", "title": "Chief of Staff", "name": "Ruth Ellery"}
-		people.append(person)
+		people.append({
+			"office": role,
+			"name": GameState.cabinet_name(role),
+			"title": GameState.cabinet_title(role),
+		})
 	return people
 
 

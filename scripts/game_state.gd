@@ -42,7 +42,7 @@ var played_events: Dictionary = {}
 var story_flags: Dictionary = {}
 
 ## Which cabinet member currently holds each office.
-## Keys are the six role ids; values are first names from CABINET_NAMES.
+## Keys are the six role ids; values are full names, from CABINET_CAST below.
 var cabinet_roles: Dictionary = {}
 
 ## Relationship score (0-100) with each of the six active cabinet roles.
@@ -73,10 +73,46 @@ const CABINET_NAMES: Array[String] = [
 	"Nathan", "Imani", "Walter",
 ]
 
-## The six offices filled from the shuffled pool, in seating order.
+## The six offices, in seating order.
 const CABINET_ROLES: Array[String] = [
 	"chief", "treasury", "state", "defense", "justice", "health",
 ]
+
+## The cabinet, cast once rather than drawn.
+##
+## The six roles used to be dealt from a shuffled pool of the 24 names above, so
+## a run's cabinet was different every time. That broke anything written about a
+## particular person, and it broke it in three places at once: an event naming
+## Margaret got whoever the shuffle had seated at Defense, the voice archetypes
+## in character_profiles.json are keyed by *name* so they moved with the shuffle
+## too, and once the camera started cutting to a speaker's seat it pointed at
+## somebody the line had not been written for.
+##
+## So they are fixed here. Every first name is one the portraits cover (see
+## godot/assets/portraits/cabinet/) and one character_profiles.json already
+## carries an archetype for, which is what binds archetype to office: the
+## archetype follows the name, and now the name never moves. The surnames are
+## the ones the project already used for these people in its own test casts.
+##
+##   chief     Ruth Ellery        Operator
+##   treasury  Priya Nakamura     Scholar
+##   state     Daniel Osei        Scholar
+##   defense   Margaret Halloran  Hawk
+##   justice   Eleanor Brennan    Hawk
+##   health    Marcus Petrov      Idealist
+##
+## The chief's full name matters twice over: Cast.portrait_key() files the chief
+## under the whole name because "Ruth" is also a cabinet and a child name, so
+## the portrait at chief/ruth-ellery.webp only resolves for a chief called
+## exactly that.
+const CABINET_CAST := {
+	"chief": {"name": "Ruth Ellery", "title": "Chief of Staff"},
+	"treasury": {"name": "Priya Nakamura", "title": "Treasury Secretary"},
+	"state": {"name": "Daniel Osei", "title": "Secretary of State"},
+	"defense": {"name": "Margaret Halloran", "title": "Defense Secretary"},
+	"justice": {"name": "Eleanor Brennan", "title": "Attorney General"},
+	"health": {"name": "Marcus Petrov", "title": "Health Secretary"},
+}
 
 
 func _ready() -> void:
@@ -112,14 +148,48 @@ func voice_archetype(character_name: String) -> String:
 	for group in character_profiles.values():
 		if group is Dictionary and group.has(character_name):
 			return str(group[character_name])
+	# The profiles are keyed by first name and the cabinet carries full ones, so
+	# a miss is retried on the first word before giving up.
+	var parts := character_name.strip_edges().split(" ", false)
+	if parts.size() > 1:
+		for group in character_profiles.values():
+			if group is Dictionary and group.has(parts[0]):
+				return str(group[parts[0]])
 	return ""
 
 
-## Starts a fresh run: resets the headline numbers and flags, then shuffles
-## the 24 cabinet names and assigns one to each of the six roles.
+# ------------------------------------------------------------------ the cabinet
+
+## The full name of whoever holds [param role], or "" for an office nobody does.
+func cabinet_name(role: String) -> String:
+	return str(cabinet_roles.get(role, ""))
+
+
+## Their first name, which is the key the portraits and the body models use.
+func cabinet_first_name(role: String) -> String:
+	var parts := cabinet_name(role).split(" ", false)
+	return parts[0] if parts.size() > 0 else ""
+
+
+## Their formal title -- "Defense Secretary", "Attorney General".
+func cabinet_title(role: String) -> String:
+	var cast_entry: Variant = CABINET_CAST.get(role, {})
+	return str((cast_entry as Dictionary).get("title", "")) if cast_entry is Dictionary else ""
+
+
+## Their voice archetype: "Hawk", "Scholar", "Operator", "Idealist".
+func cabinet_archetype(role: String) -> String:
+	return voice_archetype(cabinet_first_name(role))
+
+
+## Starts a fresh run: resets the headline numbers and flags, then seats the
+## cabinet.
 ##
-## [param names] is optional. When omitted (the normal case) it uses the
-## built-in CABINET_NAMES pool; a caller may pass its own list of 6+ names.
+## [param names] is optional and is an override, not the normal path. Left
+## empty -- which is what every caller in the game does -- the six offices are
+## filled from CABINET_CAST and are the same people in every run. Passing a
+## list of six or more names goes back to drawing from that list at random,
+## which is there for a caller that wants an arbitrary cabinet to test against.
 func start_new_run(names: Array = []) -> void:
 	approval = 50
 	budget = 50
@@ -134,15 +204,16 @@ func start_new_run(names: Array = []) -> void:
 	cabinet_roles.clear()
 	_reset_relationship_state()
 
-	var pool: Array[String] = CABINET_NAMES.duplicate()
-	if not names.is_empty() and names.size() >= CABINET_ROLES.size():
-		pool = []
+	if names.is_empty() or names.size() < CABINET_ROLES.size():
+		for role in CABINET_ROLES:
+			cabinet_roles[role] = str((CABINET_CAST[role] as Dictionary)["name"])
+	else:
+		var pool: Array[String] = []
 		for entry in names:
 			pool.append(str(entry))
-	pool.shuffle()
-
-	for i in range(CABINET_ROLES.size()):
-		cabinet_roles[CABINET_ROLES[i]] = pool[i]
+		pool.shuffle()
+		for i in range(CABINET_ROLES.size()):
+			cabinet_roles[CABINET_ROLES[i]] = pool[i]
 
 	stats_changed.emit()
 	calendar_changed.emit(year, month, week)

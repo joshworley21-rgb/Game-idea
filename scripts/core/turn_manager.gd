@@ -778,13 +778,14 @@ func _person_for_speaker(speaker: String) -> Dictionary:
 				if id == key or kind == key:
 					return member
 
-	# GameState's simple map is enough for the cabinet roles. The chief needs
-	# the full name because the chief portrait is stored as chief/ruth-ellery.
+	# The cabinet is cast once in GameState, so the office is enough to name
+	# whoever holds it and to title them.
 	if GameState.cabinet_roles.has(key):
-		var first := str(GameState.cabinet_roles[key])
-		if key == "chief" and first.to_lower() == "ruth":
-			return {"office": "chief", "title": "Chief of Staff", "name": "Ruth Ellery"}
-		return {"office": key, "name": first}
+		return {
+			"office": key,
+			"name": GameState.cabinet_name(key),
+			"title": GameState.cabinet_title(key),
+		}
 
 	match key:
 		"press":

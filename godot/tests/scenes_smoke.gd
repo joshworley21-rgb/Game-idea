@@ -326,7 +326,9 @@ func _cabinet_meeting() -> void:
 
 	_check("the camera sat with every speaker", wrong_seat, "")
 	_check("it heard from both sides", seen_speakers.size() >= 4, true)
-	_check("starting with the Treasury Secretary", seen_speakers[0] if seen_speakers.size() > 0 else "", "treasury")
+	# The Hawk sits at Defense and the Scholar at State, fixed by
+	# GameState.CABINET_CAST, so the argument always opens the same way round.
+	_check("starting with the Defense Secretary", seen_speakers[0] if seen_speakers.size() > 0 else "", "defense")
 	_check("and answering with the Secretary of State", seen_speakers[1] if seen_speakers.size() > 1 else "", "state")
 
 	# And the room gives way again: the next event names no room, so it is the

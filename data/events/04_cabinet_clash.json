@@ -1,48 +1,48 @@
 {
   "room": "cabinet",
-  "speaker": "treasury",
+  "speaker": "defense",
   "nodes": {
     "hawk_1": {
-      "speaker": "treasury",
-      "text": "Margaret (Hawk): \"Strike them now. No debate. No warning.\"",
+      "speaker": "defense",
+      "text": "{defense_first} ({defense_archetype}): \"Strike them now. No debate. No warning.\"",
       "choices": [
-        { "text": "Let the Secretary of State answer.", "next": "scholar_1" }
+        { "text": "Let the {state_title} answer.", "next": "scholar_1" }
       ]
     },
     "scholar_1": {
       "speaker": "state",
-      "text": "Daniel (Scholar): \"It is not unreasonable to suggest that the decision to authorize an overt military action, were it to be undertaken without the benefit of a comprehensive and multi-agency review of the intelligence upon which it is ostensibly predicated, would constitute a departure from the deliberative norms that have historically governed the conduct of this office.\"",
+      "text": "{state_first} ({state_archetype}): \"It is not unreasonable to suggest that the decision to authorize an overt military action, were it to be undertaken without the benefit of a comprehensive and multi-agency review of the intelligence upon which it is ostensibly predicated, would constitute a departure from the deliberative norms that have historically governed the conduct of this office.\"",
       "choices": [
         { "text": "Let them go on.", "next": "hawk_2" }
       ]
     },
     "hawk_2": {
-      "speaker": "treasury",
-      "text": "Margaret (Hawk): \"They hit first. We finish it. Today.\"",
+      "speaker": "defense",
+      "text": "{defense_first} ({defense_archetype}): \"They hit first. We finish it. Today.\"",
       "choices": [
-        { "text": "Let the Secretary of State answer.", "next": "scholar_2" }
+        { "text": "Let the {state_title} answer.", "next": "scholar_2" }
       ]
     },
     "scholar_2": {
       "speaker": "state",
-      "text": "Daniel (Scholar): \"The assertion that the adversary has, in fact, initiated the precipitating act remains, at this juncture, a matter of interpretive disagreement among the relevant analysts, and it would therefore be premature to treat the available evidence as dispositive.\"",
+      "text": "{state_first} ({state_archetype}): \"The assertion that the adversary has, in fact, initiated the precipitating act remains, at this juncture, a matter of interpretive disagreement among the relevant analysts, and it would therefore be premature to treat the available evidence as dispositive.\"",
       "choices": [
         { "text": "Let them go on.", "next": "hawk_3" }
       ]
     },
     "hawk_3": {
-      "speaker": "treasury",
-      "text": "Margaret (Hawk): \"Weakness invites war. Strength ends it.\"",
+      "speaker": "defense",
+      "text": "{defense_first} ({defense_archetype}): \"Weakness invites war. Strength ends it.\"",
       "choices": [
-        { "text": "Let the Secretary of State answer.", "next": "scholar_3" }
+        { "text": "Let the {state_title} answer.", "next": "scholar_3" }
       ]
     },
     "scholar_3": {
       "speaker": "state",
-      "text": "Daniel (Scholar): \"One might observe, with all due respect, that the historical record does not unambiguously support the proposition that displays of unmitigated force reliably produce the pacifying outcomes their advocates so confidently anticipate, and it is precisely this uncertainty that the requested review is intended to address.\"",
+      "text": "{state_first} ({state_archetype}): \"One might observe, with all due respect, that the historical record does not unambiguously support the proposition that displays of unmitigated force reliably produce the pacifying outcomes their advocates so confidently anticipate, and it is precisely this uncertainty that the requested review is intended to address.\"",
       "choices": [
         {
-          "text": "Back the Hawk. Authorize an immediate strike.",
+          "text": "Back the {defense_title}. Authorize an immediate strike.",
           "stat_impact": {
             "tension": 15,
             "approval": 5
@@ -50,7 +50,7 @@
           "set_flag": "sided_with_hawk"
         },
         {
-          "text": "Back the Scholar. Order a full intelligence review.",
+          "text": "Back the {state_title}. Order a full intelligence review.",
           "stat_impact": {
             "approval": 5,
             "tension": -10

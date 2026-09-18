@@ -258,10 +258,10 @@ func _refresh() -> void:
 		if not _slots.has(role_id):
 			continue
 		var slot: Dictionary = _slots[role_id]
-		var first := str(roles.get(role_id, ""))
-		_set_text(slot.get("name") as Label, first if not first.is_empty() else "Vacant")
-		_set_text(slot.get("archetype") as Label, _archetype_text(first))
-		_set_portrait(slot.get("portrait") as TextureRect, role_id, first)
+		var full_name := str(roles.get(role_id, ""))
+		_set_text(slot.get("name") as Label, full_name if not full_name.is_empty() else "Vacant")
+		_set_text(slot.get("archetype") as Label, _archetype_text(full_name))
+		_set_portrait(slot.get("portrait") as TextureRect, role_id, full_name)
 
 		var trust_value := int(trust.get(role_id, 50))
 		var bar: ProgressBar = slot.get("trust") as ProgressBar
@@ -280,11 +280,12 @@ func _state_dict(key: String) -> Dictionary:
 	return {}
 
 
-func _archetype_text(first: String) -> String:
-	if first.is_empty():
+func _archetype_text(full_name: String) -> String:
+	if full_name.is_empty():
 		return "Awaiting appointment"
+	# voice_archetype() takes a full name as happily as a first one.
 	if _state != null and _state.has_method("voice_archetype"):
-		var archetype := str(_state.call("voice_archetype", first))
+		var archetype := str(_state.call("voice_archetype", full_name))
 		if not archetype.is_empty():
 			return archetype
 	return "Undisclosed"
@@ -304,25 +305,35 @@ func _intel_text(role_id: String) -> String:
 	return "\n".join(secrets)
 
 
-func _set_portrait(rect: TextureRect, role_id: String, first: String) -> void:
+func _set_portrait(rect: TextureRect, role_id: String, full_name: String) -> void:
 	if rect == null:
 		return
-	var path := _portrait_path(role_id, first)
+	var path := _portrait_path(role_id, full_name)
 	if path.is_empty() or not ResourceLoader.exists(path):
 		rect.texture = null
 		return
 	rect.texture = load(path) as Texture2D
 
 
-func _portrait_path(role_id: String, first: String) -> String:
-	if first.is_empty():
+func _portrait_path(role_id: String, full_name: String) -> String:
+	if full_name.is_empty():
 		return ""
-	# The Chief of Staff has a dedicated full-name portrait. It is used only
-	# when the chief actually is Ruth; any other chief is a normal cabinet
-	# draw and their first-name portrait lives with the rest of the cabinet.
-	if role_id == "chief" and first.to_lower() == "ruth" and ResourceLoader.exists(CHIEF_PORTRAIT_PATH):
+	# The Chief of Staff has a dedicated full-name portrait, filed that way
+	# because "Ruth" is also a cabinet and a child name. It is used only when
+	# the chief actually is Ruth Ellery; any other chief is a normal cabinet
+	# draw whose portrait lives with the rest under their first name.
+	if role_id == "chief" and Cast.slug(full_name) == "ruth-ellery" and ResourceLoader.exists(CHIEF_PORTRAIT_PATH):
 		return CHIEF_PORTRAIT_PATH
-	return CABINET_PORTRAIT_ROOT + "/" + Cast.slug(first) + ".webp"
+	# Slugged on the first name alone: the cabinet carries full names now and
+	# every cabinet portrait is filed under the first.
+	return CABINET_PORTRAIT_ROOT + "/" + Cast.slug(_first_word(full_name)) + ".webp"
+
+
+## The first word of a name, which is the key the portraits and the voice
+## archetypes are both filed under.
+func _first_word(full_name: String) -> String:
+	var parts := full_name.strip_edges().split(" ", false)
+	return parts[0] if parts.size() > 0 else ""
 
 
 func _set_text(label: Label, text: String) -> void:

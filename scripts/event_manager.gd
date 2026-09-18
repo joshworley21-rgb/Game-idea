@@ -27,6 +27,13 @@ extends CanvasLayer
 ## top level of the file and omit "nodes"/"start". Choices with no "next"
 ## value end the dialogue. Buttons are created in code so the tree of nodes
 ## can be swapped without touching a scene file.
+##
+## Node text and choice text are both run through fill_tokens() before they are
+## shown, so dialogue names the cabinet by office rather than by person:
+## "{defense}" is the Defense Secretary's full name, "{defense_first}" their
+## first, "{defense_title}" their title and "{defense_archetype}" their voice.
+## Writing a line against the office is what keeps it correct if the cast is
+## ever changed.
 
 ## The event just ended (ran out of nodes, or the player reached a leaf).
 signal event_finished
@@ -275,17 +282,51 @@ func _resolve_node_text(node: Dictionary) -> String:
 	var default_text := str(node.get("text", ""))
 	var conditional: Variant = node.get("conditional_text", _event_data.get("conditional_text", {}))
 	if not (conditional is Dictionary) or (conditional as Dictionary).is_empty():
-		return default_text
+		return fill_tokens(default_text)
 	var block: Dictionary = conditional
 
 	var speaker := str(block.get("speaker", _event_data.get("speaker", node.get("speaker", ""))))
 	if speaker.is_empty() or not GameState.advisor_trust.has(speaker):
-		return default_text
+		return fill_tokens(default_text)
 
 	var threshold := int(block.get("threshold", 30))
 	if int(GameState.advisor_trust[speaker]) < threshold:
-		return str(block.get("hostile_text", default_text))
-	return default_text
+		return fill_tokens(str(block.get("hostile_text", default_text)))
+	return fill_tokens(default_text)
+
+
+## Substitutes the cabinet into a line of dialogue.
+##
+##   {defense}            Margaret Halloran
+##   {defense_first}      Margaret
+##   {defense_title}      Defense Secretary
+##   {defense_archetype}  Hawk
+##
+## for any of the six role ids. Dialogue used to name the cabinet outright, and
+## that only worked while the cast was fixed by luck: the roles were dealt from
+## a shuffled pool, so a line written for Margaret was spoken by whoever the
+## shuffle had seated. The cast is fixed now -- see GameState.CABINET_CAST --
+## and writing a line against the office rather than the person keeps it that
+## way, so a recast never silently puts the wrong name in somebody's mouth.
+##
+## A token naming something unknown is left exactly as it was written. Replacing
+## it with an empty string would hide the typo in a line that still reads.
+func fill_tokens(text: String) -> String:
+	if not text.contains("{"):
+		return text
+
+	var out := text
+	for role in GameState.CABINET_ROLES:
+		var full_name := GameState.cabinet_name(role)
+		if full_name.is_empty():
+			continue
+		out = out.replace("{%s_first}" % role, GameState.cabinet_first_name(role))
+		out = out.replace("{%s_title}" % role, GameState.cabinet_title(role))
+		out = out.replace("{%s_archetype}" % role, GameState.cabinet_archetype(role))
+		# Last, or "{defense}" would match inside "{defense_title}" and leave
+		# the suffix stranded as "Margaret Halloran_title".
+		out = out.replace("{%s}" % role, full_name)
+	return out
 
 
 ## Who is speaking a node: its own "speaker", or the event's when it has none.
@@ -327,7 +368,9 @@ func _resolve_node(node_ref: Variant) -> Dictionary:
 func _add_choice_button(choice: Dictionary) -> void:
 	var button := Button.new()
 	button.name = "Choice"
-	var original_text := str(choice.get("text", "Continue"))
+	# Filled the same way the node text is: a choice reading "Let the
+	# {state_title} answer" is the same sentence as the line above it.
+	var original_text := fill_tokens(str(choice.get("text", "Continue")))
 	button.text = original_text
 	var locked := false
 
