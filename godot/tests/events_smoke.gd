@@ -53,6 +53,7 @@ func _run() -> void:
 	_random_flag()
 	_played_once()
 	_locked_choices()
+	_events_end()
 	_arc_runs_through()
 
 	if _failures == 0:
@@ -264,6 +265,54 @@ func _locked_choices() -> void:
 	_check("the background-locked option keeps its text", labels[1], "[LOCKED - Background] Speak as a veteran.")
 	_check("the open option is untagged", labels[2], "Say nothing.")
 	em.free()
+
+
+# An event that cannot end is a run that cannot end. This is the shape most of
+# data/events is in -- "text" and "choices" at the top level, no "nodes" -- and
+# picking a choice with no "next" used to resolve back to the event itself and
+# show it again, forever. The turn never finished and the calendar never moved.
+func _events_end() -> void:
+	print("events: an event ends when its choice has nowhere to go")
+	_reset()
+
+	var flat := _event_manager()
+	var finished := [0]
+	flat.event_finished.connect(func() -> void: finished[0] += 1)
+	flat.play_event({
+		"text": "The grid is down.",
+		"choices": [{"text": "Declare an emergency.", "set_flag": "declared"}],
+	})
+	_check("the event is playing", flat.is_playing(), true)
+	flat._on_choice_pressed(flat._event_data["choices"][0])
+	_check("the choice ended it", finished[0], 1)
+	_check("it is no longer playing", flat.is_playing(), false)
+	_check("and the choice still applied", _gs.story_flags.has("declared"), true)
+
+	# A node reached by "next" that offers nothing to decide is the end of the
+	# branch. It still needs a button, or the player reads a card they cannot
+	# dismiss and the turn hangs there.
+	_reset()
+	var leaf := _event_manager()
+	var leaf_finished := [0]
+	leaf.event_finished.connect(func() -> void: leaf_finished[0] += 1)
+	leaf.play_event({
+		"nodes": {
+			"start": {"text": "The markets are nervous.", "choices": [
+				{"text": "Reassure them.", "next": "calm"}]},
+			"calm": {"text": "The markets settle.", "choices": []},
+		},
+		"start": "start",
+	})
+	leaf._on_choice_pressed(leaf._event_data["nodes"]["start"]["choices"][0])
+	_check("the closing beat is shown", leaf.event_text(), "The markets settle.")
+	_check("it is not finished yet", leaf_finished[0], 0)
+	_check("there is one way out of it", leaf.choice_count(), 1)
+	_check("and it reads Continue", leaf.choice_labels()[0], "Continue")
+	leaf._finish()
+	_check("taking it ends the event", leaf_finished[0], 1)
+
+	flat.free()
+	leaf.free()
 
 
 # The point of all of the above: an arc has to be able to run from its first

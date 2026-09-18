@@ -733,6 +733,16 @@ pose invented for it, and the lift is measured off the leg chain, so a model
 built to other proportions still stands on the ground. If an `idle_stand` clip
 is ever added, it is played instead and none of this runs.
 
+**The run ends.** A run finishes when the term is up (`turn_limit`, or four
+years on the calendar) or the deck runs dry, and either way `TurnManager` reads
+the legacy off the state that earned it and puts the epilogue on screen: the
+re-election verdict, a historical grade, and what became of the cabinet. The
+grade bands are the web build's own, copied from `gradeFor()` in
+`src/game/endings.ts` so a B+ means the same thing in both versions — though
+the score behind it is built from the four numbers this GameState carries, not
+the web build's full nation model. "Play Again" resets everything in one place
+and deals a first turn.
+
 **Events.** The deck is every `.json` under `data/events/`, subdirectories
 included, dealt shuffled and never twice in a run. An event's
 `trigger_condition` understands `required_flag`, `required_flags`,
@@ -758,7 +768,7 @@ play:
 
 ```bash
 npm run assets     # required once: the Oval Office model is not committed
-npm run godot:test # import, then parity + events + scenes + the two rooms
+npm run godot:test # import, then parity + events + epilogue + scenes + rooms
 godot4 --path .    # play it: game.tscn is the main scene
 ```
 

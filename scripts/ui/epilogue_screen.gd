@@ -15,14 +15,47 @@ const BODY_COLOR := Color(0.82, 0.85, 0.91, 1.0)
 ## CabinetDossier. The shipped game supplies /root/GameState via project.godot.
 var _state: Node = null
 var _verdict_label: Label
+var _grade_label: Label
+var _score_label: Label
 var _fates_box: VBoxContainer
+var _reason_label: Label
+var _legacy: Dictionary = {}
+
+
+## The player asked for another run. Whoever drives the turns listens for this
+## and starts one; the screen does not restart the game itself, because it does
+## not know what else has to be reset besides GameState.
+signal play_again
 
 
 func _ready() -> void:
 	layer = 30
 	_state = get_node_or_null("/root/GameState")
 	_build()
-	_populate()
+	# Only generate for itself when nobody has handed it a report. Opened by
+	# TurnManager the numbers arrive already read, which matters: GameState goes
+	# on being the live run, so a screen that generated late would be scoring
+	# whatever the state had drifted to rather than the run that just ended.
+	if _legacy.is_empty():
+		_populate(_generate())
+
+
+## Show a report read elsewhere. Safe to call before the screen is in the tree,
+## which is the usual case -- TurnManager instantiates it, hands it the legacy,
+## and then adds it.
+func show_legacy(legacy: Dictionary, reason: String = "") -> void:
+	_legacy = legacy.duplicate(true)
+	if not reason.is_empty():
+		_legacy["reason"] = reason
+	if _verdict_label != null:
+		_populate(_legacy)
+	visible = true
+
+
+## The report currently on screen, for a test or a caller that wants to read
+## back what was shown.
+func legacy() -> Dictionary:
+	return _legacy
 
 
 func _generate() -> Dictionary:
@@ -72,9 +105,27 @@ func _build() -> void:
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(heading)
 
+	# Why the run ended, when the caller says. Sits under the heading because it
+	# is the first thing a player wants answered: served the term, or removed.
+	_reason_label = _make_label("", 15, BODY_COLOR)
+	_reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_reason_label.visible = false
+	column.add_child(_reason_label)
+
 	column.add_child(_make_label("Re-Election Verdict", 18, HEADING_COLOR))
 	_verdict_label = _make_label("", 22, VERDICT_COLOR)
 	column.add_child(_verdict_label)
+
+	column.add_child(_make_label("Historical Grade", 18, HEADING_COLOR))
+	var grade_row := HBoxContainer.new()
+	grade_row.name = "Grade"
+	grade_row.add_theme_constant_override("separation", 12)
+	column.add_child(grade_row)
+	_grade_label = _make_label("", 34, VERDICT_COLOR)
+	grade_row.add_child(_grade_label)
+	_score_label = _make_label("", 15, BODY_COLOR)
+	_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grade_row.add_child(_score_label)
 
 	column.add_child(_make_label("Cabinet Fates", 18, HEADING_COLOR))
 	_fates_box = VBoxContainer.new()
@@ -91,16 +142,55 @@ func _build() -> void:
 
 # ------------------------------------------------------------------ the data
 
-func _populate() -> void:
-	var legacy := _generate()
+## The reason strings TurnManager ends a run with, as a player would read them.
+const REASONS := {
+	"term": "You served out the full term.",
+	"out_of_events": "You served until the country had nothing left to ask of you.",
+	"impeachment": "The House impeached, and the Senate convicted.",
+	"collapse": "The government ran out of money before it ran out of time.",
+}
+
+
+func _populate(legacy: Dictionary) -> void:
+	_legacy = legacy
 	_verdict_label.text = str(legacy.get("verdict", ""))
+
+	var reason := str(legacy.get("reason", ""))
+	_reason_label.text = str(REASONS.get(reason, ""))
+	_reason_label.visible = not _reason_label.text.is_empty()
+
+	_grade_label.text = str(legacy.get("grade", ""))
+	if legacy.has("score"):
+		_score_label.text = "%d / 100" % int(legacy.get("score", 0))
+		var parts: Variant = legacy.get("breakdown", {})
+		if parts is Dictionary and not (parts as Dictionary).is_empty():
+			_score_label.text += "   (%s)" % _breakdown_text(parts)
+	else:
+		_score_label.text = ""
+
+	# Rebuilt rather than appended to, so showing a second run's report does not
+	# leave the first run's cabinet on screen under it.
+	for child in _fates_box.get_children():
+		child.queue_free()
 
 	var fates: Array = []
 	var raw_fates: Variant = legacy.get("cabinet_fates", [])
 	if raw_fates is Array:
 		fates = raw_fates
+	if fates.is_empty():
+		_fates_box.add_child(_make_label("Your cabinet left no mark on the record.", 15, BODY_COLOR))
 	for line in fates:
 		_fates_box.add_child(_make_label("• " + str(line), 15, BODY_COLOR))
+
+
+## "approval 62 · solvency 41 · calm 55 · loyalty 70", in a fixed order so the
+## line does not reshuffle between runs.
+func _breakdown_text(parts: Dictionary) -> String:
+	var pieces: Array[String] = []
+	for key in ["approval", "solvency", "calm", "loyalty"]:
+		if parts.has(key):
+			pieces.append("%s %d" % [key, int(parts[key])])
+	return " · ".join(pieces)
 
 
 func _make_label(text: String, font_size: int, color: Color) -> Label:
@@ -114,9 +204,12 @@ func _make_label(text: String, font_size: int, color: Color) -> Label:
 
 # ------------------------------------------------------------- play again
 
+## Hand the request on and get out of the way.
+##
+## The screen no longer resets GameState itself. It used to, and that was the
+## wrong place for it: resetting the numbers without telling the turn loop left
+## a finished TurnManager sitting on a fresh run it would never deal. Whoever
+## owns the loop listens for play_again and resets everything in one go.
 func _on_play_again_pressed() -> void:
-	if _state != null and _state.has_method("start_new_run"):
-		_state.call("start_new_run")
-		visible = false
-	else:
-		push_warning("EpilogueScreen: no GameState autoload found; cannot start a new run")
+	visible = false
+	play_again.emit()

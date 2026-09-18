@@ -230,9 +230,19 @@ func _show_node(node_ref: Variant) -> void:
 	print(displayed_text)
 
 	_clear_choices()
+	var offered := 0
 	for choice in node.get("choices", []):
 		if choice is Dictionary:
 			_add_choice_button(choice)
+			offered += 1
+
+	# A node with no choices is the end of the branch -- "the markets settle",
+	# and nothing more to decide. It still needs a way out, or the player is
+	# left reading a card with no buttons on it and the turn never finishes.
+	# Counted as they are added rather than off the box, so this does not
+	# depend on the previous node's buttons having gone yet.
+	if offered == 0:
+		_add_finish_button()
 
 
 ## Returns the text that should actually be shown for [param node].
@@ -326,6 +336,16 @@ func _add_choice_button(choice: Dictionary) -> void:
 	_choices_box.add_child(button)
 
 
+## The single button on a node that offers no choices. It applies nothing --
+## a closing beat has no consequences of its own -- and ends the event.
+func _add_finish_button() -> void:
+	var button := Button.new()
+	button.name = "Continue"
+	button.text = "Continue"
+	button.pressed.connect(_finish)
+	_choices_box.add_child(button)
+
+
 func _on_choice_pressed(choice: Dictionary) -> void:
 	var stat_impact: Dictionary = choice.get("stat_impact", {})
 	var trust_impact: Dictionary = choice.get("trust_impact", {})
@@ -340,7 +360,19 @@ func _on_choice_pressed(choice: Dictionary) -> void:
 
 	choice_made.emit(choice)
 
+	# A choice with no "next" ends the dialogue, and it has to say so here
+	# rather than by asking _show_node to resolve "".
+	#
+	# That is what it used to do, and on a flat event -- one with "text" and
+	# "choices" at the top level and no "nodes" -- _resolve_node("") falls
+	# through to "the event data itself is the node" and hands back the event.
+	# So the event re-showed itself, forever: the turn never finished, the
+	# calendar never moved, and the run could not reach its own ending. Most of
+	# the events in data/events are flat, so this was most of the game.
 	var next_ref: Variant = choice.get("next", "")
+	if next_ref is String and str(next_ref).is_empty():
+		_finish()
+		return
 	_show_node(next_ref)
 
 
@@ -356,10 +388,18 @@ func _apply_random_flag(choice: Dictionary) -> String:
 	return picked
 
 
+## Takes the previous node's buttons off the card.
+##
+## remove_child() before queue_free(), because queue_free() alone defers the
+## removal to the end of the frame: until then the old buttons are still
+## children, so choice_count() and choice_labels() report the node the player
+## has just left, and any code that counts the box to decide what to add sees
+## buttons that are on their way out. (get_children().clear() did nothing at
+## all -- it emptied a copy of the list.)
 func _clear_choices() -> void:
 	for child in _choices_box.get_children():
+		_choices_box.remove_child(child)
 		child.queue_free()
-	_choices_box.get_children().clear()
 
 
 func _finish() -> void:

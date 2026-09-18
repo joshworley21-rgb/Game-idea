@@ -40,6 +40,10 @@ func _ready() -> void:
 
 	if turn_manager.has_signal("game_over"):
 		turn_manager.connect("game_over", Callable(self, "_on_game_over"))
+	# The turn system resets everything and deals the first turn of the new run
+	# itself; this only has to put the new cabinet back in the rooms.
+	if turn_manager.has_signal("run_restarted"):
+		turn_manager.connect("run_restarted", Callable(self, "_on_run_restarted"))
 
 	if autostart:
 		start_run()
@@ -49,10 +53,19 @@ func _ready() -> void:
 ## run: it starts a fresh one.
 func start_run() -> void:
 	GameState.start_new_run(cabinet_names)
+	_seed_rooms()
 
-	# The rooms resolve a speaker to a person, and the full run state is what
-	# carries the portraits. GameState's own role -> first-name map is the
-	# fallback, so a room with no state still seats somebody.
+	_started = true
+	if turn_manager != null and turn_manager.has_method("start_turn"):
+		turn_manager.call("start_turn")
+
+
+## Hand the rooms and the turn system the current cabinet.
+##
+## The rooms resolve a speaker to a person, and the full run state is what
+## carries the portraits. GameState's own role -> first-name map is the
+## fallback, so a room with no state still seats somebody.
+func _seed_rooms() -> void:
 	var state := {"cabinet": _cabinet_from_state()}
 	for room in [get_node_or_null("OvalOffice"), get_node_or_null("CabinetRoom")]:
 		if room != null and room.has_method("set_state"):
@@ -60,9 +73,12 @@ func start_run() -> void:
 	if turn_manager != null and turn_manager.has_method("set_state"):
 		turn_manager.call("set_state", state)
 
+
+## A new run was started from the epilogue screen. GameState has already been
+## reset by then, so the cabinet read here is the new one.
+func _on_run_restarted() -> void:
 	_started = true
-	if turn_manager != null and turn_manager.has_method("start_turn"):
-		turn_manager.call("start_turn")
+	_seed_rooms()
 
 
 func is_running() -> bool:
@@ -87,7 +103,7 @@ func _cabinet_from_state() -> Array:
 	return people
 
 
-func _on_game_over(reason: String) -> void:
+func _on_game_over(reason: String, _legacy: Dictionary) -> void:
 	_started = false
 	print("Game: the run ended - %s" % reason)
 	run_finished.emit(reason)

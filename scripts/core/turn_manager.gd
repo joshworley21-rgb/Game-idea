@@ -18,11 +18,20 @@ signal turn_started(event_id: String, speaker: String)
 signal turn_presented(event_id: String, speaker: String)
 ## Emitted when a choice resolves, with the choice Dictionary EventManager saw.
 signal turn_resolved(choice: Dictionary)
-## Emitted when no eligible event could be found.
+## Emitted when a turn found no eligible event but the run is not over. Kept
+## for a caller that wants to know a turn was quiet; the run ending on an empty
+## deck is game_over("out_of_events"), not this.
 signal turn_skipped
-## Emitted when a win/loss threshold ends the run. `reason` is "impeachment"
-## (approval at or below 0) or "collapse" (budget at or below -50).
-signal game_over(reason: String)
+## Emitted when the run ends, for any reason:
+##   "impeachment"    approval at or below 0
+##   "collapse"       budget at or below -50
+##   "term"           the term was served out, or turn_limit was reached
+##   "out_of_events"  no eligible event is left to deal
+## Carries the legacy report EpilogueGenerator produced for that run.
+signal game_over(reason: String, legacy: Dictionary)
+## Emitted after the player asks for another run and everything has been reset,
+## so a scene can re-seed its rooms off the new cabinet.
+signal run_restarted
 
 @export var event_directory: String = "res://data/events/"
 @export var event_manager: Node
@@ -36,6 +45,19 @@ signal game_over(reason: String)
 const CABINET_ROLE_ORDER: Array[String] = [
 	"chief", "treasury", "state", "defense", "justice", "health",
 ]
+
+## How many turns a run lasts before the term is up. The fiction's term is four
+## years, which at a week a turn is 192 of them -- far more content than exists,
+## so this is sized to the content instead and the year check below is the one
+## that matters once there is enough. Set to 0 to leave it to the calendar.
+@export var turn_limit: int = 12
+## The term in years, checked against GameState's calendar. A run that reaches
+## the end of it ends whatever turn_limit says.
+@export var term_years: int = 4
+
+## The end-of-run screen. Left unset, the scene below is instantiated on demand.
+@export var epilogue_screen: Node
+@export var epilogue_scene: PackedScene = preload("res://scenes/ui/epilogue_screen.tscn")
 
 @export var focus_seconds: float = 0.55
 ## Used only when a cabinet seat has no authored Focus marker.
@@ -106,8 +128,12 @@ func start_turn() -> void:
 
 	var path := _select_event_path()
 	if path.is_empty():
+		# The deck is spent. This used to emit turn_skipped and stop, which left
+		# the player looking at a room that would never do anything again --
+		# every event played, no ending, no way out. An exhausted deck is an end
+		# to the run, so it ends it.
 		_busy = false
-		turn_skipped.emit()
+		_trigger_game_over("out_of_events")
 		return
 
 	var data := _read_event(path)
@@ -170,7 +196,25 @@ func on_choice_resolved(choice: Dictionary = {}) -> void:
 	# system gets both in one call". Calling it here as well ran the sweep
 	# twice per turn.
 	GameState.advance_turn()
+
+	# Checked after the advance, so the turn the player just took counts towards
+	# the term rather than the one they are about to be offered.
+	if _term_is_over():
+		_trigger_game_over("term")
+		return
+
 	start_turn()
+
+
+## Whether the run has reached the end of its term.
+##
+## Either limit ends it, whichever comes first: turn_limit is the content's
+## limit and the calendar is the fiction's. A turn_limit of 0 leaves it to the
+## calendar alone.
+func _term_is_over() -> bool:
+	if turn_limit > 0 and int(GameState.turn) > turn_limit:
+		return true
+	return term_years > 0 and int(GameState.year) > term_years
 
 
 # ------------------------------------------------------------- event selection
@@ -498,13 +542,102 @@ func _end_condition() -> String:
 	return ""
 
 
+## End the run: read the legacy off the state that produced it, put the
+## epilogue on screen, and stop dealing turns.
 func _trigger_game_over(reason: String) -> void:
 	if _game_over:
 		return
 	_game_over = true
+	_busy = false
 	_set_camera_locked(false)
-	game_over.emit(reason)
-	print("TurnManager: game over - %s" % reason)
+	_hide_event_ui()
+
+	# Generated here rather than by the screen, and generated now rather than in
+	# the screen's _ready(): GameState stays live after the run, so anything
+	# that reads it later is scoring a different moment.
+	var legacy := EpilogueGenerator.new().generate_legacy()
+	legacy["reason"] = reason
+
+	_show_epilogue(legacy, reason)
+	game_over.emit(reason, legacy)
+	print("TurnManager: game over - %s (%s, %d/100)" % [
+		reason, str(legacy.get("grade", "?")), int(legacy.get("score", 0))
+	])
+
+
+## The event card has to come down with the run. Left up, its buttons sit under
+## the epilogue and are still live.
+func _hide_event_ui() -> void:
+	var em := _event_manager_node()
+	if em != null and em is CanvasItem:
+		(em as CanvasItem).visible = false
+	var card := _briefing_card()
+	if card != null and card.has_method("close_card"):
+		card.call("close_card")
+
+
+func _show_epilogue(legacy: Dictionary, reason: String) -> void:
+	var screen := _epilogue_screen()
+	if screen == null:
+		push_warning("TurnManager: no epilogue screen, so the run ends with nothing on screen.")
+		return
+	if screen.has_method("show_legacy"):
+		screen.call("show_legacy", legacy, reason)
+	elif screen is CanvasItem:
+		(screen as CanvasItem).visible = true
+
+
+## The epilogue screen, instantiated on first use.
+##
+## Added as a child of this node so it goes away with the turn system, and
+## connected here rather than in a scene file so a scene that never authors one
+## still gets the ending.
+func _epilogue_screen() -> Node:
+	if epilogue_screen != null and is_instance_valid(epilogue_screen):
+		return epilogue_screen
+	if epilogue_screen == null:
+		epilogue_screen = get_node_or_null("EpilogueScreen")
+	if epilogue_screen == null and epilogue_scene != null:
+		epilogue_screen = epilogue_scene.instantiate()
+		epilogue_screen.name = "EpilogueScreen"
+		add_child(epilogue_screen)
+	if epilogue_screen != null and epilogue_screen.has_signal("play_again"):
+		if not epilogue_screen.is_connected("play_again", Callable(self, "restart_run")):
+			epilogue_screen.connect("play_again", Callable(self, "restart_run"))
+	return epilogue_screen
+
+
+# --------------------------------------------------------------- playing again
+
+## Start a fresh run from a finished one.
+##
+## Everything that remembers the last run is reset in one place: GameState's
+## numbers, flags and played set, and this node's deck and current turn. The
+## screen used to reset GameState by itself, which left the turn system finished
+## and holding a spent deck over a brand new run.
+func restart_run() -> void:
+	_game_over = false
+	_busy = false
+	_kill_entry_tween()
+	_current_event_path = ""
+	_current_event = {}
+	_current_speaker = ""
+	_current_person = {}
+	_last_choice = {}
+	_deck.clear()
+	_deck_cursor = 0
+	_deck_ready = false
+
+	GameState.start_new_run()
+
+	var screen := _epilogue_screen()
+	if screen != null and screen is CanvasItem:
+		(screen as CanvasItem).visible = false
+
+	# The rooms are seeded off the cabinet, and the cabinet is new, so whoever
+	# owns them gets told before the first turn of the new run is dealt.
+	run_restarted.emit()
+	start_turn()
 
 
 # ------------------------------------------------------------------- speakers
