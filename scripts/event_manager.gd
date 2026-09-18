@@ -34,6 +34,14 @@ signal event_finished
 ## A choice was selected. Emitted after GameState.apply_choice() runs.
 signal choice_made(choice: Dictionary)
 
+## The dialogue moved to a node, carrying that node's id and whoever is
+## speaking it. The id is "" for a flat event, which has only the one node.
+##
+## This is what lets a room stage a conversation rather than a briefing: an
+## event with a different speaker on each node is an argument, and something
+## listening here can put the camera on whoever is talking.
+signal node_shown(node_id: String, speaker: String)
+
 ## Where load_event() looks for files. Relative paths are resolved against
 ## the Godot project root (res://), so callers usually pass
 ## "res://scripts/events/cabinet_intro.json" or just "scripts/events/...".
@@ -223,6 +231,8 @@ func _show_node(node_ref: Variant) -> void:
 		_finish()
 		return
 
+	node_shown.emit(node_ref if node_ref is String else "", speaker_for_node(node))
+
 	var displayed_text := _resolve_node_text(node)
 	_text_label.text = displayed_text
 	# The console trace is part of the brief: print the event text as it is
@@ -276,6 +286,18 @@ func _resolve_node_text(node: Dictionary) -> String:
 	if int(GameState.advisor_trust[speaker]) < threshold:
 		return str(block.get("hostile_text", default_text))
 	return default_text
+
+
+## Who is speaking a node: its own "speaker", or the event's when it has none.
+##
+## A single-speaker event names its speaker once at the top and every node
+## inherits it. An argument names one per node, and that is the difference
+## between a briefing and a scene.
+func speaker_for_node(node: Dictionary) -> String:
+	var speaker := str(node.get("speaker", ""))
+	if speaker.is_empty():
+		speaker = str(_event_data.get("speaker", ""))
+	return speaker.strip_edges().to_lower()
 
 
 func _resolve_node(node_ref: Variant) -> Dictionary:

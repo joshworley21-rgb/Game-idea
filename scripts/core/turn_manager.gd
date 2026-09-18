@@ -2,15 +2,19 @@ class_name TurnManager
 extends Node
 ## The main gameplay turn controller.
 ##
-## One turn is: pick an eligible event, walk the speaker into the room (or fly
-## the camera to their cabinet seat), present that event through EventManager,
-## then resolve the choice and roll the calendar forward.
+## One turn is: pick an eligible event, stage it in the room it asks for,
+## present it through EventManager, then resolve the choice and roll the
+## calendar forward.
 ##
-## The scene this is attached to is expected to hold an EventManager node and,
-## depending on the room, an OvalOffice or a CabinetRoom. References are
-## exported so a .tscn can wire them explicitly, but every one of them also has
-## a name-based fallback below, so the script keeps working in a scene that
-## simply names its nodes the same way.
+## Staging depends on the room. The Oval walks an advisor to the desk and holds
+## there. The cabinet room flies the camera to the speaker's seat -- and keeps
+## flying it, node by node, so an event that names a different secretary on each
+## node plays as an argument across the table rather than as one person talking.
+##
+## The scene this is attached to is expected to hold an EventManager node and
+## either or both rooms. References are exported so a .tscn can wire them
+## explicitly, but every one of them also has a name-based fallback below, so
+## the script keeps working in a scene that simply names its nodes the same way.
 
 ## Emitted when start_turn() has selected an event but before the 3D entry.
 signal turn_started(event_id: String, speaker: String)
@@ -78,11 +82,18 @@ var _busy: bool = false
 var _game_over: bool = false
 var _entry_arrived: bool = false
 var _entry_tween: Tween
+## The room the current event is being staged in, so the card, the camera and
+## the seat focus all act on the same one.
+var _active_room: Node = null
 
 
 func _ready() -> void:
 	_resolve_nodes()
 	_connect_event_signals()
+	# Both room scenes declare their own camera current, so with two of them in
+	# one scene whichever entered the tree last would win. Settling on one here
+	# means the first frame is not a coin toss.
+	_activate_room(_oval_office_node() if _oval_office_node() != null else _cabinet_room_node())
 
 
 ## Hand the turn system the full run state, when the main scene has one from
@@ -402,14 +413,85 @@ func _local_can_play(data: Dictionary) -> bool:
 
 # ------------------------------------------------------------------- the 3D
 
+## Stage the entry for this turn, in whichever room the event asks for.
+##
+## This used to be a fallback chain -- the Oval if there was one, the cabinet
+## room only if there was not -- which meant that in a scene holding both, the
+## cabinet room could never be reached and its seat focus was dead code. An
+## event says where it happens now, and the room that is not in use goes dark.
 func _enter_speaker_3d(speaker: String) -> void:
-	var oval := _oval_office_node()
-	if oval != null and oval.has_method("advisor_enters"):
-		await _await_oval_arrival(oval, speaker)
+	var room := _room_for_event(_current_event)
+	_activate_room(room)
+	if room == null:
 		return
-	var room := _cabinet_room_node()
+
+	if room.has_method("advisor_enters"):
+		await _await_oval_arrival(room, speaker)
+		return
+	await _focus_cabinet_seat(room, speaker)
+
+
+## Which room an event is staged in.
+##
+## An event picks with `"room": "cabinet"` at its top level; anything else, or
+## nothing at all, means the Oval. A named room that the scene does not hold
+## falls back to the one it does, so an event written for the cabinet still
+## plays in a scene that only has an Oval in it.
+func _room_for_event(data: Dictionary) -> Node:
+	var wanted := str(data.get("room", "")).strip_edges().to_lower()
+	var oval := _oval_office_node()
+	var cabinet := _cabinet_room_node()
+	if wanted == "cabinet":
+		return cabinet if cabinet != null else oval
+	return oval if oval != null else cabinet
+
+
+## Show one room and its camera, and put the other away.
+##
+## Both room scenes set their own Camera3D current, which is right when either
+## is opened on its own and wrong the moment they share a scene. Making the
+## active room's camera current is what actually switches the view; hiding the
+## other stops it drawing through the walls of the one in use.
+func _activate_room(room: Node) -> void:
+	_active_room = room
+	for candidate in [_oval_office_node(), _cabinet_room_node()]:
+		if candidate == null:
+			continue
+		var active: bool = candidate == room
+		if candidate is Node3D:
+			(candidate as Node3D).visible = active
+		var cam := _camera_for_room(candidate)
+		if cam != null:
+			cam.current = active
+
+
+## A room's own camera: its export when it has one, else a Camera3D by name.
+## Falls back to this node's camera export, which is what a scene with a single
+## shared camera wires.
+func _camera_for_room(room: Node) -> Camera3D:
 	if room != null:
-		await _focus_cabinet_seat(room, speaker)
+		var owned: Variant = room.get("camera")
+		if owned is Camera3D:
+			return owned
+		var found := room.get_node_or_null("Camera3D") as Camera3D
+		if found != null:
+			return found
+	return _camera_node()
+
+
+## The card a room opens, so a briefing shows on the Oval's and a cabinet
+## meeting on the cabinet room's rather than both going to whichever one the
+## scene happened to wire.
+func _card_for_room(room: Node) -> Node:
+	if room != null:
+		for card_name in ["BriefingCard", "DossierCard"]:
+			var card := room.get_node_or_null(card_name)
+			if card != null:
+				return card
+		var owned: Variant = room.get("dossier_card")
+		if owned is Node:
+			return owned
+	return _briefing_card()
 
 
 func _await_oval_arrival(room: Node, speaker: String) -> void:
@@ -450,7 +532,7 @@ func _entry_timeout(room: Node) -> float:
 ## camera move so the briefing card and EventManager can take over the UI.
 func _focus_cabinet_seat(room: Node, speaker: String) -> void:
 	var index := _role_index(speaker)
-	var cam := _camera_node()
+	var cam := _camera_for_room(room)
 	var seats := _cabinet_seats(room)
 	if index < 0 or cam == null or index >= seats.size():
 		push_warning("TurnManager: cannot focus a cabinet seat for '%s'" % speaker)
@@ -512,7 +594,7 @@ func _kill_entry_tween() -> void:
 # --------------------------------------------------------------- presentation
 
 func _load_portrait_into_card() -> void:
-	var card := _briefing_card()
+	var card := _card_for_room(_active_room)
 	if card == null:
 		return
 	var face := Cast.portrait(_current_person)
@@ -530,6 +612,30 @@ func _on_event_finished() -> void:
 
 func _on_choice_made(choice: Dictionary) -> void:
 	_last_choice = choice
+
+
+## The dialogue moved to a node. In the cabinet room, put the camera on whoever
+## is speaking it.
+##
+## This is what a room full of named people is for. An event with one speaker
+## names them once and every node inherits it, so nothing moves and the shot
+## holds. An argument names a different secretary on each node, and the camera
+## goes back and forth across the table with it.
+##
+## Only the cabinet room does this: the Oval stages one advisor standing at the
+## desk, and there is nowhere else to look.
+func _on_node_shown(_node_id: String, speaker: String) -> void:
+	if _active_room == null or _active_room.has_method("advisor_enters"):
+		return
+	if speaker.is_empty() or _role_index(speaker) < 0:
+		return
+	if speaker == _current_speaker and _entry_tween != null and _entry_tween.is_valid():
+		# Already on the way there from the entry; let that finish.
+		return
+	_current_speaker = speaker
+	_current_person = _person_for_speaker(speaker)
+	_load_portrait_into_card()
+	await _focus_cabinet_seat(_active_room, speaker)
 
 
 # ------------------------------------------------------------ end-of-run logic
@@ -714,6 +820,9 @@ func _connect_event_signals() -> void:
 	if em.has_signal("choice_made"):
 		if not em.is_connected("choice_made", Callable(self, "_on_choice_made")):
 			em.connect("choice_made", Callable(self, "_on_choice_made"))
+	if em.has_signal("node_shown"):
+		if not em.is_connected("node_shown", Callable(self, "_on_node_shown")):
+			em.connect("node_shown", Callable(self, "_on_node_shown"))
 
 
 func _event_manager_node() -> Node:

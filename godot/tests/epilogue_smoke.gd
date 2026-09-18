@@ -239,8 +239,17 @@ func _play_again() -> void:
 	_check("the numbers were reset", _gs.approval, 50)
 	_check("the flags were cleared", _gs.story_flags.has("some_flag"), false)
 	_check("the calendar went back", _gs.turn, 1)
-	_check("the deck was refilled", _gs.has_played_event(burned.get_file().get_basename()), false)
 	_check("and a turn was dealt", turns.current_event_id().is_empty(), false)
+
+	# The played set is the new run's alone.
+	#
+	# Not "the burned event is absent": restart_run() deals a turn as its last
+	# act, off a freshly shuffled deck, and that turn is marked played before
+	# anything here can look. Roughly one run in three it deals the very event
+	# that was burned, so asserting its absence failed at random. What actually
+	# has to hold is that nothing survived the reset except the turn just dealt.
+	_check("the played set carries only the new turn", _gs.played_events.size(), 1)
+	_check("and it is the turn that was dealt", _gs.has_played_event(turns.current_event_id()), true)
 
 	turns.queue_free()
 	await process_frame

@@ -745,13 +745,25 @@ the score behind it is built from the four numbers this GameState carries, not
 the web build's full nation model. "Play Again" resets everything in one place
 and deals a first turn.
 
+**Rooms.** An event says where it happens. `"room": "cabinet"` stages it round
+the cabinet table; anything else, or nothing, is the Oval. Both rooms sit in
+`game.tscn` at once and `TurnManager` shows one at a time, because both scenes
+declare their own camera current and together that is a coin toss.
+
+In the cabinet room the camera follows whoever is speaking, node by node. An
+event that names one speaker at the top holds a single shot; one that names a
+different secretary on each node plays as an argument across the table, which
+is what `04_cabinet_clash` now is — six nodes alternating between the Treasury
+Secretary and the Secretary of State, with the camera going back and forth.
+
 **Events.** The deck is every `.json` under `data/events/`, subdirectories
 included, dealt shuffled and never twice in a run. An event's
 `trigger_condition` understands `required_flag`, `required_flags`,
 `any_of_flags`, `blocked_flags` and `min_turn`; an event can open on a
 `branch_on_flags` node chosen by what the player has already done, and a
 choice can carry `stat_impact`, `trust_impact`, `set_flag`, `random_flag`,
-`required_secret` and `required_background`. Both arcs — the Kalmar crisis and
+`required_secret` and `required_background`. A node may carry its own
+`speaker`, which overrides the event's and is what moves the camera. Both arcs — the Kalmar crisis and
 the whistleblower scandal — run from first beat to last on those rules, which
 `godot/tests/events_smoke.gd` walks through end to end.
 

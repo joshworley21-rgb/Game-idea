@@ -16,7 +16,7 @@
     "android:open": "cap open android",
     "assets": "node scripts/fetch-assets.mjs",
     "postinstall": "node scripts/godot-ignore.mjs",
-    "godot:test": "${GODOT:-godot4} --headless --path . --import >/dev/null && ${GODOT:-godot4} --headless --path . --script godot/tests/parity.gd && ${GODOT:-godot4} --headless --path . --quit-after 900 --script godot/tests/events_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 1200 --script godot/tests/epilogue_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 3000 --script godot/tests/scenes_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 900 --script godot/tests/oval_office_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 900 --script godot/tests/cabinet_room_smoke.gd"
+    "godot:test": "${GODOT:-godot4} --headless --path . --import >/dev/null && ${GODOT:-godot4} --headless --path . --script godot/tests/parity.gd && ${GODOT:-godot4} --headless --path . --quit-after 900 --script godot/tests/events_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 1200 --script godot/tests/epilogue_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 8000 --script godot/tests/scenes_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 900 --script godot/tests/oval_office_smoke.gd && ${GODOT:-godot4} --headless --path . --quit-after 900 --script godot/tests/cabinet_room_smoke.gd"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",

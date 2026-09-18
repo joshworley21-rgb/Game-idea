@@ -49,6 +49,7 @@ func _run() -> void:
 	await _cabinet()
 	await _oval()
 	await _game()
+	await _cabinet_meeting()
 
 	if _failures == 0:
 		print("\nscenes: all checks passed")
@@ -258,6 +259,122 @@ func _game() -> void:
 	_check("it offered at least one choice", events.choice_count() > 0, true)
 	game.queue_free()
 	await process_frame
+
+
+# An event that says it happens in the cabinet room has to be staged there, and
+# an argument has to be staged as an argument: the camera on whoever is speaking
+# this line, not parked on one person for the whole scene.
+#
+# This is the check the room was built for. Before it, _enter_speaker_3d fell
+# back to the cabinet room only when there was no Oval, so in the assembled game
+# the room could never open and its seat focus was dead code.
+func _cabinet_meeting() -> void:
+	print("scenes: a cabinet meeting is staged in the cabinet room")
+	var game := _instance("res://godot/scenes/game.tscn")
+	if game == null:
+		return
+	# Driven by hand, so the turn under test is the one being looked at rather
+	# than whatever the shuffled deck dealt first.
+	game.autostart = false
+	root.add_child(game)
+	await process_frame
+
+	var turns: Node = game.get_node("TurnManager")
+	var oval: Node3D = game.get_node("OvalOffice")
+	var cabinet: Node3D = game.get_node("CabinetRoom")
+	var events: Node = turns.event_manager
+	var state: Node = GameStateRef()
+
+	_check("the Oval opens the scene", oval.visible, true)
+	_check("the cabinet room starts dark", cabinet.visible, false)
+	_check("and only one camera is current", oval.camera.current and not cabinet.camera.current, true)
+
+	state.start_new_run()
+	state.pending_events.clear()
+	state.pending_events.append("04_cabinet_clash")
+	turns.start_turn()
+	for _i in 300:
+		await process_frame
+		if events.is_playing():
+			break
+
+	_check("the clash was dealt", turns.current_event_id(), "04_cabinet_clash")
+	_check("the cabinet room is up", cabinet.visible, true)
+	_check("the Oval stood down", oval.visible, false)
+	_check("the cabinet camera took over", cabinet.camera.current, true)
+
+	# Walk the argument, reading where the camera settles for each speaker. The
+	# seat it belongs to is the one the speaker's office owns.
+	var seen_speakers: Array[String] = []
+	var wrong_seat := ""
+	for _i in 8:
+		if not events.is_playing():
+			break
+		var speaker: String = turns.current_speaker()
+		if seen_speakers.is_empty() or seen_speakers[-1] != speaker:
+			seen_speakers.append(speaker)
+		await _settle(turns)
+		var seat := _seat_for(cabinet, speaker)
+		if seat != null and absf(cabinet.camera.global_position.x - seat.global_position.x) > 0.05:
+			wrong_seat = speaker
+			break
+		var button := _live_button(events)
+		if button == null:
+			break
+		button.pressed.emit()
+		await process_frame
+
+	_check("the camera sat with every speaker", wrong_seat, "")
+	_check("it heard from both sides", seen_speakers.size() >= 4, true)
+	_check("starting with the Treasury Secretary", seen_speakers[0] if seen_speakers.size() > 0 else "", "treasury")
+	_check("and answering with the Secretary of State", seen_speakers[1] if seen_speakers.size() > 1 else "", "state")
+
+	# And the room gives way again: the next event names no room, so it is the
+	# Oval's, and the cabinet room goes dark behind it.
+	state.pending_events.clear()
+	state.pending_events.append("01_grid_failure")
+	turns._game_over = false
+	turns._busy = false
+	turns.start_turn()
+	for _i in 300:
+		await process_frame
+		if oval.visible:
+			break
+	_check("an Oval event brings the Oval back", oval.visible, true)
+	_check("and puts the cabinet room away", cabinet.visible, false)
+	_check("with the camera to match", oval.camera.current and not cabinet.camera.current, true)
+
+	game.queue_free()
+	await process_frame
+
+
+## Waits for a seat focus to finish rather than counting frames, which is a bet
+## on the headless frame rate.
+func _settle(turns: Node) -> void:
+	for _i in 120:
+		await process_frame
+		var tween: Variant = turns._entry_tween
+		if tween == null or not (tween as Tween).is_valid():
+			return
+
+
+func _seat_for(room: Node, speaker: String) -> Marker3D:
+	var index: int = room.get("CABINET_ROLE_ORDER").find(speaker) if room.get("CABINET_ROLE_ORDER") != null else -1
+	if index < 0:
+		index = ["chief", "treasury", "state", "defense", "justice", "health"].find(speaker)
+	if index < 0 or index >= room.seats_root.get_child_count():
+		return null
+	return room.seats_root.get_child(index) as Marker3D
+
+
+func _live_button(node: Node) -> Button:
+	if node is Button and not (node as Button).disabled:
+		return node as Button
+	for child in node.get_children():
+		var hit := _live_button(child)
+		if hit != null:
+			return hit
+	return null
 
 
 ## The autoload, which --script instantiates but does not register as a global.
